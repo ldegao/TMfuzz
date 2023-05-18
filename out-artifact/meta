@@ -1,0 +1,2 @@
+./fuzzer.py -o out-artifact -s seed-artifact -c 3 -m 3 -t behavior --timeout 180 --town 5 --strategy trajectory
+start: 1684392323
