@@ -2,3 +2,4 @@ save/
 out-artifact/
 seed-artifact/
 .idea/
+__pycache__/
