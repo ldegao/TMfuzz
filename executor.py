@@ -36,7 +36,6 @@ except IndexError:
     pass
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
-import DummyWorld
 
 import pygame
 
@@ -331,13 +330,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                 start_location=sp.location,
                 end_location=wp.location,
             )
-            # BehaviorAgent requires a World object to be supplied
-            # but internally only dereferences the player object.
-            # We'll simply create a DummyWorld instance to avoid the hassle.
-            dummy_world = DummyWorld.DummyWorld(world, player)
-
             print("[+] spawned cautious BehaviorAgent")
-
         elif conf.agent_type == c.AUTOWARE:
             loc = sp.location
             rot = sp.rotation
@@ -1171,7 +1164,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                 "-crf 5",
                 vid_filename
             ])
-            cmd = f"{cmd_cat} | {cmd_ffmpeg} >output.log 2>&1"
+            cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
 
             os.system(cmd)
             print("(done)")
