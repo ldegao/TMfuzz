@@ -350,7 +350,6 @@ def main():
 
                 test_scenario_m = deepcopy(test_scenario)
                 mutated_scenario_list.append(test_scenario_m)
-
                 # STEP 3-1: ACTOR PROFILE GENERATION
 
                 if conf.function == "general":
@@ -382,61 +381,64 @@ def main():
                 elif conf.function == "traction":
                     actor_type = c.NULL
                     nav_type = c.NULL
+
+                # for i in range(0,3):
                 # repeat until a valid actor profile is generated
-                for i in range(0,3):
-                    ret = True
-                    while ret:
-                        if actor_type == c.NULL:
-                            break
+                ret = True
+                while ret:
+                    if actor_type == c.NULL:
+                        break
 
-                        elif actor_type == c.VEHICLE:
-                            # spawn vehicle at a random location
-                            # run test while mutating weather
-                            if nav_type == c.LINEAR:
-                                x = random.randint(min_x, max_x)
-                                y = random.randint(min_y, max_y)
-                                z = 1.5
-                                pitch = 0
-                                yaw = random.randint(0, 360)
-                                roll = 0
-                                speed = random.uniform(0, c.VEHICLE_MAX_SPEED)
+                    elif actor_type == c.VEHICLE:
+                        # spawn vehicle at a random location
+                        # run test while mutating weather
+                        if nav_type == c.LINEAR:
+                            x = random.randint(min_x, max_x)
+                            y = random.randint(min_y, max_y)
+                            z = 1.5
+                            pitch = 0
+                            yaw = random.randint(0, 360)
+                            roll = 0
+                            speed = random.uniform(0, c.VEHICLE_MAX_SPEED)
 
-                                loc = (x, y, z)  # carla.Location(x, y, z)
-                                rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+                            loc = (x, y, z)  # carla.Location(x, y, z)
+                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
 
-                                ret = test_scenario_m.add_actor(actor_type,
-                                                                nav_type, loc, rot, speed, None, None)
+                            ret = test_scenario_m.add_actor(actor_type,
+                                                            nav_type, loc, rot, speed, None, None)
 
-                            elif nav_type == c.IMMOBILE:
-                                x = random.randint(min_x, max_x)
-                                y = random.randint(min_y, max_y)
-                                z = 1.5
-                                pitch = 0
-                                yaw = random.randint(0, 360)
-                                roll = 0
-                                speed = 0
+                        elif nav_type == c.IMMOBILE:
+                            x = random.randint(min_x, max_x)
+                            y = random.randint(min_y, max_y)
+                            z = 1.5
+                            pitch = 0
+                            yaw = random.randint(0, 360)
+                            roll = 0
+                            speed = 0
 
-                                loc = (x, y, z)  # carla.Location(x, y, z)
-                                rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+                            loc = (x, y, z)  # carla.Location(x, y, z)
+                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
 
-                                ret = test_scenario_m.add_actor(actor_type,
-                                                                nav_type, loc, rot, speed, None, None)
+                            ret = test_scenario_m.add_actor(actor_type,
+                                                            nav_type, loc, rot, speed, None, None)
 
-                            elif nav_type == c.AUTOPILOT:
-                                sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                                dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                                ret = test_scenario_m.add_actor(actor_type,
-                                                                nav_type, None, None, None, sp_idx,
-                                                                dp_idx)
+                        elif nav_type == c.AUTOPILOT:
+                            sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                            dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                            ret = test_scenario_m.add_actor(actor_type,
+                                                            nav_type, None, None, None, sp_idx,
+                                                            dp_idx)
 
-                            elif nav_type == c.MANEUVER:
-                                if len(test_scenario_m.actors) == 0:
-                                    # add an actor
-                                    # TODO there are some issues with this
-                                    x = test_scenario_m.sp["Location"][0] + random.choice([-1, 1]) * random.randint(10, 50) / 10.0
+                        elif nav_type == c.MANEUVER:
+                            if len(test_scenario_m.actors) == 0:
+                                # add an actor
+                                # TODO there are some issues with this
+                                ret = True
+                                while ret:
+                                    x = test_scenario_m.sp["Location"][0] + random.choice([-1,0, 1]) * random.randint(15, 30) / 10.0
 
-                                    y = test_scenario_m.sp["Location"][1] + random.choice([-1, 1]) * random.randint(10, 50) / 10.0
-                                    z = 1.5
+                                    y = test_scenario_m.sp["Location"][1] + random.choice([-1,0,1]) * random.randint(15, 30) / 10.0
+                                    z = 4
 
                                     roll = test_scenario_m.sp["Rotation"][0]
                                     pitch = test_scenario_m.sp["Rotation"][1]
@@ -448,65 +450,65 @@ def main():
                                     rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
                                     ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
                                                                     speed, None, None)
+                            else:
+                                # mutate maneuvers if we have an actor
+                                i = random.randint(0, 4)
+                                direction = random.randint(-1, 1)
 
+                                if direction == 0:
+                                    speed = random.randint(0, 10)  # m/s
+                                    test_scenario_m.actors[0]["maneuvers"][i] = [direction, speed, 0]
                                 else:
-                                    # mutate maneuvers if we have an actor
-                                    i = random.randint(0, 4)
-                                    direction = random.randint(-1, 1)
+                                    degree = random.randint(30, 60)  # deg
+                                    test_scenario_m.actors[0]["maneuvers"][i] = [direction, degree, 0]
 
-                                    if direction == 0:
-                                        speed = random.randint(0, 10)  # m/s
-                                        test_scenario_m.actors[0]["maneuvers"][i] = [direction, speed, 0]
-                                    else:
-                                        degree = random.randint(30, 60)  # deg
-                                        test_scenario_m.actors[0]["maneuvers"][i] = [direction, degree, 0]
+                                # reset executed frame id
+                                for i in range(5):
+                                    test_scenario_m.actors[0]["maneuvers"][i][2] = 0
 
-                                    # reset executed frame id
-                                    for i in range(5):
-                                        test_scenario_m.actors[0]["maneuvers"][i][2] = 0
+                                ret = 0
 
-                                    ret = 0
+                            print("Maneuvers:", test_scenario_m.actors[0]["maneuvers"])
 
-                                print("Maneuvers:", test_scenario_m.actors[0]["maneuvers"])
+                    elif actor_type == c.WALKER:
+                        if nav_type == c.LINEAR:
+                            x = random.randint(min_x, max_x)
+                            y = random.randint(min_y, max_y)
+                            z = 1.5
+                            pitch = 0
+                            yaw = random.randint(0, 360)
+                            roll = 0
+                            speed = random.uniform(0, c.WALKER_MAX_SPEED)
 
-                        elif actor_type == c.WALKER:
-                            if nav_type == c.LINEAR:
-                                x = random.randint(min_x, max_x)
-                                y = random.randint(min_y, max_y)
-                                z = 1.5
-                                pitch = 0
-                                yaw = random.randint(0, 360)
-                                roll = 0
-                                speed = random.uniform(0, c.WALKER_MAX_SPEED)
+                            loc = (x, y, z)  # carla.Location(x, y, z)
+                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
 
-                                loc = (x, y, z)  # carla.Location(x, y, z)
-                                rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+                            ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
+                                                            speed, None, None)
 
-                                ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
-                                                                speed, None, None)
+                        elif nav_type == c.IMMOBILE:
+                            x = random.randint(min_x, max_x)
+                            y = random.randint(min_y, max_y)
+                            z = 1.5
+                            pitch = 0
+                            yaw = random.randint(0, 360)
+                            roll = 0
+                            speed = 0
 
-                            elif nav_type == c.IMMOBILE:
-                                x = random.randint(min_x, max_x)
-                                y = random.randint(min_y, max_y)
-                                z = 1.5
-                                pitch = 0
-                                yaw = random.randint(0, 360)
-                                roll = 0
-                                speed = 0
+                            loc = (x, y, z)  # carla.Location(x, y, z)
+                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
 
-                                loc = (x, y, z)  # carla.Location(x, y, z)
-                                rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+                            ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
+                                                            speed, None, None)
 
-                                ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
-                                                                speed, None, None)
+                        elif nav_type == c.AUTOPILOT:
+                            sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                            dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                            speed = random.randint(0, 10)
 
-                            elif nav_type == c.AUTOPILOT:
-                                sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                                dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                                speed = random.randint(0, 10)
-
-                                ret = test_scenario_m.add_actor(actor_type, nav_type, None,
-                                                                None, speed, sp_idx, dp_idx)
+                            ret = test_scenario_m.add_actor(actor_type, nav_type, None,
+                                                            None, speed, sp_idx, dp_idx)
+                # spawn actor now
 
                 if conf.debug:
                     if actor_type != c.NULL:
@@ -553,7 +555,7 @@ def main():
 
                 mutate_weather(test_scenario_m)  # mutate_weather_fixed(test)
 
-                signal.alarm(10 * 60)  # timeout after 10 mins
+                signal.alarm(15 * 60)  # timeout after 15 mins
                 try:
                     ret = test_scenario_m.run_test(state)
 

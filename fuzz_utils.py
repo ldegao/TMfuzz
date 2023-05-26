@@ -596,7 +596,6 @@ class TestScenario:
                     os.path.join(self.conf.queue_dir, log_filename),
                     os.path.join(self.conf.error_dir, log_filename)
                 )
-
             shutil.copyfile(
                 "/tmp/fuzzerdata/front.mp4",
                 os.path.join(
