@@ -1,10 +1,10 @@
 """ Global States """
-
+import signal
 class State:
     """
     A state object stores raw data and events captured from the simulator,
     including vehicular states.
-    Pass a reference to this object to TestScenario.run_test() as a parameter.
+    Pass a reference to this object to Scenario.run_test() as a parameter.
     """
     def __init__(self):
         # exec states

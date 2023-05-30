@@ -20,8 +20,8 @@ import shutil
 
 import config
 import constants as c
+import scenario
 import states
-import executor
 
 config.set_carla_api_path()
 try:
@@ -36,7 +36,7 @@ import fuzz_utils
 
 
 def create_test_scenario(conf, base_scenario):
-    return fuzz_utils.TestScenario(conf, base=base_scenario)
+    return scenario.Scenario(conf, base=base_scenario)
 
 
 def handler(signum, frame):
@@ -258,7 +258,7 @@ def main():
                 town_map = "Town0{}".format(conf.town)
             else:
                 town_map = "Town0{}".format(random.randint(1, 2))
-            (client, tm) = executor.connect(conf)
+            (client, tm) = fuzz_utils.connect(conf)
             client.set_timeout(20)
             client.load_world(town_map)
             print("available map",client.get_available_maps())
@@ -310,9 +310,9 @@ def main():
         # wait for a moment
         time.sleep(3)
         # STEP 2: TEST CASE INITIALIZATION
-        # Create and initialize a TestScenario instance based on the metadata
+        # Create and initialize a Scenario instance based on the metadata
         # read from the popped seed file.
-        # test_scenario = fuzz_utils.TestScenario(conf, base=scenario)
+        # test_scenario = fuzz_utils.Scenario(conf, base=scenario)
         try:
             with concurrent.futures.ThreadPoolExecutor() as my_executor:
                 future = my_executor.submit(create_test_scenario, conf, scenario)
@@ -334,7 +334,7 @@ def main():
             if successor_scenario is not None:
                 test_scenario = successor_scenario
 
-            mutated_scenario_list = list()  # mutated TestScenario objects
+            mutated_scenario_list = list()  # mutated Scenario objects
             score_list = list()  # driving scores of each mutated scenario
 
             round_cnt = 0

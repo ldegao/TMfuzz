@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 
 # Python packages
-import glob
 import os
-import pdb
 import sys
 import argparse
 from subprocess import Popen, PIPE
 import signal
-import numpy as np
-import random
 import time
 import math
 import traceback
@@ -17,7 +13,8 @@ import docker
 
 import config
 import constants as c
-from fuzz_utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state
+import globals
+from fuzz_utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state, connect
 
 config.set_carla_api_path()
 try:
@@ -39,10 +36,6 @@ from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=im
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 
 import pygame
-
-client = None
-tm = None
-list_spawn_points = None
 
 
 def _on_collision(event, state):
@@ -155,68 +148,14 @@ def is_player_on_puddle(player_loc, actor_frictions):
             return False
 
 
-def connect(conf):
-    global client
-    global tm
-
-    client = carla.Client(conf.sim_host, conf.sim_port)
-    client.set_timeout(10.0)
-    try:
-        client.get_server_version()
-    except Exception as e:
-        print("[-] Error: Check client connection.")
-        sys.exit(-1)
-    if conf.debug:
-        print("Connected to:", client)
-
-    tm = client.get_trafficmanager(conf.sim_tm_port)
-    tm.set_synchronous_mode(True)
-    if conf.debug:
-        print("Traffic Manager Server:", tm)
-
-    return (client, tm)
-
-
-def switch_map(conf, town):
-    """
-    Switch map in the simulator and retrieve legitimate waypoints (a list of
-    carla.Transform objects) in advance.
-    """
-    global client
-    global list_spawn_points
-
-    assert (client is not None)
-
-    try:
-        world = client.get_world()
-        # if world.get_map().name != town: # force load every time
-        if conf.debug:
-            print("[*] Switching town to {} (slow)".format(town))
-        client.set_timeout(20)  # Handle sluggish loading bug
-        client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
-        if conf.debug:
-            print("[+] Switched")
-        client.set_timeout(10.0)
-
-        town_map = world.get_map()
-        list_spawn_points = town_map.get_spawn_points()
-
-    except Exception as e:
-        print("[-] Error:", e)
-        sys.exit(-1)
-
-
 def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_list):
-    # simulate() is always called by TestScenario instance,
+    # simulate() is always called by Scenario instance,
     # so we won't need to switch map unless a new instance is created.
     # switch_map(conf, client, town)
 
-    global client
-    global tm
-
     # always reuse the existing client instance
-    assert (client is not None)
-    assert (tm is not None)
+    assert (globals.client is not None)
+    assert (globals.tm is not None)
 
     # (client, tm) = connect(self.conf)
     # tm = client.get_trafficmanager(tm.get_port())
@@ -226,8 +165,8 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
 
     try:
         # print("before world setting", time.time())
-        client.set_timeout(10.0)
-        world = client.get_world()
+        globals.client.set_timeout(10.0)
+        world = globals.client.get_world()
         # set all traffic lights to green
         set_traffic_lights_state(world, carla.TrafficLightState.Green)
         world.freeze_all_traffic_lights(True)
@@ -725,7 +664,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                     actor_vehicle.set_target_velocity(forward_vec * 0)
 
                 elif actor["nav_type"] == c.AUTOPILOT:
-                    actor_vehicle.set_autopilot(True, tm.get_port())
+                    actor_vehicle.set_autopilot(True, globals.tm.get_port())
 
                 actor_vehicle.set_simulate_physics(True)
             elif actor["type"] == c.WALKER:  # walker
@@ -1299,7 +1238,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
 
-        tm.set_synchronous_mode(False)
+        globals.tm.set_synchronous_mode(False)
         for s in sensors:
             s.stop()
             s.destroy()
@@ -1321,7 +1260,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
         else:
             if conf.debug:
                 print("[debug] reload")
-            client.reload_world()
+            globals.client.reload_world()
             if conf.debug:
                 print('[debug] done.')
             return retval
@@ -1644,6 +1583,6 @@ if __name__ == '__main__':
 
     (client, tm) = connect("localhost", 2000, 8000)
 
-    ret = simulate(client, town, tm, sp, wp,
+    ret = simulate(tm, sp, wp,
                    weather_dict, frictions_list, actors_list)
     print("simulation returned:", ret)
