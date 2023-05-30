@@ -1,6 +1,7 @@
 import os
 import json
 import pdb
+import random
 import time
 import shutil
 import math
@@ -158,6 +159,16 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
         quaternion[j] *= -1
 
     return quaternion
+
+
+class Actor:
+    def __init__(self, actor, actor_type, actor_id, actor_name, actor_transform):
+        self.actor = actor
+        self.actor_type = actor_type
+        self.actor_id = actor_id
+        self.actor_name = actor_name
+        self.actor_transform = actor_transform
+    pass
 
 
 class TestScenario:
@@ -337,6 +348,113 @@ class TestScenario:
         }
         self.actors.append(new_actor)
 
+        return 0
+
+    def spawn_actor_to_world(self, world, agent_type, actor_type, nav_type, location, rotation, speed,
+                             sp_idx, dp_idx):
+        """
+        try to spawn an actor to the world,if success return the actor,else return None. the only thing that this
+        function do is to spawn the actor to the world,the validity check should be done in the function who call this
+        function
+        world:carla.world
+        actor_type,agent_type: int
+        location: (float x, float y, float z)
+        rotation: (float yaw, float roll,float pitch)
+        speed: float
+        """
+        blueprint_library = world.get_blueprint_library()
+        vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
+        vehicle_bp.set_attribute("color", "255,0,0")
+        maneuvers = None
+        # do validity checks
+        if nav_type == c.LINEAR or nav_type == c.IMMOBILE:
+            spawn_point = (location, rotation)  # carla.Transform(location, rotation)
+            dest_point = None
+
+        elif nav_type == c.MANEUVER:
+            spawn_point = (location, rotation)  # carla.Transform(location, rotation)
+            dest_point = None
+
+            # [direction (-1: L, 0: Fwd, 1: R),
+            #  velocity (m/s) if fwd / apex degree if lane change,
+            #  frame_maneuver_performed]
+            maneuvers = [
+                [0, 0, 0],
+                [0, 8, 0],
+                [0, 8, 0],
+                [0, 8, 0],
+                [0, 8, 0],
+            ]
+
+        elif nav_type == c.AUTOPILOT:
+            assert (executor.list_spawn_points)
+            if sp_idx == dp_idx:
+                return -1
+            sp = executor.list_spawn_points[sp_idx]
+
+            # prevent autopilot vehicles from being
+            # spawned beneath the player vehicle
+            sp.location.z = 1.5
+
+            spawn_point = (
+                (sp.location.x, sp.location.y, sp.location.z),
+                (sp.rotation.roll, sp.rotation.pitch, sp.rotation.yaw)
+            )
+
+            dp = executor.list_spawn_points[dp_idx]
+
+            dest_point = (
+                (dp.location.x, dp.location.y, dp.location.z),
+                (dp.rotation.roll, dp.rotation.pitch, dp.rotation.yaw)
+            )
+
+        dist = self.get_distance_from_player(
+            get_carla_transform(spawn_point).location
+        )
+
+        if dist > c.MAX_DIST_FROM_PLAYER:
+            # print("[-] too far from player: {}m".format(int(dist)))
+            return None
+
+        elif (dist < c.MIN_DIST_FROM_PLAYER) and nav_type != c.MANEUVER:
+            # print("[-] too close to the player: {}m".format(int(dist)))
+            return None
+
+        # try to spwan a test car to see if the simulation is still running
+        # actor_type: vehicle or walker
+        x = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
+        y = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
+
+        actor_spawn_point = carla.Transform(
+            carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z + 2),
+            carla.Rotation(pitch=sp.rotation.pitch, yaw=sp.rotation.yaw, roll=sp.rotation.roll)
+        )
+
+        actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
+        if actor_vehicle is not None:
+            actor_vehicles.append(actor_vehicle)
+            new_actor = {
+                "type": c.VEHICLE,
+                "nav_type": c.LINEAR,
+                "spawn_point": None,
+                "dest_point": None,
+                "speed": random.uniform(2, 10),
+            }
+            actors_list.append(new_actor)
+            actor_vehicle.set_target_velocity(new_actor["speed"] * actor_spawn_point.rotation.get_forward_vector())
+            print("\nactors spwan:", actor_vehicle)
+        else:
+            print("\nactors spwan failed")
+
+        new_actor = {
+            "type": actor_type,
+            "nav_type": nav_type,
+            "spawn_point": spawn_point,
+            "dest_point": dest_point,
+            "speed": speed,
+            "maneuvers": maneuvers
+        }
+        self.actors.append(new_actor)
         return 0
 
     def add_puddle(self, level, location, size):

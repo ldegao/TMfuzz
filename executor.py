@@ -828,39 +828,39 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                 state.speed.append(speed)
                 state.speed_lim.append(speed_limit)
 
-                if cur_frame_id % 25 == 0:
-                    # try to spwan a test car to see if the simulation is still running
-                    # actor_type: vehicle or walker
-                    now_time = time.time()
-                    # spent_time = now_time - last_time
-                    # last_time = now_time
-                    # print("\nspent_time:", spent_time)
-                    # # now_time = time.time()
-                    # x = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
-                    # y = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
-                    # actor_spawn_point = carla.Transform(
-                    #     carla.Location(x=player_loc.x+x, y=player_loc.y+y, z = player_loc.z+2),
-                    #     carla.Rotation(pitch=sp.rotation.pitch, yaw=sp.rotation.yaw, roll=sp.rotation.roll)
-                    # )
-                    # # spent_time = time.time()-now_time
-                    # # print("\nspawn spent_time:", spent_time)
-                    # vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
-                    # vehicle_bp.set_attribute("color", "255,0,0")
-                    # actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
-                    # if actor_vehicle is not None:
-                    #     actor_vehicles.append(actor_vehicle)
-                    #     new_actor = {
-                    #         "type": c.VEHICLE,
-                    #         "nav_type": c.LINEAR,
-                    #         "spawn_point": None,
-                    #         "dest_point": None,
-                    #         "speed": random.uniform(2, 10),
-                    #     }
-                    #     actors_list.append(new_actor)
-                    #     actor_vehicle.set_target_velocity(new_actor["speed"]*actor_spawn_point.rotation.get_forward_vector())
-                    #     print("\nactors spwan:", actor_vehicle)
-                    # else:
-                    #     print("\nactors spwan failed")
+                # if cur_frame_id % 25 == 0:
+                #     # try to spwan a test car to see if the simulation is still running
+                #     # actor_type: vehicle or walker
+                #     now_time = time.time()
+                #     spent_time = now_time - last_time
+                #     last_time = now_time
+                #     print("\nspent_time:", spent_time)
+                #     # now_time = time.time()
+                #     x = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
+                #     y = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
+                #     actor_spawn_point = carla.Transform(
+                #         carla.Location(x=player_loc.x+x, y=player_loc.y+y, z = player_loc.z+2),
+                #         carla.Rotation(pitch=sp.rotation.pitch, yaw=sp.rotation.yaw, roll=sp.rotation.roll)
+                #     )
+                #     # spent_time = time.time()-now_time
+                #     # print("\nspawn spent_time:", spent_time)
+                #     vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
+                #     vehicle_bp.set_attribute("color", "255,0,0")
+                #     actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
+                #     if actor_vehicle is not None:
+                #         actor_vehicles.append(actor_vehicle)
+                #         new_actor = {
+                #             "type": c.VEHICLE,
+                #             "nav_type": c.LINEAR,
+                #             "spawn_point": None,
+                #             "dest_point": None,
+                #             "speed": random.uniform(2, 10),
+                #         }
+                #         actors_list.append(new_actor)
+                #         actor_vehicle.set_target_velocity(new_actor["speed"]*actor_spawn_point.rotation.get_forward_vector())
+                #         print("\nactors spwan:", actor_vehicle)
+                #     else:
+                #         print("\nactors spwan failed")
                 print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
                     sp.location.x, sp.location.y, player_loc.x,
                     player_loc.y, goal_loc.x, goal_loc.y,
