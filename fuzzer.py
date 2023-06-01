@@ -32,11 +32,11 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
-import fuzz_utils
+import utils
 
 
-def create_test_scenario(conf, base_scenario):
-    return scenario.Scenario(conf, base=base_scenario)
+def create_test_scenario(conf):
+    return scenario.Scenario(conf)
 
 
 def handler(signum, frame):
@@ -51,7 +51,6 @@ def init(conf, args):
         conf.determ_seed = conf.cur_time
     random.seed(conf.determ_seed)
     print("[info] determ seed set to:", conf.determ_seed)
-
     conf.out_dir = args.out_dir
     try:
         os.mkdir(conf.out_dir)
@@ -211,7 +210,6 @@ def main():
     cov_dict = {}
 
     queue = deque(conf.enqueue_seed_scenarios())
-
     scene_id = 0
     campaign_cnt = 0
 
@@ -257,11 +255,10 @@ def main():
             if conf.town is not None:
                 town_map = "Town0{}".format(conf.town)
             else:
-                town_map = "Town0{}".format(random.randint(1, 2))
-            (client, tm) = fuzz_utils.connect(conf)
+                town_map = "Town0{}".format(random.randint(1, 5))
+            (client, tm) = utils.connect(conf)
             client.set_timeout(20)
             client.load_world(town_map)
-            print("available map",client.get_available_maps())
             world = client.get_world()
             # TODO this will cause segmentation fault but i don't know why
             town = world.get_map()
@@ -273,20 +270,16 @@ def main():
             pitch = sp.rotation.pitch
             yaw = sp.rotation.yaw
             roll = sp.rotation.roll
-
-            wp = random.choice(spawn_points)
-            wp_x = wp.location.x
-            wp_y = wp.location.y
-            wp_z = wp.location.z
-            wp_yaw = wp.rotation.yaw
-
             # restrict destinition to be within 200 meters
-            while math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > 100:
+            destinition_flag =True
+            while destinition_flag:
                 wp = random.choice(spawn_points)
                 wp_x = wp.location.x
                 wp_y = wp.location.y
                 wp_z = wp.location.z
                 wp_yaw = wp.rotation.yaw
+                if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > 100:
+                    destinition_flag = False
 
             seed_dict = {
                 "map": town_map,
@@ -312,10 +305,10 @@ def main():
         # STEP 2: TEST CASE INITIALIZATION
         # Create and initialize a Scenario instance based on the metadata
         # read from the popped seed file.
-        # test_scenario = fuzz_utils.Scenario(conf, base=scenario)
+        # test_scenario = utils.Scenario(conf, base=scenario)
         try:
-            with concurrent.futures.ThreadPoolExecutor() as my_executor:
-                future = my_executor.submit(create_test_scenario, conf, scenario)
+            with concurrent.futures.ThreadPoolExecutor() as my_simutale:
+                future = my_simutale.submit(create_test_scenario, conf)
                 test_scenario = future.result(timeout=15)
         except concurrent.futures.TimeoutError:
             print("Test scenario creation timed out after 15 seconds.")
@@ -339,7 +332,7 @@ def main():
 
             round_cnt = 0
             town = test_scenario.town
-            (min_x, max_x, min_y, max_y) = fuzz_utils.get_valid_xy_range(town)
+            (min_x, max_x, min_y, max_y) = utils.get_valid_xy_range(town)
 
             while round_cnt < conf.max_mutations:  # mutation rounds
 

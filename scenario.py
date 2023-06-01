@@ -8,14 +8,14 @@ import carla
 import numpy
 import numpy as np
 
-import executor
+from simulate import simulate
 import constants as c
-import fuzz_utils
+import utils
 import globals
 from driving_quality import get_vx_light, get_ay_list, get_ay_diff_list, get_ay_heavy, get_swa_diff_list, get_swa_heavy, \
     get_ay_gain, get_ay_peak, get_frac_drop, get_abs_yr, check_hard_acc, check_hard_braking, check_hard_turn, \
     get_oversteer_level, get_understeer_level
-from fuzz_utils import get_carla_transform
+from utils import get_carla_transform
 
 
 class Scenario:
@@ -35,7 +35,7 @@ class Scenario:
     driving_quality_score = None
     found_error = False
 
-    def __init__(self, conf, base="seed00.json"):
+    def __init__(self, conf):
         """
         When initializing, perform dry run and get the oracle state
         """
@@ -44,7 +44,7 @@ class Scenario:
         # First, connect to the client once.
         # This is important because the same TM instance has to be reused
         # over multiple simulations for autopilot to be enabled.
-        (client, tm) = fuzz_utils.connect(self.conf)
+        (client, tm) = utils.connect(self.conf)
 
         self.weather["cloud"] = 0
         self.weather["rain"] = 0
@@ -59,8 +59,6 @@ class Scenario:
         self.puddles = []
         self.driving_quality_score = 0
         self.found_error = False
-
-        # seedfile = os.path.join("seed", base)
         seedfile = os.path.join(conf.seed_dir, conf.cur_scenario)
         with open(seedfile, "r") as fp:
             seed = json.load(fp)
@@ -81,13 +79,13 @@ class Scenario:
         # )
 
         self.town = seed["map"]
-        fuzz_utils.switch_map(conf, self.town)
+        utils.switch_map(conf, self.town)
 
         # self.oracle_state = dry_run(self.conf, self.client, self.tm,
         # self.town, self.sp, self.wp, self.weather)
         # print("oracle:", self.oracle_state)
 
-        # executor.get_waypoints()
+        # simutale.get_waypoints()
 
         # self.quota = self.conf.initial_quota
 
@@ -455,14 +453,14 @@ class Scenario:
 
     def run_test(self, state):
         if self.conf.debug:
-            print("[*] call executor.simulate()")
+            print("[*] call simutale.simulate()")
             # print("Weather:", self.weather)
         # print("before sim", time.time())
 
         sp = self.get_seed_sp_transform(self.seed_data)
         wp = self.get_seed_wp_transform(self.seed_data)
 
-        ret = executor.simulate(
+        ret = simulate(
             conf=self.conf,
             state=state,
             town=self.town,

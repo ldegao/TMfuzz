@@ -14,7 +14,7 @@ import docker
 import config
 import constants as c
 import globals
-from fuzz_utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state, connect
+from utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state, connect
 
 config.set_carla_api_path()
 try:

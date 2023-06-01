@@ -29,7 +29,7 @@ except ModuleNotFoundError as e:
 
 # for i in range(conf.num_dry_runs):
 # print("performing {}-th dry run".format(i+1))
-# executor.simulate(client, town, tm, sp, wp, weather, [], [])
+# simutale.simulate(client, town, tm, sp, wp, weather, [], [])
 # state = {
 # "num_frames": states.NUM_FRAMES,
 # "elapsed_time": states.ELAPSED_TIME,
