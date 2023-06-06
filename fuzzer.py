@@ -207,7 +207,6 @@ def main():
 
     init(conf, args)
 
-    cov_dict = {}
 
     queue = deque(conf.enqueue_seed_scenarios())
     scene_id = 0
@@ -216,8 +215,6 @@ def main():
     signal.signal(signal.SIGALRM, handler)
 
     while True:
-        cycle_cnt = 0
-
         # STEP 0: Restart Carla simulator at the beginning of each cycle
         # (Carla hangs after a while due to a memory leak)
         # UPDATE: can't do this due to a bug in Carla. TimeoutException will
@@ -271,7 +268,7 @@ def main():
             yaw = sp.rotation.yaw
             roll = sp.rotation.roll
             # restrict destinition to be within 200 meters
-            destinition_flag =True
+            destinition_flag = True
             while destinition_flag:
                 wp = random.choice(spawn_points)
                 wp_x = wp.location.x
@@ -315,305 +312,281 @@ def main():
             continue
         if conf.debug:
             print("[*] USING SEED FILE:", scenario)
-        successor_scenario = None
-
         # STEP 3: SCENE MUTATION
         # While test scenario has quota left, mutate scene by randomly
         # generating walker/vehicle/puddle.
-
-        while cycle_cnt < conf.max_cycles:
-            cycle_cnt += 1
-
-            if successor_scenario is not None:
-                test_scenario = successor_scenario
-
+        round_cnt = 0
+        while round_cnt < conf.max_mutations:  # mutation rounds
             mutated_scenario_list = list()  # mutated Scenario objects
             score_list = list()  # driving scores of each mutated scenario
-
-            round_cnt = 0
             town = test_scenario.town
             (min_x, max_x, min_y, max_y) = utils.get_valid_xy_range(town)
+            round_cnt += 1
+            print("\n\033[1m\033[92mCampaign #{}  Mutation #{}/{}".format(
+                campaign_cnt, round_cnt,
+                conf.max_mutations), "\033[0m", datetime.datetime.now())
 
-            while round_cnt < conf.max_mutations:  # mutation rounds
+            test_scenario_m = deepcopy(test_scenario)
+            mutated_scenario_list.append(test_scenario_m)
+            # STEP 3-1: ACTOR PROFILE GENERATION
 
-                round_cnt += 1
-                print("\n\033[1m\033[92mCampaign #{} Cycle #{}/{} Mutation #{}/{}".format(
-                    campaign_cnt, cycle_cnt, conf.max_cycles, round_cnt,
-                    conf.max_mutations), "\033[0m", datetime.datetime.now())
+            if conf.function == "general":
 
-                test_scenario_m = deepcopy(test_scenario)
-                mutated_scenario_list.append(test_scenario_m)
-                # STEP 3-1: ACTOR PROFILE GENERATION
+                if conf.strategy == c.ALL:
+                    actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
+                    nav_type = random.randint(0, len(c.NAVTYPE_LIST) - 1)
 
-                if conf.function == "general":
+                elif conf.strategy == c.CONGESTION:
+                    actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
+                    nav_type = c.AUTOPILOT
 
-                    if conf.strategy == c.ALL:
-                        actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
-                        nav_type = random.randint(0, len(c.NAVTYPE_LIST) - 1)
+                elif conf.strategy == c.ENTROPY:
+                    actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
+                    nav_type = c.LINEAR
 
-                    elif conf.strategy == c.CONGESTION:
-                        actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
-                        nav_type = c.AUTOPILOT
-
-                    elif conf.strategy == c.ENTROPY:
-                        actor_type = random.randint(0, len(c.ACTOR_LIST) - 1)
-                        nav_type = c.LINEAR
-
-                    elif conf.strategy == c.INSTABILITY:
-                        actor_type = c.NULL
-                        nav_type = c.NULL
-
-                    elif conf.strategy == c.TRAJECTORY:
-                        actor_type = c.VEHICLE
-                        nav_type = c.MANEUVER
-
-                elif conf.function == "collision":
-                    actor_type = c.ACTOR_LIST[c.VEHICLE]
-                    nav_type = c.NAVTYPE_LIST[c.LINEAR]
-
-                elif conf.function == "traction":
+                elif conf.strategy == c.INSTABILITY:
                     actor_type = c.NULL
                     nav_type = c.NULL
 
-                # for i in range(0,3):
-                # repeat until a valid actor profile is generated
-                ret = True
-                while ret:
-                    if actor_type == c.NULL:
-                        break
+                elif conf.strategy == c.TRAJECTORY:
+                    actor_type = c.VEHICLE
+                    nav_type = c.MANEUVER
 
-                    elif actor_type == c.VEHICLE:
-                        # spawn vehicle at a random location
-                        # run test while mutating weather
-                        if nav_type == c.LINEAR:
-                            x = random.randint(min_x, max_x)
-                            y = random.randint(min_y, max_y)
-                            z = 1.5
-                            pitch = 0
-                            yaw = random.randint(0, 360)
-                            roll = 0
-                            speed = random.uniform(0, c.VEHICLE_MAX_SPEED)
+            elif conf.function == "collision":
+                actor_type = c.ACTOR_LIST[c.VEHICLE]
+                nav_type = c.NAVTYPE_LIST[c.LINEAR]
 
-                            loc = (x, y, z)  # carla.Location(x, y, z)
-                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+            elif conf.function == "traction":
+                actor_type = c.NULL
+                nav_type = c.NULL
 
-                            ret = test_scenario_m.add_actor(actor_type,
-                                                            nav_type, loc, rot, speed, None, None)
-
-                        elif nav_type == c.IMMOBILE:
-                            x = random.randint(min_x, max_x)
-                            y = random.randint(min_y, max_y)
-                            z = 1.5
-                            pitch = 0
-                            yaw = random.randint(0, 360)
-                            roll = 0
-                            speed = 0
-
-                            loc = (x, y, z)  # carla.Location(x, y, z)
-                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
-
-                            ret = test_scenario_m.add_actor(actor_type,
-                                                            nav_type, loc, rot, speed, None, None)
-
-                        elif nav_type == c.AUTOPILOT:
-                            sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                            dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                            ret = test_scenario_m.add_actor(actor_type,
-                                                            nav_type, None, None, None, sp_idx,
-                                                            dp_idx)
-
-                        elif nav_type == c.MANEUVER:
-                            if len(test_scenario_m.actors) == 0:
-                                # add an actor
-                                # TODO there are some issues with this
-                                ret = True
-                                while ret:
-                                    x = test_scenario_m.sp["Location"][0] + random.choice([-1,0, 1]) * random.randint(15, 30) / 10.0
-
-                                    y = test_scenario_m.sp["Location"][1] + random.choice([-1,0,1]) * random.randint(15, 30) / 10.0
-                                    z = 4
-
-                                    roll = test_scenario_m.sp["Rotation"][0]
-                                    pitch = test_scenario_m.sp["Rotation"][1]
-                                    yaw = test_scenario_m.sp["Rotation"][2]
-
-                                    speed = 0
-
-                                    loc = (x, y, z)  # carla.Location(x, y, z)
-                                    rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
-                                    ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
-                                                                    speed, None, None)
-                            else:
-                                # mutate maneuvers if we have an actor
-                                i = random.randint(0, 4)
-                                direction = random.randint(-1, 1)
-
-                                if direction == 0:
-                                    speed = random.randint(0, 10)  # m/s
-                                    test_scenario_m.actors[0]["maneuvers"][i] = [direction, speed, 0]
-                                else:
-                                    degree = random.randint(30, 60)  # deg
-                                    test_scenario_m.actors[0]["maneuvers"][i] = [direction, degree, 0]
-
-                                # reset executed frame id
-                                for i in range(5):
-                                    test_scenario_m.actors[0]["maneuvers"][i][2] = 0
-
-                                ret = 0
-
-                            print("Maneuvers:", test_scenario_m.actors[0]["maneuvers"])
-
-                    elif actor_type == c.WALKER:
-                        if nav_type == c.LINEAR:
-                            x = random.randint(min_x, max_x)
-                            y = random.randint(min_y, max_y)
-                            z = 1.5
-                            pitch = 0
-                            yaw = random.randint(0, 360)
-                            roll = 0
-                            speed = random.uniform(0, c.WALKER_MAX_SPEED)
-
-                            loc = (x, y, z)  # carla.Location(x, y, z)
-                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
-
-                            ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
-                                                            speed, None, None)
-
-                        elif nav_type == c.IMMOBILE:
-                            x = random.randint(min_x, max_x)
-                            y = random.randint(min_y, max_y)
-                            z = 1.5
-                            pitch = 0
-                            yaw = random.randint(0, 360)
-                            roll = 0
-                            speed = 0
-
-                            loc = (x, y, z)  # carla.Location(x, y, z)
-                            rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
-
-                            ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
-                                                            speed, None, None)
-
-                        elif nav_type == c.AUTOPILOT:
-                            sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                            dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
-                            speed = random.randint(0, 10)
-
-                            ret = test_scenario_m.add_actor(actor_type, nav_type, None,
-                                                            None, speed, sp_idx, dp_idx)
-                # spawn actor now
-
-                if conf.debug:
-                    if actor_type != c.NULL:
-                        print("[debug] successfully added {} {}".format(
-                            c.NAVTYPE_NAMES[nav_type], c.ACTOR_NAMES[actor_type]))
-
-                # STEP 3-2: PUDDLE PROFILE GENERATION
-                if conf.function == "traction":
-                    prob_puddle = 0  # always add a puddle
-                elif conf.function == "collision":
-                    prob_puddle = 100  # never add a puddle
-                elif conf.strategy == c.INSTABILITY:
-                    prob_puddle = 0
-                else:
-                    prob_puddle = random.randint(0, 100)
-
-                if (prob_puddle < c.PROB_PUDDLE):
-                    ret = True
-                    while ret:
-                        # slippery puddles only
-                        level = random.randint(0, 200) / 100
-                        x = random.randint(min_x, max_x)
-                        y = random.randint(min_y, max_y)
-                        z = 0
-
-                        xy_size = c.PUDDLE_MAX_SIZE
-                        z_size = 1000  # doesn't affect anything
-
-                        loc = (x, y, z)  # carla.Location(x, y, z)
-                        size = (xy_size, xy_size, z_size)  # carla.Location(xy_size, xy_size, z_size)
-                        ret = test_scenario_m.add_puddle(level, loc, size)
-
-                    if conf.debug:
-                        print("successfully added a puddle")
-
-                # print("after seed gen and mutation", time.time())
-                # STEP 3-3: EXECUTE SIMULATION
-                ret = None
-
-                state = states.State()
-                state.campaign_cnt = campaign_cnt
-                state.cycle_cnt = cycle_cnt
-                state.mutation = round_cnt
-
-                mutate_weather(test_scenario_m)  # mutate_weather_fixed(test)
-
-                signal.alarm(15 * 60)  # timeout after 15 mins
-                try:
-                    ret = test_scenario_m.run_test(state)
-
-                except Exception as e:
-                    if e.args[0] == "HANG":
-                        print("[-] simulation hanging. abort.")
-                        ret = -1
-                    else:
-                        print("[-] run_test error:")
-                        traceback.print_exc()
-
-                signal.alarm(0)
-
-                # t3 = time.time()
-
-                # STEP 3-4: DECIDE WHAT TO DO BASED ON THE RESULT OF EXECUTION
-                # TODO: map return codes with failures, e.g., spawn
-                if ret is None:
-                    # failure
-                    pass
-
-                elif ret == -1:
-                    print("Spawn / simulation failure - don't add round cnt")
-                    round_cnt -= 1
-
-                elif ret == 1:
-                    print("fuzzer - found an error")
-                    # found an error - move on to next one in queue
-                    # test.quota = 0
+            # for i in range(0,3):
+            # repeat until a valid actor profile is generated
+            ret = True
+            while ret:
+                if actor_type == c.NULL:
                     break
 
-                elif ret == 128:
-                    print("Exit by user request")
-                    exit(0)
+                elif actor_type == c.VEHICLE:
+                    # spawn vehicle at a random location
+                    # run test while mutating weather
+                    if nav_type == c.LINEAR:
+                        x = random.randint(min_x, max_x)
+                        y = random.randint(min_y, max_y)
+                        z = 1.5
+                        pitch = 0
+                        yaw = random.randint(0, 360)
+                        roll = 0
+                        speed = random.uniform(0, c.VEHICLE_MAX_SPEED)
 
-                else:
-                    if ret == -1:
-                        print("[-] Fatal error occurred during test")
-                        exit(-1)
+                        loc = (x, y, z)  # carla.Location(x, y, z)
+                        rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
 
-                score_list.append(test_scenario_m.driving_quality_score)
-                ### mutation loop ends
+                        ret = test_scenario_m.add_actor(actor_type,
+                                                        nav_type, loc, rot, speed, None, None)
 
-            if test_scenario_m.found_error:
-                # error detected. start a new cycle with a new seed
-                successor_scenario = test_scenario_m
-                break
+                    elif nav_type == c.IMMOBILE:
+                        x = random.randint(min_x, max_x)
+                        y = random.randint(min_y, max_y)
+                        z = 1.5
+                        pitch = 0
+                        yaw = random.randint(0, 360)
+                        roll = 0
+                        speed = 0
+
+                        loc = (x, y, z)  # carla.Location(x, y, z)
+                        rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+
+                        ret = test_scenario_m.add_actor(actor_type,
+                                                        nav_type, loc, rot, speed, None, None)
+
+                    elif nav_type == c.AUTOPILOT:
+                        sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                        dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                        ret = test_scenario_m.add_actor(actor_type,
+                                                        nav_type, None, None, None, sp_idx,
+                                                        dp_idx)
+
+                    # elif nav_type == c.MANEUVER:
+                    #     if len(test_scenario_m.actor_now) == 0:
+                    #         # add an actor
+                    #         # TODO there are some issues with this
+                    #         ret = True
+                    #         while ret:
+                    #             x = test_scenario_m.sp["Location"][0] + random.choice([-1, 0, 1]) * random.randint(15,
+                    #                                                                                                30) / 10.0
+                    #
+                    #             y = test_scenario_m.sp["Location"][1] + random.choice([-1, 0, 1]) * random.randint(15,
+                    #                                                                                                30) / 10.0
+                    #             z = 4
+                    #
+                    #             roll = test_scenario_m.sp["Rotation"][0]
+                    #             pitch = test_scenario_m.sp["Rotation"][1]
+                    #             yaw = test_scenario_m.sp["Rotation"][2]
+                    #
+                    #             speed = 0
+                    #
+                    #             loc = (x, y, z)  # carla.Location(x, y, z)
+                    #             rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+                    #             ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
+                    #                                             speed, None, None)
+                    #     else:
+                    #         # mutate maneuvers if we have an actor
+                    #         i = random.randint(0, 4)
+                    #         direction = random.randint(-1, 1)
+                    #
+                    #         if direction == 0:
+                    #             speed = random.randint(0, 10)  # m/s
+                    #             test_scenario_m.actor_now[0]["maneuvers"][i] = [direction, speed, 0]
+                    #         else:
+                    #             degree = random.randint(30, 60)  # deg
+                    #             test_scenario_m.actor_now[0]["maneuvers"][i] = [direction, degree, 0]
+                    #
+                    #         # reset executed frame id
+                    #         for i in range(5):
+                    #             test_scenario_m.actor_now[0]["maneuvers"][i][2] = 0
+                    #
+                    #         ret = 0
+                    #
+                    #     print("Maneuvers:", test_scenario_m.actor_now[0]["maneuvers"])
+
+                elif actor_type == c.WALKER:
+                    if nav_type == c.LINEAR:
+                        x = random.randint(min_x, max_x)
+                        y = random.randint(min_y, max_y)
+                        z = 1.5
+                        pitch = 0
+                        yaw = random.randint(0, 360)
+                        roll = 0
+                        speed = random.uniform(0, c.WALKER_MAX_SPEED)
+
+                        loc = (x, y, z)  # carla.Location(x, y, z)
+                        rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+
+                        ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
+                                                        speed, None, None)
+
+                    elif nav_type == c.IMMOBILE:
+                        x = random.randint(min_x, max_x)
+                        y = random.randint(min_y, max_y)
+                        z = 1.5
+                        pitch = 0
+                        yaw = random.randint(0, 360)
+                        roll = 0
+                        speed = 0
+
+                        loc = (x, y, z)  # carla.Location(x, y, z)
+                        rot = (roll, pitch, yaw)  # carla.Rotation(pitch=pitch, yaw=yaw, roll=roll)
+
+                        ret = test_scenario_m.add_actor(actor_type, nav_type, loc, rot,
+                                                        speed, None, None)
+
+                    elif nav_type == c.AUTOPILOT:
+                        sp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                        dp_idx = random.randint(0, c.NUM_WAYPOINTS[town] - 1)
+                        speed = random.randint(0, 10)
+
+                        ret = test_scenario_m.add_actor(actor_type, nav_type, None,
+                                                        None, speed, sp_idx, dp_idx)
+            # spawn actor now
+
+            if conf.debug:
+                if actor_type != c.NULL:
+                    print("[debug] successfully added {} {}".format(
+                        c.NAVTYPE_NAMES[nav_type], c.ACTOR_NAMES[actor_type]))
+
+            # STEP 3-2: PUDDLE PROFILE GENERATION
+            if conf.function == "traction":
+                prob_puddle = 0  # always add a puddle
+            elif conf.function == "collision":
+                prob_puddle = 100  # never add a puddle
+            elif conf.strategy == c.INSTABILITY:
+                prob_puddle = 0
+            else:
+                prob_puddle = random.randint(0, 100)
+
+            if (prob_puddle < c.PROB_PUDDLE):
+                ret = True
+                while ret:
+                    # slippery puddles only
+                    level = random.randint(0, 200) / 100
+                    x = random.randint(min_x, max_x)
+                    y = random.randint(min_y, max_y)
+                    z = 0
+
+                    xy_size = c.PUDDLE_MAX_SIZE
+                    z_size = 1000  # doesn't affect anything
+
+                    loc = (x, y, z)  # carla.Location(x, y, z)
+                    size = (xy_size, xy_size, z_size)  # carla.Location(xy_size, xy_size, z_size)
+                    ret = test_scenario_m.add_puddle(level, loc, size)
+
+                if conf.debug:
+                    print("successfully added a puddle")
+
+            # print("after seed gen and mutation", time.time())
+            # STEP 3-3: EXECUTE SIMULATION
+            ret = None
+
+            state = states.State()
+            state.campaign_cnt = campaign_cnt
+            state.mutation = round_cnt
+            # for test
+            mutate_weather_fixed(test_scenario_m)  # mutate_weather_fixed(test)
+            signal.alarm(15 * 60)  # timeout after 15 mins
             try:
-                idx = score_list.index(min(score_list))
-            except ValueError:
-                print("[-] no score found")
-                continue
+                ret = test_scenario_m.run_test(state)
 
-            successor_scenario = mutated_scenario_list[idx]
+            except Exception as e:
+                if e.args[0] == "HANG":
+                    print("[-] simulation hanging. abort.")
+                    ret = -1
+                else:
+                    print("[-] run_test error:")
+                    traceback.print_exc()
 
-            print(score_list)
-            print(mutated_scenario_list)
-            print("successor:", vars(successor_scenario))
+            signal.alarm(0)
 
-            shutil.copyfile(
-                os.path.join(conf.queue_dir, successor_scenario.log_filename),
-                os.path.join(conf.cov_dir, successor_scenario.log_filename)
-            )
+            # t3 = time.time()
 
-            print("=" * 10 + " END OF ALL CYCLES " + "=" * 10)
+            # STEP 3-4: DECIDE WHAT TO DO BASED ON THE RESULT OF EXECUTION
+            # TODO: map return codes with failures, e.g., spawn
+            if ret is None:
+                # failure
+                pass
+
+            elif ret == -1:
+                print("Spawn / simulation failure - don't add round cnt")
+                round_cnt -= 1
+
+            elif ret == 1:
+                print("fuzzer - found an error")
+                # found an error - move on to next one in queue
+                # test.quota = 0
+                break
+
+            elif ret == 128:
+                print("Exit by user request")
+                exit(0)
+
+            else:
+                if ret == -1:
+                    print("[-] Fatal error occurred during test")
+                    exit(-1)
+
+            score_list.append(test_scenario_m.driving_quality_score)
+            # mutation loop ends
+        if test_scenario_m.found_error:
+            print("[-]error detected. start a new cycle with a new seed")
+            continue
+        try:
+            idx = score_list.index(min(score_list))
+        except ValueError:
+            print("[-] no score found")
+            continue
+        print(score_list)
+        print(mutated_scenario_list)
+        print("=" * 10 + " END OF ALL CYCLES " + "=" * 10)
 
 
 if __name__ == "__main__":

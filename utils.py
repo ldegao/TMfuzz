@@ -3,7 +3,7 @@ import json
 import math
 import pdb
 import sys
-import globals
+import globals as g
 import config
 from driving_quality import *
 
@@ -154,22 +154,22 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
 
 def connect(conf):
     # global client, tm
-    globals.client = carla.Client(conf.sim_host, conf.sim_port)
-    globals.client.set_timeout(10.0)
+    g.client = carla.Client(conf.sim_host, conf.sim_port)
+    g.client.set_timeout(10.0)
     try:
-        globals.client.get_server_version()
+        g.client.get_server_version()
     except Exception as e:
         print("[-] Error: Check client connection.")
         sys.exit(-1)
     if conf.debug:
-        print("Connected to:", globals.client)
+        print("Connected to:", g.client)
 
-    globals.tm = globals.client.get_trafficmanager(conf.sim_tm_port)
-    globals.tm.set_synchronous_mode(True)
+    g.tm = g.client.get_trafficmanager(conf.sim_tm_port)
+    g.tm.set_synchronous_mode(True)
     if conf.debug:
-        print("Traffic Manager Server:", globals.tm)
+        print("Traffic Manager Server:", g.tm)
 
-    return (globals.client, globals.tm)
+    return (g.client, g.tm)
 
 
 def switch_map(conf, town):
@@ -178,22 +178,23 @@ def switch_map(conf, town):
     carla.Transform objects) in advance.
     """
 
-    assert (globals.client is not None)
+    assert (g.client is not None)
 
     try:
-        world = globals.client.get_world()
+        world = g.client.get_world()
         # if world.get_map().name != town: # force load every time
         if conf.debug:
             print("[*] Switching town to {} (slow)".format(town))
-        globals.client.set_timeout(20)  # Handle sluggish loading bug
-        globals.client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
+        g.client.set_timeout(20)  # Handle sluggish loading bug
+        g.client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
         if conf.debug:
             print("[+] Switched")
-        globals.client.set_timeout(10.0)
+        g.client.set_timeout(10.0)
 
         town_map = world.get_map()
-        globals.list_spawn_points = town_map.get_spawn_points()
+        g.list_spawn_points = town_map.get_spawn_points()
 
     except Exception as e:
         print("[-] Error:", e)
         sys.exit(-1)
+

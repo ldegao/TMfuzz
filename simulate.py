@@ -2,8 +2,9 @@
 
 # Python packages
 import os
+import pdb
+import random
 import sys
-import argparse
 from subprocess import Popen, PIPE
 import signal
 import time
@@ -11,9 +12,10 @@ import math
 import traceback
 import docker
 
+from actor import Actor
 import config
 import constants as c
-import globals
+import globals as g
 from utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state, connect
 
 config.set_carla_api_path()
@@ -93,16 +95,16 @@ def _on_top_camera_capture(image):
 # _surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
 
-def set_camera(conf, player, spectator):
+def _set_camera(conf, player, spectator):
     if conf.view == c.BIRDSEYE:
-        cam_over_player(player, spectator)
+        _cam_over_player(player, spectator)
     elif conf.view == c.ONROOF:
-        cam_chase_player(player, spectator)
+        _cam_chase_player(player, spectator)
     else:  # fallthru default
-        cam_chase_player(player, spectator)
+        _cam_chase_player(player, spectator)
 
 
-def cam_chase_player(player, spectator):
+def _cam_chase_player(player, spectator):
     location = player.get_location()
     rotation = player.get_transform().rotation
     fwd_vec = rotation.get_forward_vector()
@@ -119,7 +121,7 @@ def cam_chase_player(player, spectator):
     )
 
 
-def cam_over_player(player, spectator):
+def _cam_over_player(player, spectator):
     location = player.get_location()
     location.z += 100
     # rotation = player.get_transform().rotation
@@ -130,7 +132,7 @@ def cam_over_player(player, spectator):
     )
 
 
-def is_player_on_puddle(player_loc, actor_frictions):
+def _is_player_on_puddle(player_loc, actor_frictions):
     for friction in actor_frictions:
         len_x = float(friction.attributes["extent_x"])
         len_y = float(friction.attributes["extent_y"])
@@ -142,31 +144,35 @@ def is_player_on_puddle(player_loc, actor_frictions):
         p4 = loc_y + len_y / 100
         p_x = player_loc.x
         p_y = player_loc.y
-        if p1 <= p_x and p_x <= p2 and p3 <= p_y and p_y <= p4:
+        if p1 <= p_x <= p2 and p3 <= p_y and p_y <= p4:
             return True
         else:
             return False
 
 
-def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_list):
+def _try_to_add_actor():
+    pass
+
+
+def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
     # simulate() is always called by Scenario instance,
     # so we won't need to switch map unless a new instance is created.
     # switch_map(conf, client, town)
 
     # always reuse the existing client instance
-    assert (globals.client is not None)
-    assert (globals.tm is not None)
+    assert (g.client is not None)
+    assert (g.tm is not None)
 
     # (client, tm) = connect(self.conf)
     # tm = client.get_trafficmanager(tm.get_port())
     # print("TM_CLIENT:", tm, tm.get_port())
     # tm.reset_traffic_lights() # XXX: might need this later
     retval = 0
-
+    actors_now = []
     try:
         # print("before world setting", time.time())
-        globals.client.set_timeout(10.0)
-        world = globals.client.get_world()
+        g.client.set_timeout(10.0)
+        world = g.client.get_world()
         # set all traffic lights to green
         set_traffic_lights_state(world, carla.TrafficLightState.Green)
         world.freeze_all_traffic_lights(True)
@@ -401,7 +407,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
 
         # print("after spawning ego_vehicle", time.time())
 
-        # print("before spawning actors", time.time())
+        # print("before spawning actor_now", time.time())
 
         # Attach collision detector
         collision_bp = blueprint_library.find('sensor.other.collision')
@@ -522,19 +528,19 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                 friction["level"])
                   )
 
-        # spawn actors
+        # spawn actor_now
         vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
         vehicle_bp.set_attribute("color", "255,0,0")
         walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
         walker_controller_bp = blueprint_library.find('controller.ai.walker')
 
-        for actor in actors_list:
-            actor_sp = get_carla_transform(actor["spawn_point"])
-            if actor["type"] == c.VEHICLE:  # vehicle
+        for actor in actors_now:
+            actor_sp = get_carla_transform(actor.spawn_point)
+            if actor.actor_type == c.VEHICLE:  # vehicle
                 actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_sp)
-                actor_nav = c.NAVTYPE_NAMES[actor["nav_type"]]
+                actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
                 if actor_vehicle is None:
-                    actor_str = c.ACTOR_NAMES[actor["type"]]
+                    actor_str = c.ACTOR_NAMES[actor.actor_type]
                     print("[-] Failed spawning {} {} at ({}, {})".format(
                         actor_nav, actor_str, actor_sp.location.x,
                         actor_sp.location.y)
@@ -554,11 +560,11 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                     actor_sp.rotation.yaw)
                       )
 
-            elif actor["type"] == c.WALKER:  # walker
+            elif actor.actor_type == c.WALKER:  # walker
                 actor_walker = world.try_spawn_actor(walker_bp, actor_sp)
-                actor_nav = c.NAVTYPE_NAMES[actor["nav_type"]]
+                actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
                 if actor_walker is None:
-                    actor_str = c.ACTOR_NAMES[actor["type"]]
+                    actor_str = c.ACTOR_NAMES[actor.actor_type]
                     print("[-] Failed spawning {} {} at ({}, {})".format(
                         actor_nav, actor_str, actor_sp.location.x,
                         actor_sp.location.y)
@@ -577,7 +583,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                     actor_sp.location.y,
                     actor_sp.rotation.yaw)
                       )
-        # print("after spawning actors", time.time())
+        # print("after spawning actor_now", time.time())
 
         if conf.agent_type == c.AUTOWARE:
             # print("before launching autoware", time.time())
@@ -647,37 +653,37 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
         # handle actor missions after Autoware's goal is published
         cnt_v = 0
         cnt_w = 0
-        for actor in actors_list:
-            actor_sp = get_carla_transform(actor["spawn_point"])
-            actor_dp = get_carla_transform(actor["dest_point"])
-            if actor["type"] == c.VEHICLE:  # vehicle
+        for actor in actors_now:
+            actor_sp = get_carla_transform(actor.spawn_point)
+            actor_dp = get_carla_transform(actor.dest_point)
+            if actor.actor_type == c.VEHICLE:  # vehicle
                 actor_vehicle = actor_vehicles[cnt_v]
                 cnt_v += 1
-                if actor["nav_type"] == c.LINEAR:
+                if actor.nav_type == c.LINEAR:
                     forward_vec = actor_sp.rotation.get_forward_vector()
-                    actor_vehicle.set_target_velocity(forward_vec * actor["speed"])
+                    actor_vehicle.set_target_velocity(forward_vec * actor.speed)
 
-                elif actor["nav_type"] == c.MANEUVER:
+                elif actor.nav_type == c.MANEUVER:
                     # set initial speed 0
                     # trajectory control happens in the control loop below
                     forward_vec = actor_sp.rotation.get_forward_vector()
                     actor_vehicle.set_target_velocity(forward_vec * 0)
 
-                elif actor["nav_type"] == c.AUTOPILOT:
-                    actor_vehicle.set_autopilot(True, globals.tm.get_port())
+                elif actor.nav_type == c.AUTOPILOT:
+                    actor_vehicle.set_autopilot(True, g.tm.get_port())
 
                 actor_vehicle.set_simulate_physics(True)
-            elif actor["type"] == c.WALKER:  # walker
+            elif actor.actor_type == c.WALKER:  # walker
                 actor_walker = actor_walkers[cnt_w]
                 cnt_w += 1
-                if actor["nav_type"] == c.LINEAR:
+                if actor.nav_type == c.LINEAR:
                     forward_vec = actor_sp.rotation.get_forward_vector()
                     controller_walker = carla.WalkerControl()
                     controller_walker.direction = forward_vec
-                    controller_walker.speed = actor["speed"]
+                    controller_walker.speed = actor.speed
                     actor_walker.apply_control(controller_walker)
 
-                elif actor["nav_type"] == c.AUTOPILOT:
+                elif actor.nav_type == c.AUTOPILOT:
                     controller_walker = world.spawn_actor(
                         walker_controller_bp,
                         actor_sp,
@@ -685,10 +691,10 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
 
                     world.tick()  # without this, walker vanishes
                     controller_walker.start()
-                    controller_walker.set_max_speed(float(actor["speed"]))
+                    controller_walker.set_max_speed(float(actor.speed))
                     controller_walker.go_to_location(actor_dp.location)
 
-                elif actor["nav_type"] == c.IMMOBILE:
+                elif actor.nav_type == c.IMMOBILE:
                     controller_walker = None
 
                 if controller_walker:  # can be None if immobile walker
@@ -766,40 +772,6 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
 
                 state.speed.append(speed)
                 state.speed_lim.append(speed_limit)
-
-                # if cur_frame_id % 25 == 0:
-                #     # try to spwan a test car to see if the simulation is still running
-                #     # actor_type: vehicle or walker
-                #     now_time = time.time()
-                #     spent_time = now_time - last_time
-                #     last_time = now_time
-                #     print("\nspent_time:", spent_time)
-                #     # now_time = time.time()
-                #     x = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
-                #     y = random.uniform(2, 10) if random.random() < 0.5 else random.uniform(-10, -2)
-                #     actor_spawn_point = carla.Transform(
-                #         carla.Location(x=player_loc.x+x, y=player_loc.y+y, z = player_loc.z+2),
-                #         carla.Rotation(pitch=sp.rotation.pitch, yaw=sp.rotation.yaw, roll=sp.rotation.roll)
-                #     )
-                #     # spent_time = time.time()-now_time
-                #     # print("\nspawn spent_time:", spent_time)
-                #     vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
-                #     vehicle_bp.set_attribute("color", "255,0,0")
-                #     actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
-                #     if actor_vehicle is not None:
-                #         actor_vehicles.append(actor_vehicle)
-                #         new_actor = {
-                #             "type": c.VEHICLE,
-                #             "nav_type": c.LINEAR,
-                #             "spawn_point": None,
-                #             "dest_point": None,
-                #             "speed": random.uniform(2, 10),
-                #         }
-                #         actors_list.append(new_actor)
-                #         actor_vehicle.set_target_velocity(new_actor["speed"]*actor_spawn_point.rotation.get_forward_vector())
-                #         print("\nactors spwan:", actor_vehicle)
-                #     else:
-                #         print("\nactors spwan failed")
                 print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
                     sp.location.x, sp.location.y, player_loc.x,
                     player_loc.y, goal_loc.x, goal_loc.y,
@@ -827,6 +799,58 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
 
                         if not stopped_at_red:
                             state.red_violation = True
+                # TODO:fix here
+                # add actor per 1s here
+                if cur_frame_id % 25 == 0:
+                    # try to spwan a test linear car to see if the simulation is still running
+                    # choose actor from actor_list first
+                    finded = False
+                    for actor in actor_list:
+                        if actor not in actors_now:
+                            # check if this actor is good to spawn
+                            flag = True
+                            for actor_now in actors_now:
+                                if not actor.safe_check(actor_now):
+                                    flag = False
+                                    break
+                            if flag:
+                                # spawn this actor
+                                # finded = True
+                                # actor.spawn(world)
+                                # actors_now.append(actor)
+                                break
+                    # actor_type: vehicle or walker
+                    x = random.uniform(4, 20) if random.random() < 0.5 else random.uniform(-20, -4)
+                    y = random.uniform(4, 20) if random.random() < 0.5 else random.uniform(-20, -4)
+                    location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z + 1)
+                    waypoint = town_map.get_waypoint(location, project_to_road=True,
+                                                     lane_type=carla.libcarla.LaneType.Driving)
+                    road_direction = waypoint.transform.get_forward_vector()
+                    road_direction_x = road_direction.x
+                    road_direction_y = road_direction.y
+                    roll = math.atan2(road_direction_y, road_direction_x)
+                    roll_degrees = math.degrees(roll)
+
+                    actor_spawn_point = carla.Transform(
+                        carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
+                                       z=player_loc.z + 1),
+                        carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
+                    )
+                    vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
+                    vehicle_bp.set_attribute("color", "255,0,0")
+                    actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
+                    if actor_vehicle is not None:
+                        new_actor = Actor(actor_type=c.VEHICLE,nav_type=c.LINEAR,spawn_point=None,dest_point=None,speed=random.uniform(3, 10))
+                        actor_vehicles.append(actor_vehicle)
+                        actor_vehicle.set_target_velocity(
+                            new_actor.speed * road_direction)
+                        actor_vehicle.set_transform(actor_spawn_point)
+                        new_actor.set_instance(actor_vehicle)
+                        print("\nactors spwan:", actor_vehicle)
+                        actors_now.append(new_actor)
+                        actor_list.append(new_actor)
+                    else:
+                        print("\nactors spwan failed")
 
                 # world.debug.draw_point(
                 # player_loc + carla.Location(z=10),
@@ -919,7 +943,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                 # Handle actor maneuvers
                 if conf.strategy == c.TRAJECTORY:
                     # hard code the actor id to 0,not good at all.
-                    actor = actors_list[0]
+                    actor = actors_now[0]
                     maneuvers = actor["maneuvers"]
 
                     maneuver_id = int(state.num_frames / c.FRAMES_PER_TIMESTEP)
@@ -940,7 +964,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
                             actor_speed = maneuver[1]
 
                             forward_vec = get_carla_transform(
-                                actor["spawn_point"]).rotation.get_forward_vector()
+                                actor.spawn_point).rotation.get_forward_vector()
 
                             if actor_direction == 0:  # forward
 
@@ -1238,7 +1262,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
 
-        globals.tm.set_synchronous_mode(False)
+        g.tm.set_synchronous_mode(False)
         for s in sensors:
             s.stop()
             s.destroy()
@@ -1260,7 +1284,7 @@ def simulate(conf, state, town, sp, wp, weather_dict, frictions_list, actors_lis
         else:
             if conf.debug:
                 print("[debug] reload")
-            globals.client.reload_world()
+            g.client.reload_world()
             if conf.debug:
                 print('[debug] done.')
             return retval
@@ -1382,7 +1406,7 @@ def set_args(argparser):
     # level (0-1.0), size of triggerbox (x, y, z in cm),
     # and location (x, y, z).
 
-    # Dynamic actors
+    # Dynamic actor_now
     argparser.add_argument(
         "--actor",
         action="append",
@@ -1412,177 +1436,176 @@ def set_args(argparser):
         action="store_true"
     )
 
-
-if __name__ == '__main__':
-    conf = config.Config()
-    argparser = argparse.ArgumentParser()
-    argparser = set_args()
-    args = argparser.parse_args()
-    # if args.debug:
-    conf.debug = True
-    # else:
-    #     conf.debug = False
-
-    if args.cloud < 0 or args.cloud > 100:
-        print("[-] Error in arg cloud: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.rain < 0 or args.rain > 100:
-        print("[-] Error in arg rain: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.puddle < 0 or args.puddle > 100:
-        print("[-] Error in arg puddle: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.wind < 0 or args.wind > 100:
-        print("[-] Error in arg wind: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.fog < 0 or args.fog > 100:
-        print("[-] Error in arg fog: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.wetness < 0 or args.wetness > 100:
-        print("[-] Error in arg wetness: {}".format(c.MSG_BAD_WEATHER_ARG))
-        sys.exit(-1)
-    if args.angle < 0 or args.angle > 360:
-        print("[-] Error in arg angle: {}".format(c.MSG_BAD_SUN_ARG))
-        sys.exit(-1)
-    if args.altitude < -90 or args.altitude > 90:
-        print("[-] Error in arg altitude: {}".format(c.MSG_BAD_SUN_ARG))
-        sys.exit(-1)
-
-    weather_dict = {
-        "cloud": args.cloud,
-        "rain": args.rain,
-        "puddle": args.puddle,
-        "wind": args.wind,
-        "fog": args.fog,
-        "wetness": args.wetness,
-        "angle": args.angle,
-        "altitude": args.altitude
-    }
-
-    frictions_list = []
-    if args.friction:
-        frictions = args.friction
-        for friction in frictions:
-            if not friction:
-                print("[-] Error in arg: {}".format(c.MSG_EMPTY_FRICTION_ARG))
-                sys.exit(-1)
-
-            if len(friction) != 7:
-                print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_ARG))
-                sys.exit(-1)
-
-            if friction[0] < 0 or friction[0] > 1:
-                print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_LEVEL))
-                sys.exit(-1)
-
-            friction_level = friction[0]
-            friction_box_size = carla.Location(
-                x=friction[1], y=friction[2], z=friction[3]
-            )
-            friction_spawn_point = carla.Transform(
-                carla.Location(x=friction[4], y=friction[5], z=friction[6]),
-                carla.Rotation()
-            )
-
-            frictions_list.append({
-                "level": friction_level,
-                "size": friction_box_size,
-                "spawn_point": friction_spawn_point
-            }
-            )
-
-    # parse actors
-    actors_list = []
-    if args.actor:
-        actors = args.actor
-        for actor in actors:
-            if not actor:
-                print("[-] Error in arg: {}".format(c.MSG_EMPTY_ACTOR_ARG))
-                sys.exit(-1)
-
-            if int(actor[0]) == 0 or int(actor[0]) == 1:
-                if len(actor) != 12:
-                    print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_ATTR))
-                    sys.exit(-1)
-
-                # actor_type: vehicle or walker
-                actor_type = actor[0]
-                nav_type = actor[1]
-                actor_spawn_point = carla.Transform(
-                    carla.Location(x=actor[2], y=actor[3], z=actor[4]),
-                    carla.Rotation(pitch=actor[5], yaw=actor[6], roll=actor[7])
-                )
-                actor_dest_point = carla.Location(
-                    x=actor[8], y=actor[9], z=actor[10]
-                )
-
-                actor_speed = actor[11]
-
-                actors_list.append({
-                    "type": actor_type,
-                    "nav_type": nav_type,
-                    "spawn_point": actor_spawn_point,
-                    "dest_point": actor_dest_point,
-                    "speed": actor_speed
-                }
-                )
-
-            elif int(actor[0]) == 2:  # placeholder for other actors
-                pass
-
-            else:
-                print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_TYPE))
-                sys.exit(-1)
-
-    if args.spawn:
-        if len(args.spawn) != 6:
-            print("[-] Error in arg spawn: {}".format(c.MSG_BAD_SPAWN_ARG))
-            sys.exit(-1)
-
-        sp = carla.Transform(
-            carla.Location(args.spawn[0], args.spawn[1], args.spawn[2]),
-            carla.Rotation(args.spawn[3], args.spawn[4], args.spawn[5]),
-        )
-    else:  # default for Town01
-        sp = carla.Transform(
-            carla.Location(334.83, 217.1, 1.32),
-            carla.Rotation(0.0, 90, 0.0)
-        )
-
-    if args.dest:
-        if len(args.spawn) != 6:
-            print("[-] Error in arg dest: {}".format(c.MSG_BAD_DEST_ARG))
-            sys.exit(-1)
-
-        wp = carla.Location(args.dest[0], args.dest[1], args.dest[2])
-    else:  # default for Town01
-        wp = carla.Location(335.49, 298.81, 1.32)
-
-    if args.speed:
-        config.TARGET_SPEED = args.speed
-
-    if args.view:
-        if int(args.view) == config.ONROOF:
-            config.VIEW = config.ONROOF
-        if int(args.view) == config.BIRDSEYE:
-            config.VIEW = config.BIRDSEYE
-
-    if args.town:
-        town = args.town
-    else:
-        town = "Town01"
-
-    if args.no_speed_check:
-        config.CHECKS["speed"] = False
-    if args.no_crash_check:
-        config.CHECKS["crash"] = False
-    if args.no_lane_check:
-        config.CHECKS["lane"] = False
-    if args.no_stuck_check:
-        config.CHECKS["stuck"] = False
-
-    (client, tm) = connect("localhost", 2000, 8000)
-
-    ret = simulate(tm, sp, wp,
-                   weather_dict, frictions_list, actors_list)
-    print("simulation returned:", ret)
+# if __name__ == '__main__':
+#     conf = config.Config()
+#     argparser = argparse.ArgumentParser()
+#     argparser = set_args()
+#     args = argparser.parse_args()
+#     # if args.debug:
+#     conf.debug = True
+#     # else:
+#     #     conf.debug = False
+#
+#     if args.cloud < 0 or args.cloud > 100:
+#         print("[-] Error in arg cloud: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.rain < 0 or args.rain > 100:
+#         print("[-] Error in arg rain: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.puddle < 0 or args.puddle > 100:
+#         print("[-] Error in arg puddle: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.wind < 0 or args.wind > 100:
+#         print("[-] Error in arg wind: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.fog < 0 or args.fog > 100:
+#         print("[-] Error in arg fog: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.wetness < 0 or args.wetness > 100:
+#         print("[-] Error in arg wetness: {}".format(c.MSG_BAD_WEATHER_ARG))
+#         sys.exit(-1)
+#     if args.angle < 0 or args.angle > 360:
+#         print("[-] Error in arg angle: {}".format(c.MSG_BAD_SUN_ARG))
+#         sys.exit(-1)
+#     if args.altitude < -90 or args.altitude > 90:
+#         print("[-] Error in arg altitude: {}".format(c.MSG_BAD_SUN_ARG))
+#         sys.exit(-1)
+#
+#     weather_dict = {
+#         "cloud": args.cloud,
+#         "rain": args.rain,
+#         "puddle": args.puddle,
+#         "wind": args.wind,
+#         "fog": args.fog,
+#         "wetness": args.wetness,
+#         "angle": args.angle,
+#         "altitude": args.altitude
+#     }
+#
+#     frictions_list = []
+#     if args.friction:
+#         frictions = args.friction
+#         for friction in frictions:
+#             if not friction:
+#                 print("[-] Error in arg: {}".format(c.MSG_EMPTY_FRICTION_ARG))
+#                 sys.exit(-1)
+#
+#             if len(friction) != 7:
+#                 print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_ARG))
+#                 sys.exit(-1)
+#
+#             if friction[0] < 0 or friction[0] > 1:
+#                 print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_LEVEL))
+#                 sys.exit(-1)
+#
+#             friction_level = friction[0]
+#             friction_box_size = carla.Location(
+#                 x=friction[1], y=friction[2], z=friction[3]
+#             )
+#             friction_spawn_point = carla.Transform(
+#                 carla.Location(x=friction[4], y=friction[5], z=friction[6]),
+#                 carla.Rotation()
+#             )
+#
+#             frictions_list.append({
+#                 "level": friction_level,
+#                 "size": friction_box_size,
+#                 "spawn_point": friction_spawn_point
+#             }
+#             )
+#
+#     # parse actor_now
+#     actors_now = []
+#     if args.actor:
+#         actors = args.actor
+#         for actor in actors:
+#             if not actor:
+#                 print("[-] Error in arg: {}".format(c.MSG_EMPTY_ACTOR_ARG))
+#                 sys.exit(-1)
+#
+#             if int(actor[0]) == 0 or int(actor[0]) == 1:
+#                 if len(actor) != 12:
+#                     print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_ATTR))
+#                     sys.exit(-1)
+#
+#                 # actor_type: vehicle or walker
+#                 actor_type = actor[0]
+#                 nav_type = actor[1]
+#                 actor_spawn_point = carla.Transform(
+#                     carla.Location(x=actor[2], y=actor[3], z=actor[4]),
+#                     carla.Rotation(pitch=actor[5], yaw=actor[6], roll=actor[7])
+#                 )
+#                 actor_dest_point = carla.Location(
+#                     x=actor[8], y=actor[9], z=actor[10]
+#                 )
+#
+#                 actor_speed = actor[11]
+#
+#                 actors_now.append({
+#                     "type": actor_type,
+#                     "nav_type": nav_type,
+#                     "spawn_point": actor_spawn_point,
+#                     "dest_point": actor_dest_point,
+#                     "speed": actor_speed
+#                 }
+#                 )
+#
+#             elif int(actor[0]) == 2:  # placeholder for other actor_now
+#                 pass
+#
+#             else:
+#                 print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_TYPE))
+#                 sys.exit(-1)
+#
+#     if args.spawn:
+#         if len(args.spawn) != 6:
+#             print("[-] Error in arg spawn: {}".format(c.MSG_BAD_SPAWN_ARG))
+#             sys.exit(-1)
+#
+#         sp = carla.Transform(
+#             carla.Location(args.spawn[0], args.spawn[1], args.spawn[2]),
+#             carla.Rotation(args.spawn[3], args.spawn[4], args.spawn[5]),
+#         )
+#     else:  # default for Town01
+#         sp = carla.Transform(
+#             carla.Location(334.83, 217.1, 1.32),
+#             carla.Rotation(0.0, 90, 0.0)
+#         )
+#
+#     if args.dest:
+#         if len(args.spawn) != 6:
+#             print("[-] Error in arg dest: {}".format(c.MSG_BAD_DEST_ARG))
+#             sys.exit(-1)
+#
+#         wp = carla.Location(args.dest[0], args.dest[1], args.dest[2])
+#     else:  # default for Town01
+#         wp = carla.Location(335.49, 298.81, 1.32)
+#
+#     if args.speed:
+#         config.TARGET_SPEED = args.speed
+#
+#     if args.view:
+#         if int(args.view) == config.ONROOF:
+#             config.VIEW = config.ONROOF
+#         if int(args.view) == config.BIRDSEYE:
+#             config.VIEW = config.BIRDSEYE
+#
+#     if args.town:
+#         town = args.town
+#     else:
+#         town = "Town01"
+#
+#     if args.no_speed_check:
+#         config.CHECKS["speed"] = False
+#     if args.no_crash_check:
+#         config.CHECKS["crash"] = False
+#     if args.no_lane_check:
+#         config.CHECKS["lane"] = False
+#     if args.no_stuck_check:
+#         config.CHECKS["stuck"] = False
+#
+#     (client, tm) = connect("localhost", 2000, 8000)
+#
+#     ret = simulate(tm, sp, wp,
+#                    weather_dict, frictions_list, actors_now)
+#     print("simulation returned:", ret)
