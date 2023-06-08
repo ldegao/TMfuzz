@@ -166,10 +166,11 @@ def connect(conf):
 
     g.tm = g.client.get_trafficmanager(conf.sim_tm_port)
     g.tm.set_synchronous_mode(True)
+    g.tm.set_random_device_seed(0)
     if conf.debug:
         print("Traffic Manager Server:", g.tm)
 
-    return (g.client, g.tm)
+    return g.client, g.tm
 
 
 def switch_map(conf, town):

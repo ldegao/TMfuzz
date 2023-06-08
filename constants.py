@@ -48,6 +48,7 @@ LINEAR    = 0
 AUTOPILOT = 1
 IMMOBILE  = 2
 MANEUVER  = 3
+EGO = 4
 NAVTYPE_LIST = [LINEAR, AUTOPILOT, IMMOBILE]
 NAVTYPE_NAMES = ["linear", "autopilot", "immobile", "maneuver"]
 

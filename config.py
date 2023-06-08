@@ -23,6 +23,7 @@ def set_carla_api_path():
     try:
         # change to my path
         # api_path = glob.glob(glob_path)[0]
+        # TODO:fix it
         api_path = "/home/linshenghao/drivefuzz/carla/PythonAPI/carla/dist/carla-0.9.13-py3.6-linux-x86_64.egg"
     except IndexError:
         print("Couldn't set Carla API path.")
@@ -67,7 +68,7 @@ class Config:
         # Enable/disable Various Checks
         self.check_dict = {
             "speed": True,
-            "lane": True,
+            "lane": False,
             "crash": True,
             "stuck": True,
             "red": True,

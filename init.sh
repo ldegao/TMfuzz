@@ -1,8 +1,13 @@
 #!/bin/bash
 
-fuzzerdata_dir="/tmp/fuzzerdata/"
+fuzzerdata_dir="/tmp/fuzzerdata/$USER/"
 docker_name="carla-$USER"
 
+# Create fuzzerdata_dir if it doesn't exist
+if [[ ! -d "$fuzzerdata_dir" ]]; then
+  mkdir -p "$fuzzerdata_dir"
+  echo "Created directory $fuzzerdata_dir"
+fi
 # Check if the Docker container is in the exited state
 if [[ "$(docker inspect -f '{{.State.Status}}' "$docker_name" 2>/dev/null)" == "exited" ]]; then
   echo "Docker container $docker_name is in exited state. Running stop_carla.sh..."

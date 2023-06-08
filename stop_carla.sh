@@ -1,1 +1,1 @@
-docker rm -f carla-linshenghao
+docker rm -f carla-$USER

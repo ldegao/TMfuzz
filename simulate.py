@@ -41,16 +41,15 @@ import pygame
 
 
 def _on_collision(event, state):
-    # print("COLLISION:", event)
-
-    if event.frame > state.first_frame_id + state.num_frames:
+    # TODO: find the bug here(can not deal with frame correctly)
+    if state.end:
         # ignore collision happened AFTER simulation ends
         # (can happen because of sluggish garbage collection of Carla)
         return
-
+    print("COLLISION:", event.other_actor.type_id)
     if event.other_actor.type_id != "static.road":
         # do not count collision while spawning ego vehicle (hard drop)
-
+        print("crashed")
         state.crashed = True
         state.collision_event = event
 
@@ -76,11 +75,11 @@ def _on_invasion(event, state):
 
 
 def _on_front_camera_capture(image):
-    image.save_to_disk(f"/tmp/fuzzerdata/front-{image.frame:05d}.jpg")
+    image.save_to_disk(f"/tmp/fuzzerdata/{g.username}/front-{image.frame:05d}.jpg")
 
 
 def _on_top_camera_capture(image):
-    image.save_to_disk(f"/tmp/fuzzerdata/top-{image.frame:05d}.jpg")
+    image.save_to_disk(f"/tmp/fuzzerdata/{g.username}/top-{image.frame:05d}.jpg")
 
 
 # def _on_view_image(self, image):
@@ -175,7 +174,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         world = g.client.get_world()
         # set all traffic lights to green
         set_traffic_lights_state(world, carla.TrafficLightState.Green)
-        world.freeze_all_traffic_lights(True)
+        # world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
             print("[debug] world:", world)
@@ -185,6 +184,10 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             print("[debug] map:", town_map)
 
         blueprint_library = world.get_blueprint_library()
+        vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
+        vehicle_bp.set_attribute("color", "255,0,0")
+        walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
+        walker_controller_bp = blueprint_library.find('controller.ai.walker')
         settings = world.get_settings()
         settings.synchronous_mode = True
         settings.fixed_delta_seconds = 1.0 / c.FRAME_RATE  # FPS
@@ -224,6 +227,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         player_bp = blueprint_library.filter('nissan')[0]
         # player_bp.set_attribute("role_name", "ego")
         player = None
+        ego = None
 
         goal_loc = wp.location
         goal_rot = wp.rotation
@@ -252,13 +256,20 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
             world.tick()  # sync once with simulator
             player.set_simulate_physics(True)
-
+            ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
+                        dest_point=wp, id=-1)
+            ego.set_instance(player)
             agent = BasicAgent(player)
-            agent.set_destination((wp.location.x, wp.location.y, wp.location.z))
+            location = carla.Location(x=wp.location.x, y=wp.location.y, z=wp.location.z)
+            waypoint = town_map.get_waypoint(location)
+            agent.set_destination(waypoint.transform.location)
             print("[+] spawned BasicAgent")
 
         elif conf.agent_type == c.BEHAVIOR:
             player = world.try_spawn_actor(player_bp, sp)
+            ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
+                        dest_point=wp, id=-1)
+            ego.set_instance(player)
             if player is None:
                 print("[-] Failed spawning player")
                 state.spawn_failed = True
@@ -529,11 +540,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                   )
 
         # spawn actor_now
-        vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
-        vehicle_bp.set_attribute("color", "255,0,0")
-        walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
-        walker_controller_bp = blueprint_library.find('controller.ai.walker')
-
         for actor in actors_now:
             actor_sp = get_carla_transform(actor.spawn_point)
             if actor.actor_type == c.VEHICLE:  # vehicle
@@ -801,56 +807,111 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             state.red_violation = True
                 # TODO:fix here
                 # add actor per 1s here
-                if cur_frame_id % 25 == 0:
-                    # try to spwan a test linear car to see if the simulation is still running
+                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0):
+                    # try to spawn a test linear car to see if the simulation is still running
                     # choose actor from actor_list first
+                    # delete backgound car which is too far
+                    print("try to spawn an actor")
+                    for actor in actors_now:
+                        if actor.instance.get_location().distance(player_loc) > 110:
+                            actor.instance.set_autopilot(False)
+                            actor_vehicles.remove(actor.instance)
+                            actor.instance.destroy()
+                            actors_now.remove(actor)
+                            actor.instance = None
                     finded = False
                     for actor in actor_list:
-                        if actor not in actors_now:
+                        if actor.fresh & (actor.spawn_point.location.distance(player_loc) < 100):
                             # check if this actor is good to spawn
                             flag = True
-                            for actor_now in actors_now:
-                                if not actor.safe_check(actor_now):
-                                    flag = False
-                                    break
+                            # width = actor.get_lane_width(town_map)
+                            # for actor_now in actors_now:
+                            #     if not actor.safe_check(actor_now, width, 5):
+                            #         flag = False
+                            #         break
+                            # if not actor.safe_check(ego, width, 2):
+                            #     flag = False
                             if flag:
                                 # spawn this actor
-                                # finded = True
-                                # actor.spawn(world)
-                                # actors_now.append(actor)
-                                break
-                    # actor_type: vehicle or walker
-                    x = random.uniform(4, 20) if random.random() < 0.5 else random.uniform(-20, -4)
-                    y = random.uniform(4, 20) if random.random() < 0.5 else random.uniform(-20, -4)
-                    location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z + 1)
-                    waypoint = town_map.get_waypoint(location, project_to_road=True,
-                                                     lane_type=carla.libcarla.LaneType.Driving)
-                    road_direction = waypoint.transform.get_forward_vector()
-                    road_direction_x = road_direction.x
-                    road_direction_y = road_direction.y
-                    roll = math.atan2(road_direction_y, road_direction_x)
-                    roll_degrees = math.degrees(roll)
+                                actor_vehicle = world.try_spawn_actor(vehicle_bp, actor.spawn_point)
+                                if actor_vehicle is None:
+                                    continue
+                                actor_vehicles.append(actor_vehicle)
+                                # TODO: change the mode of actor_vehicle later
+                                actor_spawn_rotation = actor.spawn_point.rotation
+                                roll_degrees = actor_spawn_rotation.yaw
+                                roll = math.radians(roll_degrees)
 
-                    actor_spawn_point = carla.Transform(
-                        carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
-                                       z=player_loc.z + 1),
-                        carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
-                    )
-                    vehicle_bp = blueprint_library.find("vehicle.bmw.grandtourer")
-                    vehicle_bp.set_attribute("color", "255,0,0")
-                    actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
-                    if actor_vehicle is not None:
-                        new_actor = Actor(actor_type=c.VEHICLE,nav_type=c.LINEAR,spawn_point=None,dest_point=None,speed=random.uniform(3, 10))
+                                road_direction_x = math.cos(roll)
+                                road_direction_y = math.sin(roll)
+
+                                road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
+                                actor_vehicle.set_target_velocity(
+                                    actor.speed * road_direction)
+                                actor_vehicle.set_transform(actor.spawn_point)
+                                actor_vehicle.set_autopilot(True, g.tm.get_port())
+                                actor_vehicle.set_simulate_physics(True)
+                                actor.set_instance(actor_vehicle)
+                                actors_now.append(actor)
+                                actor.fresh = False
+                                finded = True
+                                print("\nspawn an old actor id:", actor.id)
+                                break
+                    if not finded:
+                        # actor_type: vehicle or walker
+                        actor_vehicle = None
+                        new_actor = None
+                        # try 10 time
+                        repeat_times = 0
+                        while actor_vehicle is None:
+                            repeat_times += 1
+                            if repeat_times > 100:
+                                print("bad")
+                                break
+                            # print("\ntry to spawn a new actor")
+                            x = random.uniform(-50, 50)
+                            y = random.uniform(-50, 50)
+                            location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z + 0.5)
+                            waypoint = town_map.get_waypoint(location, project_to_road=True,
+                                                             lane_type=carla.libcarla.LaneType.Driving)
+                            road_direction = waypoint.transform.get_forward_vector()
+                            road_direction_x = road_direction.x
+                            road_direction_y = road_direction.y
+                            roll = math.atan2(road_direction_y, road_direction_x)
+                            roll_degrees = math.degrees(roll)
+                            actor_spawn_point = carla.Transform(
+                                carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
+                                               z=player_loc.z + 0.5),
+                                carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
+                            )
+                            # do safe check
+                            new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.LINEAR, spawn_point=actor_spawn_point,
+                                              dest_point=None, speed=random.uniform(3, 10), id=len(actor_list))
+                            width = new_actor.get_lane_width(town_map)
+                            flag = True
+                            for actor_now in actors_now:
+                                if not new_actor.safe_check(actor_now, width, 10):
+                                    flag = False
+                                    break
+                            if not new_actor.safe_check(ego, width, 5):
+                                flag = False
+                            if flag:
+                                actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
+                            else:
+                                continue
                         actor_vehicles.append(actor_vehicle)
                         actor_vehicle.set_target_velocity(
                             new_actor.speed * road_direction)
                         actor_vehicle.set_transform(actor_spawn_point)
+                        actor_vehicle.set_autopilot(True, g.tm.get_port())
+                        actor_vehicle.set_simulate_physics(True)
+                        # path = ['Straight']
+                        # g.tm.set_route(actor_vehicle, path)
                         new_actor.set_instance(actor_vehicle)
-                        print("\nactors spwan:", actor_vehicle)
+                        print("\nspawn a new actor,id:", new_actor.id)
+                        new_actor.fresh = False
                         actors_now.append(new_actor)
                         actor_list.append(new_actor)
-                    else:
-                        print("\nactors spwan failed")
 
                 # world.debug.draw_point(
                 # player_loc + carla.Location(z=10),
@@ -864,7 +925,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     # for carla agents, we should apply controls ourselves
                     # XXX: check and resolve BehaviorAgent's run_step issue of
                     # not being able to get adjacent waypoints
-                    control = agent.run_step(debug=True)
+                    control = agent.run_step()
                     player.apply_control(control)
 
                 elif conf.agent_type == c.BEHAVIOR:
@@ -872,7 +933,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     agent.get_local_planner().set_speed(speed_limit)
                     lp = agent.get_local_planner()
                     if (len(lp._waypoints_queue) != 0):
-                        control = agent.run_step(debug=True)
+                        control = agent.run_step()
                         player.apply_control(control)
 
                 elif conf.agent_type == c.AUTOWARE:
@@ -1143,15 +1204,15 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
     finally:
         # Finalize simulation
         # rospy.signal_shutdown("fin")
-
+        state.end = True
         if conf.agent_type == c.BASIC or conf.agent_type == c.BEHAVIOR:
             # remove jpg files
             print("Saving front camera video", end=" ")
 
-            vid_filename = "/tmp/fuzzerdata/front.mp4"
+            vid_filename = f"/tmp/fuzzerdata/{g.username}/front.mp4"
             if os.path.exists(vid_filename):
                 os.remove(vid_filename)
-            cmd_cat = "cat /tmp/fuzzerdata/front-*.jpg"
+            cmd_cat = f"cat /tmp/fuzzerdata/{g.username}/front-*.jpg"
             cmd_ffmpeg = " ".join([
                 "ffmpeg",
                 "-f image2pipe",
@@ -1167,15 +1228,15 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             os.system(cmd)
             print("(done)")
 
-            cmd = "rm -f /tmp/fuzzerdata/front-*.jpg"
+            cmd = f"rm -f /tmp/fuzzerdata/{g.username}/front-*.jpg"
             os.system(cmd)
 
             print("Saving top camera video", end=" ")
-            vid_filename = "/tmp/fuzzerdata/top.mp4"
+            vid_filename = f"/tmp/fuzzerdata/{g.username}/top.mp4"
             if os.path.exists(vid_filename):
                 os.remove(vid_filename)
 
-            cmd_cat = "cat /tmp/fuzzerdata/top-*.jpg"
+            cmd_cat = f"cat /tmp/fuzzerdata/{g.username}/top-*.jpg"
             cmd_ffmpeg = " ".join([
                 "ffmpeg",
                 "-f image2pipe",
@@ -1191,14 +1252,14 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             os.system(cmd)
             print("(done)")
 
-            cmd = "rm -f /tmp/fuzzerdata/top-*.jpg"
+            cmd = f"rm -f /tmp/fuzzerdata/{g.username}/top-*.jpg"
             os.system(cmd)
 
         elif conf.agent_type == c.AUTOWARE:
             os.system("rosnode kill /recorder_video_front")
             os.system("rosnode kill /recorder_video_rear")
             os.system("rosnode kill /recorder_bag")
-            while os.path.exists("/tmp/fuzzerdata/bagfile.lz4.bag.active"):
+            while os.path.exists(f"/tmp/fuzzerdata/{g.username}/bagfile.lz4.bag.active"):
                 print("waiting for rosbag to dump data")
                 time.sleep(3)
 
@@ -1222,18 +1283,18 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             # print("done")
 
             # print("running lcov")
-            # lcov_cmd = docker_prefix + "lcov --no-external --capture --directory ./ --output-file /tmp/fuzzerdata/autoware_{}.info".format(
+            # lcov_cmd = docker_prefix + "lcov --no-external --capture --directory ./ --output-file /tmp/fuzzerdata/$USER/autoware_{}.info".format(
             # start_time)
             # os.system(lcov_cmd)
             # print("done")
 
             # print("merging lcov result with base")
-            # lcov_cmd2 = docker_prefix + "lcov --add-tracefile /tmp/fuzzerdata/autoware_base.info --add-tracefile /tmp/fuzzerdata/autoware_{}.info --output-file /tmp/fuzzerdata/autoware_{}_total.info".format(start_time, start_time)
+            # lcov_cmd2 = docker_prefix + "lcov --add-tracefile /tmp/fuzzerdata/$USER/autoware_base.info --add-tracefile /tmp/fuzzerdata/$USER/autoware_{}.info --output-file /tmp/fuzzerdata/$USER/autoware_{}_total.info".format(start_time, start_time)
             # os.system(lcov_cmd2)
             # print("done")
 
             # print("generating html report")
-            # genhtml_cmd = docker_prefix + "genhtml /tmp/fuzzerdata/autoware_{}_total.info --output-directory /tmp/fuzzerdata/autoware_{}_total/".format(start_time, start_time)
+            # genhtml_cmd = docker_prefix + "genhtml /tmp/fuzzerdata/$USER/autoware_{}_total.info --output-directory /tmp/fuzzerdata/$USER/autoware_{}_total/".format(start_time, start_time)
             # os.system(genhtml_cmd)
             # print("done")
             # LCOV-based coverage experiment fin
@@ -1263,6 +1324,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         world.apply_settings(settings)
 
         g.tm.set_synchronous_mode(False)
+        for actor in actor_list:
+            actor.fresh = True
         for s in sensors:
             s.stop()
             s.destroy()
@@ -1277,10 +1340,11 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 print("destroyed {}: {}".format(v, ret))
             except Exception as e:
                 print("Failed to destroy {}: {}".format(v, e))
+        for actor in actors_now:
+            actor.instance = None
         # Don't reload and exit if user requests so
         if retval == 128:
             return retval
-
         else:
             if conf.debug:
                 print("[debug] reload")

@@ -452,7 +452,7 @@ class Scenario:
             print("[*] call simutale.simulate()")
             # print("Weather:", self.weather)
         # print("before sim", time.time())
-
+        state.end = False
         sp = self.get_seed_sp_transform(self.seed_data)
         wp = self.get_seed_wp_transform(self.seed_data)
         ret = simulate(
@@ -533,16 +533,16 @@ class Scenario:
                     os.path.join(self.conf.error_dir, log_filename)
                 )
                 shutil.copyfile(
-                    "/tmp/fuzzerdata/bagfile.lz4.bag",
+                    f"/tmp/fuzzerdata/{g.username}/bagfile.lz4.bag",
                     os.path.join(self.conf.rosbag_dir, log_filename.replace(".json", ".bag"))
                 )
 
             shutil.copyfile(
-                "/tmp/fuzzerdata/front.mp4",
+                f"/tmp/fuzzerdata/{g.username}/front.mp4",
                 os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-front.mp4"))
             )
             shutil.copyfile(
-                "/tmp/fuzzerdata/rear.mp4",
+                f"/tmp/fuzzerdata/{g.username}/rear.mp4",
                 os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-rear.mp4"))
             )
 
@@ -553,7 +553,7 @@ class Scenario:
                     os.path.join(self.conf.error_dir, log_filename)
                 )
             shutil.copyfile(
-                "/tmp/fuzzerdata/front.mp4",
+                f"/tmp/fuzzerdata/{g.username}/front.mp4",
                 os.path.join(
                     self.conf.cam_dir,
                     log_filename.replace(".json", "-front.mp4")
@@ -561,7 +561,7 @@ class Scenario:
             )
 
             shutil.copyfile(
-                "/tmp/fuzzerdata/top.mp4",
+                f"/tmp/fuzzerdata/{g.username}/top.mp4",
                 os.path.join(
                     self.conf.cam_dir,
                     log_filename.replace(".json", "-top.mp4")
