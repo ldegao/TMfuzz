@@ -659,52 +659,52 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         # handle actor missions after Autoware's goal is published
         cnt_v = 0
         cnt_w = 0
-        for actor in actors_now:
-            actor_sp = get_carla_transform(actor.spawn_point)
-            actor_dp = get_carla_transform(actor.dest_point)
-            if actor.actor_type == c.VEHICLE:  # vehicle
-                actor_vehicle = actor_vehicles[cnt_v]
-                cnt_v += 1
-                if actor.nav_type == c.LINEAR:
-                    forward_vec = actor_sp.rotation.get_forward_vector()
-                    actor_vehicle.set_target_velocity(forward_vec * actor.speed)
-
-                elif actor.nav_type == c.MANEUVER:
-                    # set initial speed 0
-                    # trajectory control happens in the control loop below
-                    forward_vec = actor_sp.rotation.get_forward_vector()
-                    actor_vehicle.set_target_velocity(forward_vec * 0)
-
-                elif actor.nav_type == c.AUTOPILOT:
-                    actor_vehicle.set_autopilot(True, g.tm.get_port())
-
-                actor_vehicle.set_simulate_physics(True)
-            elif actor.actor_type == c.WALKER:  # walker
-                actor_walker = actor_walkers[cnt_w]
-                cnt_w += 1
-                if actor.nav_type == c.LINEAR:
-                    forward_vec = actor_sp.rotation.get_forward_vector()
-                    controller_walker = carla.WalkerControl()
-                    controller_walker.direction = forward_vec
-                    controller_walker.speed = actor.speed
-                    actor_walker.apply_control(controller_walker)
-
-                elif actor.nav_type == c.AUTOPILOT:
-                    controller_walker = world.spawn_actor(
-                        walker_controller_bp,
-                        actor_sp,
-                        actor_walker)
-
-                    world.tick()  # without this, walker vanishes
-                    controller_walker.start()
-                    controller_walker.set_max_speed(float(actor.speed))
-                    controller_walker.go_to_location(actor_dp.location)
-
-                elif actor.nav_type == c.IMMOBILE:
-                    controller_walker = None
-
-                if controller_walker:  # can be None if immobile walker
-                    actor_controllers.append(controller_walker)
+        # for actor in actors_now:
+        #     actor_sp = get_carla_transform(actor.spawn_point)
+        #     actor_dp = get_carla_transform(actor.dest_point)
+        #     if actor.actor_type == c.VEHICLE:  # vehicle
+        #         actor_vehicle = actor_vehicles[cnt_v]
+        #         cnt_v += 1
+        #         if actor.nav_type == c.LINEAR:
+        #             forward_vec = actor_sp.rotation.get_forward_vector()
+        #             actor_vehicle.set_target_velocity(forward_vec * actor.speed)
+        #
+        #         elif actor.nav_type == c.MANEUVER:
+        #             # set initial speed 0
+        #             # trajectory control happens in the control loop below
+        #             forward_vec = actor_sp.rotation.get_forward_vector()
+        #             actor_vehicle.set_target_velocity(forward_vec * 0)
+        #
+        #         elif actor.nav_type == c.AUTOPILOT:
+        #             actor_vehicle.set_autopilot(True, g.tm.get_port())
+        #
+        #         actor_vehicle.set_simulate_physics(True)
+        #     elif actor.actor_type == c.WALKER:  # walker
+        #         actor_walker = actor_walkers[cnt_w]
+        #         cnt_w += 1
+        #         if actor.nav_type == c.LINEAR:
+        #             forward_vec = actor_sp.rotation.get_forward_vector()
+        #             controller_walker = carla.WalkerControl()
+        #             controller_walker.direction = forward_vec
+        #             controller_walker.speed = actor.speed
+        #             actor_walker.apply_control(controller_walker)
+        #
+        #         elif actor.nav_type == c.AUTOPILOT:
+        #             controller_walker = world.spawn_actor(
+        #                 walker_controller_bp,
+        #                 actor_sp,
+        #                 actor_walker)
+        #
+        #             world.tick()  # without this, walker vanishes
+        #             controller_walker.start()
+        #             controller_walker.set_max_speed(float(actor.speed))
+        #             controller_walker.go_to_location(actor_dp.location)
+        #
+        #         elif actor.nav_type == c.IMMOBILE:
+        #             controller_walker = None
+        #
+        #         if controller_walker:  # can be None if immobile walker
+        #             actor_controllers.append(controller_walker)
 
         elapsed_time = 0
         start_time = time.time()
@@ -811,7 +811,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     # try to spawn a test linear car to see if the simulation is still running
                     # choose actor from actor_list first
                     # delete backgound car which is too far
-                    print("try to spawn an actor")
+                    print("\ntry to spawn an actor")
                     for actor in actors_now:
                         if actor.instance.get_location().distance(player_loc) > 110:
                             actor.instance.set_autopilot(False)
@@ -844,12 +844,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
                                 road_direction_x = math.cos(roll)
                                 road_direction_y = math.sin(roll)
-
                                 road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
                                 actor_vehicle.set_target_velocity(
                                     actor.speed * road_direction)
                                 actor_vehicle.set_transform(actor.spawn_point)
                                 actor_vehicle.set_autopilot(True, g.tm.get_port())
+                                g.tm.set_route(actor_vehicle, ["Straight"])
                                 actor_vehicle.set_simulate_physics(True)
                                 actor.set_instance(actor_vehicle)
                                 actors_now.append(actor)
@@ -865,13 +865,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         repeat_times = 0
                         while actor_vehicle is None:
                             repeat_times += 1
-                            if repeat_times > 100:
-                                print("bad")
-                                break
-                            # print("\ntry to spawn a new actor")
                             x = random.uniform(-50, 50)
                             y = random.uniform(-50, 50)
-                            location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z + 0.5)
+                            location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                                              lane_type=carla.libcarla.LaneType.Driving)
                             road_direction = waypoint.transform.get_forward_vector()
@@ -881,7 +877,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             roll_degrees = math.degrees(roll)
                             actor_spawn_point = carla.Transform(
                                 carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
-                                               z=player_loc.z + 0.5),
+                                               z=waypoint.transform.location.z + 0.1*repeat_times),
                                 carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
                             )
                             # do safe check
@@ -904,9 +900,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             new_actor.speed * road_direction)
                         actor_vehicle.set_transform(actor_spawn_point)
                         actor_vehicle.set_autopilot(True, g.tm.get_port())
+                        g.tm.set_route(actor_vehicle, ["Straight"])
                         actor_vehicle.set_simulate_physics(True)
-                        # path = ['Straight']
-                        # g.tm.set_route(actor_vehicle, path)
                         new_actor.set_instance(actor_vehicle)
                         print("\nspawn a new actor,id:", new_actor.id)
                         new_actor.fresh = False
