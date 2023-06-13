@@ -1,11 +1,14 @@
 """ Global States """
 import signal
+
+
 class State:
     """
     A state object stores raw data and events captured from the simulator,
     including vehicular states.
     Pass a reference to this object to Scenario.run_test() as a parameter.
     """
+
     def __init__(self):
         # exec states
         self.loop = 0
@@ -16,7 +19,6 @@ class State:
         self.num_frames = 0
         self.elapsed_time = 0
         self.end = False
-
 
         # failure states
         self.spawn_failed = False
@@ -65,4 +67,3 @@ class State:
         print("[-] something happened: {}".format(signal.signum.name))
         self.other = True
         self.signal = signum
-

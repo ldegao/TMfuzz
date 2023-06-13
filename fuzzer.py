@@ -443,7 +443,7 @@ def main():
             #         #             degree = random.randint(30, 60)  # deg
             #         #             test_scenario.actor_now[0]["maneuvers"][i] = [direction, degree, 0]
             #         #
-            #         #         # reset executed frame id
+            #         #         # reset executed frame actor_id
             #         #         for i in range(5):
             #         #             test_scenario.actor_now[0]["maneuvers"][i][2] = 0
             #         #

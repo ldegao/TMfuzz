@@ -173,7 +173,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         g.client.set_timeout(10.0)
         world = g.client.get_world()
         # set all traffic lights to green
-        set_traffic_lights_state(world, carla.TrafficLightState.Green)
+        # set_traffic_lights_state(world, carla.TrafficLightState.Green)
         # world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
@@ -257,7 +257,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             world.tick()  # sync once with simulator
             player.set_simulate_physics(True)
             ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
-                        dest_point=wp, id=-1)
+                        dest_point=wp, actor_id=-1)
             ego.set_instance(player)
             agent = BasicAgent(player)
             location = carla.Location(x=wp.location.x, y=wp.location.y, z=wp.location.z)
@@ -268,7 +268,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         elif conf.agent_type == c.BEHAVIOR:
             player = world.try_spawn_actor(player_bp, sp)
             ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
-                        dest_point=wp, id=-1)
+                        dest_point=wp, actor_id=-1)
             ego.set_instance(player)
             if player is None:
                 print("[-] Failed spawning player")
@@ -398,7 +398,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     if vehicle.attributes["role_name"] == "ego_vehicle":
                         autoware_agent_found = True
                         player = vehicle
-                        print("\n    [*] found [{}] at {}".format(player.id,
+                        print("\n    [*] found [{}] at {}".format(player.actor_id,
                                                                   player.get_location()))
                         break
                 if autoware_agent_found:
@@ -533,7 +533,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     color=carla.Color(r=0, g=0, b=255)
                 )
             print("[+] New puddle [%d] @(%.2f, %.2f) lvl %.2f" % (
-                friction_trigger.id,
+                friction_trigger.actor_id,
                 friction_sp_transform.location.x,
                 friction_sp_transform.location.y,
                 friction["level"])
@@ -560,7 +560,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 actor_vehicles.append(actor_vehicle)
                 print("[+] New %s vehicle [%d] @(%.2f, %.2f) yaw %.2f" % (
                     actor_nav,
-                    actor_vehicle.id,
+                    actor_vehicle.actor_id,
                     actor_sp.location.x,
                     actor_sp.location.y,
                     actor_sp.rotation.yaw)
@@ -584,7 +584,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 actor_walkers.append(actor_walker)
                 print("[+] New %s walker [%d] @(%.2f, %.2f) yaw %.2f" % (
                     actor_nav,
-                    actor_walker.id,
+                    actor_walker.actor_id,
                     actor_sp.location.x,
                     actor_sp.location.y,
                     actor_sp.rotation.yaw)
@@ -739,6 +739,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 print("[*] START DRIVING: {} {}".format(first_frame_id,
                                                         first_sim_time))
             last_time = start_time
+            found_frame = -999
             while True:
                 # Use sampling frequency of FPS*2 for precision!
                 clock.tick(c.FRAME_RATE * 2)
@@ -805,109 +806,121 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
                         if not stopped_at_red:
                             state.red_violation = True
-                # TODO:fix here
+                # update for any frame
+                for actor in actors_now:
+                    if actor.instance.get_location().distance(player_loc) > 100:
+                        actor.instance.set_autopilot(False)
+                        actor_vehicles.remove(actor.instance)
+                        actor.instance.destroy()
+                        actors_now.remove(actor)
+                        actor.instance = None
+                for actor in actor_list:
+                    # TODO: add vel check to avoid bug from cross road
+                    if actor.fresh & (actor.ego_loc.distance(player_loc) < 1.5):
+                        found_frame = state.num_frames
+                        # check if this actor is good to spawn
+                        v1 = carla.Vector2D(actor.ego_loc.x - player_loc.x, actor.ego_loc.y - player_loc.y)
+                        v2 = vel
+                        angle = get_angle_between_vectors(v1, v2)
+                        if angle < 90 and angle != 0:
+                            continue
+                        # check if this actor is not exist
+                        if actor.actor_type is None:
+                            actor.fresh = False
+                            break
+                        # spawn this actor
+                        actor_vehicle = world.try_spawn_actor(vehicle_bp, actor.spawn_point)
+                        if actor_vehicle is None:
+                            # print("spawn fail")
+                            continue
+                        actor_vehicles.append(actor_vehicle)
+                        # TODO: change the mode of actor_vehicle later
+                        actor_spawn_rotation = actor.spawn_point.rotation
+                        roll_degrees = actor_spawn_rotation.yaw
+                        roll = math.radians(roll_degrees)
+                        road_direction_x = math.cos(roll)
+                        road_direction_y = math.sin(roll)
+                        road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
+                        actor_vehicle.set_transform(actor.spawn_point)
+                        set_autopilot(actor_vehicle)
+                        actor_vehicle.set_target_velocity(
+                            actor.speed * road_direction)
+                        actor.set_instance(actor_vehicle)
+                        actors_now.append(actor)
+                        actor.fresh = False
+                        end_time = time.time()
+                        execution_time = end_time - start_time
+                        break
                 # add actor per 1s here
-                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0):
+                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0) & (state.num_frames > 25):
                     # try to spawn a test linear car to see if the simulation is still running
                     # choose actor from actor_list first
                     # delete backgound car which is too far
-                    print("\ntry to spawn an actor")
-                    for actor in actors_now:
-                        if actor.instance.get_location().distance(player_loc) > 110:
-                            actor.instance.set_autopilot(False)
-                            actor_vehicles.remove(actor.instance)
-                            actor.instance.destroy()
-                            actors_now.remove(actor)
-                            actor.instance = None
-                    finded = False
-                    for actor in actor_list:
-                        if actor.fresh & (actor.spawn_point.location.distance(player_loc) < 100):
-                            # check if this actor is good to spawn
-                            flag = True
-                            # width = actor.get_lane_width(town_map)
-                            # for actor_now in actors_now:
-                            #     if not actor.safe_check(actor_now, width, 5):
-                            #         flag = False
-                            #         break
-                            # if not actor.safe_check(ego, width, 2):
-                            #     flag = False
-                            if flag:
-                                # spawn this actor
-                                actor_vehicle = world.try_spawn_actor(vehicle_bp, actor.spawn_point)
-                                if actor_vehicle is None:
-                                    continue
-                                actor_vehicles.append(actor_vehicle)
-                                # TODO: change the mode of actor_vehicle later
-                                actor_spawn_rotation = actor.spawn_point.rotation
-                                roll_degrees = actor_spawn_rotation.yaw
-                                roll = math.radians(roll_degrees)
-
-                                road_direction_x = math.cos(roll)
-                                road_direction_y = math.sin(roll)
-                                road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
-                                actor_vehicle.set_target_velocity(
-                                    actor.speed * road_direction)
-                                actor_vehicle.set_transform(actor.spawn_point)
-                                actor_vehicle.set_autopilot(True, g.tm.get_port())
-                                g.tm.set_route(actor_vehicle, ["Straight"])
-                                actor_vehicle.set_simulate_physics(True)
-                                actor.set_instance(actor_vehicle)
-                                actors_now.append(actor)
-                                actor.fresh = False
-                                finded = True
-                                print("\nspawn an old actor id:", actor.id)
-                                break
-                    if not finded:
+                    start_time = time.time()
+                    if abs(state.num_frames - found_frame) > 25:
                         # actor_type: vehicle or walker
                         actor_vehicle = None
                         new_actor = None
-                        # try 10 time
+                        # try 5 time
                         repeat_times = 0
                         while actor_vehicle is None:
                             repeat_times += 1
-                            x = random.uniform(-50, 50)
-                            y = random.uniform(-50, 50)
+                            if repeat_times > 5:
+                                new_actor = Actor(actor_type=None, nav_type=None,
+                                                  spawn_point=None,
+                                                  dest_point=None, speed=None,
+                                                  actor_id=len(actor_list),
+                                                  ego_loc=player_loc, ego_vel=vel)
+                                new_actor.instance = None
+                                actor_list.append(new_actor)
+                                new_actor.fresh = False
+                                break
+                            x = random.uniform(-40, 40)
+                            y = random.uniform(-40, 40)
                             location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                                              lane_type=carla.libcarla.LaneType.Driving)
-                            road_direction = waypoint.transform.get_forward_vector()
+                            # check the z value
+                            if abs(waypoint.transform.location.z - player_loc.z) > 0.5:
+                                continue
+                            road_direction = waypoint.transform.rotation.get_forward_vector()
                             road_direction_x = road_direction.x
                             road_direction_y = road_direction.y
                             roll = math.atan2(road_direction_y, road_direction_x)
                             roll_degrees = math.degrees(roll)
                             actor_spawn_point = carla.Transform(
                                 carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
-                                               z=waypoint.transform.location.z + 0.1*repeat_times),
+                                               z=waypoint.transform.location.z + 0.1 * repeat_times),
                                 carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
                             )
                             # do safe check
                             new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.LINEAR, spawn_point=actor_spawn_point,
-                                              dest_point=None, speed=random.uniform(3, 10), id=len(actor_list))
+                                              dest_point=None, speed=random.uniform(20 / 3.6, 40 / 3.6),
+                                              actor_id=len(actor_list),
+                                              ego_loc=player_loc, ego_vel=vel)
                             width = new_actor.get_lane_width(town_map)
                             flag = True
                             for actor_now in actors_now:
-                                if not new_actor.safe_check(actor_now, width, 10):
+                                if not new_actor.safe_check(actor_now, width, 5 - repeat_times * 0.1):
                                     flag = False
                                     break
-                            if not new_actor.safe_check(ego, width, 5):
+                            if not new_actor.safe_check(ego, width, 5 - repeat_times * 0.1):
                                 flag = False
                             if flag:
                                 actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
                             else:
                                 continue
-                        actor_vehicles.append(actor_vehicle)
-                        actor_vehicle.set_target_velocity(
-                            new_actor.speed * road_direction)
-                        actor_vehicle.set_transform(actor_spawn_point)
-                        actor_vehicle.set_autopilot(True, g.tm.get_port())
-                        g.tm.set_route(actor_vehicle, ["Straight"])
-                        actor_vehicle.set_simulate_physics(True)
-                        new_actor.set_instance(actor_vehicle)
-                        print("\nspawn a new actor,id:", new_actor.id)
-                        new_actor.fresh = False
-                        actors_now.append(new_actor)
-                        actor_list.append(new_actor)
-
+                        if actor_vehicle is not None:
+                            actor_vehicles.append(actor_vehicle)
+                            actor_vehicle.set_transform(actor_spawn_point)
+                            set_autopilot(actor_vehicle)
+                            actor_vehicle.set_target_velocity(
+                                new_actor.speed * road_direction)
+                            new_actor.set_instance(actor_vehicle)
+                            new_actor.fresh = False
+                            actors_now.append(new_actor)
+                            actor_list.append(new_actor)
+                    found_frame = False
                 # world.debug.draw_point(
                 # player_loc + carla.Location(z=10),
                 # size=0.1,
@@ -998,7 +1011,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
                 # Handle actor maneuvers
                 if conf.strategy == c.TRAJECTORY:
-                    # hard code the actor id to 0,not good at all.
+                    # hard code the actor actor_id to 0,not good at all.
                     actor = actors_now[0]
                     maneuvers = actor["maneuvers"]
 
@@ -1007,7 +1020,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         maneuver = maneuvers[maneuver_id]
 
                         if maneuver[2] == 0:
-                            # print(f"\nPerforming maneuver #{maneuver_id} at frame {state.num_frames}")
                             # mark as done
                             maneuver[2] = state.num_frames
 
@@ -1347,6 +1359,40 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             if conf.debug:
                 print('[debug] done.')
             return retval
+
+
+def get_distance_to_target(vehicle_location, target_location):
+    dx = target_location.x - vehicle_location.x
+    dy = target_location.y - vehicle_location.y
+    return math.sqrt(dx ** 2 + dy ** 2)
+
+
+def get_angle_between_vectors(vector1, vector2):
+    dot_product = vector1.x * vector2.x + vector1.y * vector2.y
+    magnitudes_product = math.sqrt(vector1.x ** 2 + vector1.y ** 2) * math.sqrt(vector2.x ** 2 + vector2.y ** 2)
+    if magnitudes_product == 0:
+        return 0
+    else:
+        cos_angle = dot_product / magnitudes_product
+        return math.degrees(math.acos(cos_angle))
+
+
+def set_autopilot(vehicle):
+    #
+    vehicle.set_autopilot(True, g.tm.get_port())
+    g.tm.ignore_lights_percentage(vehicle, 0)
+    g.tm.ignore_signs_percentage(vehicle, 0)
+    g.tm.ignore_vehicles_percentage(vehicle, 0)
+    g.tm.ignore_walkers_percentage(vehicle, 0)
+
+    g.tm.auto_lane_change(vehicle,True)
+    # g.tm.auto_update_lights(vehicle, True)
+
+    g.tm.vehicle_percentage_speed_difference(vehicle, 0)
+
+    g.tm.set_route(vehicle, ["Straight"])
+    vehicle.set_simulate_physics(True)
+
 
 
 def set_args(argparser):

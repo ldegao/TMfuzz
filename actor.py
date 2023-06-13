@@ -9,7 +9,7 @@ import carla
 
 
 class Actor:
-    id = 0
+    actor_id = 0
     actor_type = 0
     nav_type = 0
     spawn_point = None
@@ -19,16 +19,20 @@ class Actor:
     instance = None
     is_player = False
     fresh = True
+    ego_state = None
 
-    def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, id=0, speed=0):
+    def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
+                 ego_vel=None):
         self.actor_type = actor_type
         self.nav_type = nav_type
         self.spawn_point = spawn_point
         self.dest_point = dest_point
         self.speed = speed
-        self.id = id
+        self.actor_id = actor_id
+        self.ego_loc = ego_loc
+        self.ego_vel = ego_vel
 
-    def safe_check(self, another_actor, distance,t):
+    def safe_check(self, another_actor, distance, t):
         if self.instance is None:
             position1 = self.spawn_point.location
             roll_degrees = self.spawn_point.rotation.roll
@@ -50,7 +54,7 @@ class Actor:
             position2 = another_actor.instance.get_transform().location
             speed2 = another_actor.instance.get_velocity()
 
-        return not check_rectangle_intersection(position1, position2, speed1, speed2, 5, distance)
+        return not check_rectangle_intersection(position1, position2, speed1, speed2, t, distance)
 
     def set_instance(self, actor_vehicle):
         self.instance = actor_vehicle
