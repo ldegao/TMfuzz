@@ -173,7 +173,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         g.client.set_timeout(10.0)
         world = g.client.get_world()
         # set all traffic lights to green
-        # set_traffic_lights_state(world, carla.TrafficLightState.Green)
+        set_traffic_lights_state(world, carla.TrafficLightState.Green)
         # world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
@@ -808,7 +808,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             state.red_violation = True
                 # update for any frame
                 for actor in actors_now:
-                    if actor.instance.get_location().distance(player_loc) > 100:
+                    if actor.instance.get_location().distance(player_loc) > 120:
                         actor.instance.set_autopilot(False)
                         actor_vehicles.remove(actor.instance)
                         actor.instance.destroy()
@@ -821,8 +821,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         # check if this actor is good to spawn
                         v1 = carla.Vector2D(actor.ego_loc.x - player_loc.x, actor.ego_loc.y - player_loc.y)
                         v2 = vel
+                        if math.sqrt(vel.x**2+vel.y**2) < 1/3.6:
+                            # if ego is stuck,don't add this actor
+                            continue
                         angle = get_angle_between_vectors(v1, v2)
                         if angle < 90 and angle != 0:
+                            # the better time will come later
                             continue
                         # check if this actor is not exist
                         if actor.actor_type is None:
@@ -875,13 +879,24 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                 actor_list.append(new_actor)
                                 new_actor.fresh = False
                                 break
-                            x = random.uniform(-40, 40)
-                            y = random.uniform(-40, 40)
+                            x = random.uniform(-50, 50)
+                            y = random.uniform(-50, 50)
                             location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                                              lane_type=carla.libcarla.LaneType.Driving)
+                            bg_speed = random.uniform(20 / 3.6, 40 / 3.6)
+                            # we don't want to add bg car in junction or near it
+                            # because it may cause red light problem
+                            if waypoint.is_junction or waypoint.next(bg_speed*3)[-1].is_junction:
+                                repeat_times -= 1
+                                continue
                             # check the z value
                             if abs(waypoint.transform.location.z - player_loc.z) > 0.5:
+                                continue
+                            # The background vehicle should not be generated directly within the vehicle's perception
+                            # range, instead, the current use is within 10 meters
+                            if waypoint.transform.location.distance(player_loc) < 10:
+                                repeat_times -= 1
                                 continue
                             road_direction = waypoint.transform.rotation.get_forward_vector()
                             road_direction_x = road_direction.x
@@ -895,16 +910,15 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             )
                             # do safe check
                             new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.LINEAR, spawn_point=actor_spawn_point,
-                                              dest_point=None, speed=random.uniform(20 / 3.6, 40 / 3.6),
+                                              dest_point=None, speed=bg_speed,
                                               actor_id=len(actor_list),
                                               ego_loc=player_loc, ego_vel=vel)
-                            width = new_actor.get_lane_width(town_map)
                             flag = True
                             for actor_now in actors_now:
-                                if not new_actor.safe_check(actor_now, width, 5 - repeat_times * 0.1):
+                                if not new_actor.safe_check(actor_now):
                                     flag = False
                                     break
-                            if not new_actor.safe_check(ego, width, 5 - repeat_times * 0.1):
+                            if not new_actor.safe_check(ego):
                                 flag = False
                             if flag:
                                 actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
@@ -1385,14 +1399,13 @@ def set_autopilot(vehicle):
     g.tm.ignore_vehicles_percentage(vehicle, 0)
     g.tm.ignore_walkers_percentage(vehicle, 0)
 
-    g.tm.auto_lane_change(vehicle,True)
+    g.tm.auto_lane_change(vehicle, True)
     # g.tm.auto_update_lights(vehicle, True)
 
     g.tm.vehicle_percentage_speed_difference(vehicle, 0)
 
     g.tm.set_route(vehicle, ["Straight"])
     vehicle.set_simulate_physics(True)
-
 
 
 def set_args(argparser):
