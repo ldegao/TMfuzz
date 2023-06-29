@@ -65,7 +65,7 @@ def _on_invasion(event, state):
     crossed_lanes = event.crossed_lane_markings
     for crossed_lane in crossed_lanes:
         if crossed_lane.lane_change == carla.LaneChange.NONE:
-            # print("LANE INVASION:", event)
+            print("LANE INVASION:", event)
             state.laneinvaded = True
             state.laneinvasion_event.append(event)
 
@@ -174,7 +174,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         world = g.client.get_world()
         # set all traffic lights to green
         set_traffic_lights_state(world, carla.TrafficLightState.Green)
-        # world.freeze_all_traffic_lights(True)
+        world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
             print("[debug] world:", world)
@@ -217,10 +217,10 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         actor_controllers = []
         actor_frictions = []
         ros_pid = 0
+        max_weight = 0
 
         world.tick()  # sync once with simulator
 
-        # spawn player
         # how DriveFuzz spawns a player vehicle depends on
         # the autonomous driving agent
         # due to carla 0.9.13 do not have benz, we change it to nissan
@@ -653,60 +653,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             state.autoware_goal = pub_cmd
 
             world.tick()
-            # print("after launching autoware", time.time())
 
-        # print("real simulation begins", time.time())
-        # handle actor missions after Autoware's goal is published
-        cnt_v = 0
-        cnt_w = 0
-        # for actor in actors_now:
-        #     actor_sp = get_carla_transform(actor.spawn_point)
-        #     actor_dp = get_carla_transform(actor.dest_point)
-        #     if actor.actor_type == c.VEHICLE:  # vehicle
-        #         actor_vehicle = actor_vehicles[cnt_v]
-        #         cnt_v += 1
-        #         if actor.nav_type == c.LINEAR:
-        #             forward_vec = actor_sp.rotation.get_forward_vector()
-        #             actor_vehicle.set_target_velocity(forward_vec * actor.speed)
-        #
-        #         elif actor.nav_type == c.MANEUVER:
-        #             # set initial speed 0
-        #             # trajectory control happens in the control loop below
-        #             forward_vec = actor_sp.rotation.get_forward_vector()
-        #             actor_vehicle.set_target_velocity(forward_vec * 0)
-        #
-        #         elif actor.nav_type == c.AUTOPILOT:
-        #             actor_vehicle.set_autopilot(True, g.tm.get_port())
-        #
-        #         actor_vehicle.set_simulate_physics(True)
-        #     elif actor.actor_type == c.WALKER:  # walker
-        #         actor_walker = actor_walkers[cnt_w]
-        #         cnt_w += 1
-        #         if actor.nav_type == c.LINEAR:
-        #             forward_vec = actor_sp.rotation.get_forward_vector()
-        #             controller_walker = carla.WalkerControl()
-        #             controller_walker.direction = forward_vec
-        #             controller_walker.speed = actor.speed
-        #             actor_walker.apply_control(controller_walker)
-        #
-        #         elif actor.nav_type == c.AUTOPILOT:
-        #             controller_walker = world.spawn_actor(
-        #                 walker_controller_bp,
-        #                 actor_sp,
-        #                 actor_walker)
-        #
-        #             world.tick()  # without this, walker vanishes
-        #             controller_walker.start()
-        #             controller_walker.set_max_speed(float(actor.speed))
-        #             controller_walker.go_to_location(actor_dp.location)
-        #
-        #         elif actor.nav_type == c.IMMOBILE:
-        #             controller_walker = None
-        #
-        #         if controller_walker:  # can be None if immobile walker
-        #             actor_controllers.append(controller_walker)
-
-        elapsed_time = 0
         start_time = time.time()
 
         yaw = sp.rotation.yaw
@@ -808,7 +755,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             state.red_violation = True
                 # update for any frame
                 for actor in actors_now:
-                    if actor.instance.get_location().distance(player_loc) > 120:
+                    if actor.instance.get_location().distance(player_loc) > 50 * math.sqrt(2):
                         actor.instance.set_autopilot(False)
                         actor_vehicles.remove(actor.instance)
                         actor.instance.destroy()
@@ -821,7 +768,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         # check if this actor is good to spawn
                         v1 = carla.Vector2D(actor.ego_loc.x - player_loc.x, actor.ego_loc.y - player_loc.y)
                         v2 = vel
-                        if math.sqrt(vel.x**2+vel.y**2) < 1/3.6:
+                        if math.sqrt(vel.x ** 2 + vel.y ** 2) < 1 / 3.6:
                             # if ego is stuck,don't add this actor
                             continue
                         angle = get_angle_between_vectors(v1, v2)
@@ -855,8 +802,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         end_time = time.time()
                         execution_time = end_time - start_time
                         break
+
                 # add actor per 1s here
-                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0) & (state.num_frames > 25):
+                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0) & (state.num_frames > 1):
                     # try to spawn a test linear car to see if the simulation is still running
                     # choose actor from actor_list first
                     # delete backgound car which is too far
@@ -867,6 +815,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         new_actor = None
                         # try 5 time
                         repeat_times = 0
+                        # if
                         while actor_vehicle is None:
                             repeat_times += 1
                             if repeat_times > 5:
@@ -887,14 +836,14 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             bg_speed = random.uniform(20 / 3.6, 40 / 3.6)
                             # we don't want to add bg car in junction or near it
                             # because it may cause red light problem
-                            if waypoint.is_junction or waypoint.next(bg_speed*3)[-1].is_junction:
+                            if waypoint.is_junction or waypoint.next(bg_speed * 3)[-1].is_junction:
                                 repeat_times -= 1
                                 continue
                             # check the z value
                             if abs(waypoint.transform.location.z - player_loc.z) > 0.5:
                                 continue
                             # The background vehicle should not be generated directly within the vehicle's perception
-                            # range, instead, the current use is within 10 meters
+                            # very nearby, instead, the current use is within 10 meters
                             if waypoint.transform.location.distance(player_loc) < 10:
                                 repeat_times -= 1
                                 continue
@@ -954,7 +903,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     agent._update_information()
                     agent.get_local_planner().set_speed(speed_limit)
                     lp = agent.get_local_planner()
-                    if (len(lp._waypoints_queue) != 0):
+                    if len(lp._waypoints_queue) != 0:
                         control = agent.run_step()
                         player.apply_control(control)
 
@@ -962,6 +911,15 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     # autoware does it on its own. we just retrieve the
                     # control for state computation
                     control = player.get_control()
+                # make bg car more cautious
+                for actor in actors_now:
+                    if actor.instance is not None:
+                        # dont allow reverse
+                        actor_speed = actor.instance.get_velocity()
+                        actor_transform = actor.instance.get_transform()
+                        player_fwd_vec = actor_transform.rotation.get_forward_vector()
+                        if actor_speed.x*player_fwd_vec.x + actor_speed.y*player_fwd_vec.y < 0:
+                            actor.instance.apply_control(carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0))
 
                 state.cont_throttle.append(control.throttle)
                 state.cont_brake.append(control.brake)
@@ -1024,83 +982,83 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 state.lon_speed_list.append(lon_speed)
 
                 # Handle actor maneuvers
-                if conf.strategy == c.TRAJECTORY:
-                    # hard code the actor actor_id to 0,not good at all.
-                    actor = actors_now[0]
-                    maneuvers = actor["maneuvers"]
-
-                    maneuver_id = int(state.num_frames / c.FRAMES_PER_TIMESTEP)
-                    if maneuver_id < 5:
-                        maneuver = maneuvers[maneuver_id]
-
-                        if maneuver[2] == 0:
-                            # mark as done
-                            maneuver[2] = state.num_frames
-
-                            # retrieve the actual actor vehicle object
-                            # there is only one actor in Trajectory mode
-                            actor_vehicle = actor_vehicles[0]
-
-                            # perform the action
-                            actor_direction = maneuver[0]
-                            actor_speed = maneuver[1]
-
-                            forward_vec = get_carla_transform(
-                                actor.spawn_point).rotation.get_forward_vector()
-
-                            if actor_direction == 0:  # forward
-
-                                actor_vehicle.set_target_velocity(
-                                    forward_vec * actor_speed
-                                )
-
-                        elif maneuver[2] > 0 and abs(maneuver[2] - state.num_frames) < 40:
-                            # continuously apply lateral force to the vehicle
-                            # for 40 frames (2 secs)
-                            actor_direction = maneuver[0]
-                            apex_degree = maneuver[1]
-
-                            """
-                            Model smooth lane changing through varying thetas
-                            (theta)
-                            45           * *
-                            30       * *     * *
-                            15     *             * *
-                            0  * *                   *
-                               0 5 10 15 20 25 30 35 40 (t = # frame)
-                            """
-
-                            theta_max = apex_degree
-                            force_constant = 5  # should weigh by actor_speed?
-
-                            t = abs(maneuver[2] - state.num_frames)
-                            if t < 20:
-                                theta = t * (theta_max / 20)
-                            else:
-                                theta = t * -1 * (theta_max / 20) + 2 * theta_max
-
-                            if actor_direction != 0:  # skip if fwd
-                                if actor_direction == -1:  # switch to left lane
-                                    theta *= -1  # turn cc-wise
-                                elif actor_direction == 1:  # switch to right lane
-                                    pass  # turn c-wise
-
-                                theta_rad = math.radians(theta)
-                                sin = math.sin(theta_rad)
-                                cos = math.cos(theta_rad)
-
-                                x0 = forward_vec.x
-                                y0 = forward_vec.y
-
-                                x1 = cos * x0 - sin * y0
-                                y1 = sin * x0 + cos * y0
-
-                                dir_vec = carla.Vector3D(x=x1, y=y1, z=0.0)
-                                actor_vehicle.set_target_velocity(
-                                    dir_vec * force_constant
-                                )
-
-                # Check Autoware-defined destination
+                # if conf.strategy == c.TRAJECTORY:
+                #     # hard code the actor actor_id to 0,not good at all.
+                #     actor = actors_now[0]
+                #     maneuvers = actor["maneuvers"]
+                #
+                #     maneuver_id = int(state.num_frames / c.FRAMES_PER_TIMESTEP)
+                #     if maneuver_id < 5:
+                #         maneuver = maneuvers[maneuver_id]
+                #
+                #         if maneuver[2] == 0:
+                #             # mark as done
+                #             maneuver[2] = state.num_frames
+                #
+                #             # retrieve the actual actor vehicle object
+                #             # there is only one actor in Trajectory mode
+                #             actor_vehicle = actor_vehicles[0]
+                #
+                #             # perform the action
+                #             actor_direction = maneuver[0]
+                #             actor_speed = maneuver[1]
+                #
+                #             forward_vec = get_carla_transform(
+                #                 actor.spawn_point).rotation.get_forward_vector()
+                #
+                #             if actor_direction == 0:  # forward
+                #
+                #                 actor_vehicle.set_target_velocity(
+                #                     forward_vec * actor_speed
+                #                 )
+                #
+                #         elif maneuver[2] > 0 and abs(maneuver[2] - state.num_frames) < 40:
+                #             # continuously apply lateral force to the vehicle
+                #             # for 40 frames (2 secs)
+                #             actor_direction = maneuver[0]
+                #             apex_degree = maneuver[1]
+                #
+                #             """
+                #             Model smooth lane changing through varying thetas
+                #             (theta)
+                #             45           * *
+                #             30       * *     * *
+                #             15     *             * *
+                #             0  * *                   *
+                #                0 5 10 15 20 25 30 35 40 (t = # frame)
+                #             """
+                #
+                #             theta_max = apex_degree
+                #             force_constant = 5  # should weigh by actor_speed?
+                #
+                #             t = abs(maneuver[2] - state.num_frames)
+                #             if t < 20:
+                #                 theta = t * (theta_max / 20)
+                #             else:
+                #                 theta = t * -1 * (theta_max / 20) + 2 * theta_max
+                #
+                #             if actor_direction != 0:  # skip if fwd
+                #                 if actor_direction == -1:  # switch to left lane
+                #                     theta *= -1  # turn cc-wise
+                #                 elif actor_direction == 1:  # switch to right lane
+                #                     pass  # turn c-wise
+                #
+                #                 theta_rad = math.radians(theta)
+                #                 sin = math.sin(theta_rad)
+                #                 cos = math.cos(theta_rad)
+                #
+                #                 x0 = forward_vec.x
+                #                 y0 = forward_vec.y
+                #
+                #                 x1 = cos * x0 - sin * y0
+                #                 y1 = sin * x0 + cos * y0
+                #
+                #                 dir_vec = carla.Vector3D(x=x1, y=y1, z=0.0)
+                #                 actor_vehicle.set_target_velocity(
+                #                     dir_vec * force_constant
+                #                 )
+                #
+                # # Check Autoware-defined destination
                 # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
                 # VehicleReady\nWaitOrder\nStopping\nWaitDriveReady\n
 
@@ -1140,6 +1098,14 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     print("\n[*] (Carla heuristic) Reached the destination")
                     retval = 0
                     break
+                # change weight here
+                for actor in actors_now:
+                    dis = actor.instance.get_location().distance(player_loc)
+                    v = actor.instance.get_velocity()
+                    sum_v = speed / 3.6 + math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
+                    now_weight = sum_v / dis
+                    actor.weight = max(actor.weight, now_weight)
+                    max_weight = max(actor.weight, max_weight)
 
                 # Check speeding
                 if conf.check_dict["speed"]:
@@ -1225,6 +1191,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
     finally:
         # Finalize simulation
         # rospy.signal_shutdown("fin")
+        # find biggest weight of actor-list
+
         state.end = True
         if conf.agent_type == c.BASIC or conf.agent_type == c.BEHAVIOR:
             # remove jpg files
@@ -1400,9 +1368,8 @@ def set_autopilot(vehicle):
     g.tm.ignore_walkers_percentage(vehicle, 0)
 
     g.tm.auto_lane_change(vehicle, True)
-    # g.tm.auto_update_lights(vehicle, True)
 
-    g.tm.vehicle_percentage_speed_difference(vehicle, 0)
+    g.tm.vehicle_percentage_speed_difference(vehicle, 1)
 
     g.tm.set_route(vehicle, ["Straight"])
     vehicle.set_simulate_physics(True)
@@ -1553,177 +1520,3 @@ def set_args(argparser):
         "--no-stuck-check",
         action="store_true"
     )
-
-# if __name__ == '__main__':
-#     conf = config.Config()
-#     argparser = argparse.ArgumentParser()
-#     argparser = set_args()
-#     args = argparser.parse_args()
-#     # if args.debug:
-#     conf.debug = True
-#     # else:
-#     #     conf.debug = False
-#
-#     if args.cloud < 0 or args.cloud > 100:
-#         print("[-] Error in arg cloud: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.rain < 0 or args.rain > 100:
-#         print("[-] Error in arg rain: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.puddle < 0 or args.puddle > 100:
-#         print("[-] Error in arg puddle: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.wind < 0 or args.wind > 100:
-#         print("[-] Error in arg wind: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.fog < 0 or args.fog > 100:
-#         print("[-] Error in arg fog: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.wetness < 0 or args.wetness > 100:
-#         print("[-] Error in arg wetness: {}".format(c.MSG_BAD_WEATHER_ARG))
-#         sys.exit(-1)
-#     if args.angle < 0 or args.angle > 360:
-#         print("[-] Error in arg angle: {}".format(c.MSG_BAD_SUN_ARG))
-#         sys.exit(-1)
-#     if args.altitude < -90 or args.altitude > 90:
-#         print("[-] Error in arg altitude: {}".format(c.MSG_BAD_SUN_ARG))
-#         sys.exit(-1)
-#
-#     weather_dict = {
-#         "cloud": args.cloud,
-#         "rain": args.rain,
-#         "puddle": args.puddle,
-#         "wind": args.wind,
-#         "fog": args.fog,
-#         "wetness": args.wetness,
-#         "angle": args.angle,
-#         "altitude": args.altitude
-#     }
-#
-#     frictions_list = []
-#     if args.friction:
-#         frictions = args.friction
-#         for friction in frictions:
-#             if not friction:
-#                 print("[-] Error in arg: {}".format(c.MSG_EMPTY_FRICTION_ARG))
-#                 sys.exit(-1)
-#
-#             if len(friction) != 7:
-#                 print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_ARG))
-#                 sys.exit(-1)
-#
-#             if friction[0] < 0 or friction[0] > 1:
-#                 print("[-] Error in arg: {}".format(c.MSG_BAD_FRICTION_LEVEL))
-#                 sys.exit(-1)
-#
-#             friction_level = friction[0]
-#             friction_box_size = carla.Location(
-#                 x=friction[1], y=friction[2], z=friction[3]
-#             )
-#             friction_spawn_point = carla.Transform(
-#                 carla.Location(x=friction[4], y=friction[5], z=friction[6]),
-#                 carla.Rotation()
-#             )
-#
-#             frictions_list.append({
-#                 "level": friction_level,
-#                 "size": friction_box_size,
-#                 "spawn_point": friction_spawn_point
-#             }
-#             )
-#
-#     # parse actor_now
-#     actors_now = []
-#     if args.actor:
-#         actors = args.actor
-#         for actor in actors:
-#             if not actor:
-#                 print("[-] Error in arg: {}".format(c.MSG_EMPTY_ACTOR_ARG))
-#                 sys.exit(-1)
-#
-#             if int(actor[0]) == 0 or int(actor[0]) == 1:
-#                 if len(actor) != 12:
-#                     print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_ATTR))
-#                     sys.exit(-1)
-#
-#                 # actor_type: vehicle or walker
-#                 actor_type = actor[0]
-#                 nav_type = actor[1]
-#                 actor_spawn_point = carla.Transform(
-#                     carla.Location(x=actor[2], y=actor[3], z=actor[4]),
-#                     carla.Rotation(pitch=actor[5], yaw=actor[6], roll=actor[7])
-#                 )
-#                 actor_dest_point = carla.Location(
-#                     x=actor[8], y=actor[9], z=actor[10]
-#                 )
-#
-#                 actor_speed = actor[11]
-#
-#                 actors_now.append({
-#                     "type": actor_type,
-#                     "nav_type": nav_type,
-#                     "spawn_point": actor_spawn_point,
-#                     "dest_point": actor_dest_point,
-#                     "speed": actor_speed
-#                 }
-#                 )
-#
-#             elif int(actor[0]) == 2:  # placeholder for other actor_now
-#                 pass
-#
-#             else:
-#                 print("[-] Error in arg: {}".format(c.MSG_BAD_ACTOR_TYPE))
-#                 sys.exit(-1)
-#
-#     if args.spawn:
-#         if len(args.spawn) != 6:
-#             print("[-] Error in arg spawn: {}".format(c.MSG_BAD_SPAWN_ARG))
-#             sys.exit(-1)
-#
-#         sp = carla.Transform(
-#             carla.Location(args.spawn[0], args.spawn[1], args.spawn[2]),
-#             carla.Rotation(args.spawn[3], args.spawn[4], args.spawn[5]),
-#         )
-#     else:  # default for Town01
-#         sp = carla.Transform(
-#             carla.Location(334.83, 217.1, 1.32),
-#             carla.Rotation(0.0, 90, 0.0)
-#         )
-#
-#     if args.dest:
-#         if len(args.spawn) != 6:
-#             print("[-] Error in arg dest: {}".format(c.MSG_BAD_DEST_ARG))
-#             sys.exit(-1)
-#
-#         wp = carla.Location(args.dest[0], args.dest[1], args.dest[2])
-#     else:  # default for Town01
-#         wp = carla.Location(335.49, 298.81, 1.32)
-#
-#     if args.speed:
-#         config.TARGET_SPEED = args.speed
-#
-#     if args.view:
-#         if int(args.view) == config.ONROOF:
-#             config.VIEW = config.ONROOF
-#         if int(args.view) == config.BIRDSEYE:
-#             config.VIEW = config.BIRDSEYE
-#
-#     if args.town:
-#         town = args.town
-#     else:
-#         town = "Town01"
-#
-#     if args.no_speed_check:
-#         config.CHECKS["speed"] = False
-#     if args.no_crash_check:
-#         config.CHECKS["crash"] = False
-#     if args.no_lane_check:
-#         config.CHECKS["lane"] = False
-#     if args.no_stuck_check:
-#         config.CHECKS["stuck"] = False
-#
-#     (client, tm) = connect("localhost", 2000, 8000)
-#
-#     ret = simulate(tm, sp, wp,
-#                    weather_dict, frictions_list, actors_now)
-#     print("simulation returned:", ret)

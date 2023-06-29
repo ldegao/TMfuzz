@@ -207,7 +207,6 @@ def main():
 
     init(conf, args)
 
-
     queue = deque(conf.enqueue_seed_scenarios())
     scene_id = 0
     campaign_cnt = 0
@@ -564,8 +563,8 @@ def main():
                 # found an error - move on to next one in queue
                 # test.quota = 0
                 # for test
-                continue
-                #break
+                # continue
+                break
 
             elif ret == 128:
                 print("Exit by user request")

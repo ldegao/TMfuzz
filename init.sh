@@ -15,13 +15,14 @@ if [[ "$(docker inspect -f '{{.State.Status}}' "$docker_name" 2>/dev/null)" == "
 fi
 
 # Check if the Docker container doesn't exist
+# shellcheck disable=SC2143
 if [[ ! "$(docker ps -a --format '{{.Names}}' | grep -w "$docker_name")" ]]; then
   echo "Docker container $docker_name doesn't exist. Running run_carla.sh..."
   "./run_carla.sh"
 fi
 
 source savefile.sh
-if [ "$(ls -A $fuzzerdata_dir)" ]; then
+if [ "$(ls -A "$fuzzerdata_dir")" ]; then
   find "$fuzzerdata_dir"* -type f -delete
   echo "Deleted files in $fuzzerdata_dir"
 else
