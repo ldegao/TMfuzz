@@ -16,13 +16,17 @@ class Actor:
     dest_point = None
     speed = 0
     weight = 0
+    spawn_frame = 0
+    max_weight_frame = 0
     instance = None
     is_player = False
     fresh = True
     ego_state = None
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None):
+                 ego_vel=None, spawn_frame=0):
+        self.event_list = []
+        self.spawn_frame = spawn_frame
         self.actor_type = actor_type
         self.nav_type = nav_type
         self.spawn_point = spawn_point
@@ -48,10 +52,10 @@ class Actor:
             another_is_ego = True
         # calculate points of two vehicles safe rectangle
         points_list1 = calculate_safe_rectangle(self.get_position_now(), self.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6 / 2,
+                                                c.HARD_ACC_THRES / 3.6,
                                                 width, self_is_ego)
         points_list2 = calculate_safe_rectangle(another_actor.get_position_now(), another_actor.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6 / 2, width, another_is_ego)
+                                                c.HARD_ACC_THRES / 3.6, width, another_is_ego)
         # calculate lines of two vehicles safe rectangle
         lines_list1 = []
         lines_list2 = []
@@ -101,6 +105,9 @@ class Actor:
 
     def get_lane_width(self, town_map):
         return self.get_waypoint(town_map).lane_width
+
+    def add_event(self, frame, event):
+        self.event_list.append((frame, event))
 
 
 def calculate_safe_rectangle(position, speed, acceleration, lane_width, is_player=False):

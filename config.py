@@ -54,7 +54,9 @@ class Config:
         self.max_mutation = 0
         self.num_dry_runs = 1
         self.num_param_mutations = 1
-        # self.initial_quota = 10
+        self.num_mutation_car = 1
+        self.density = 1
+        self.no_traffic_lights = True
 
         # Fuzzing metadata
         self.cur_time = None
@@ -68,7 +70,7 @@ class Config:
         # Enable/disable Various Checks
         self.check_dict = {
             "speed": True,
-            "lane": False,
+            "lane": True,
             "crash": True,
             "stuck": True,
             "red": True,

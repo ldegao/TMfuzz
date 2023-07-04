@@ -461,7 +461,6 @@ class Scenario:
         if not self.conf.function.startswith("eval"):
             if ret == 128:
                 return 128
-
         if error:
             self.found_error = True
             return 1
@@ -531,8 +530,6 @@ class Scenario:
             os_level = get_oversteer_level(SWA_diff, Ay_diff, yr)
             us_level = get_understeer_level(fd)
 
-            # TODO: add unstable event detection (section 3.5.1)
-
             if os_level >= os_thres:
                 if Vx > 5 and Ay_diff > 0.1:
                     num_oversteer += 1
@@ -543,15 +540,6 @@ class Scenario:
                     num_understeer += 1
                     # print("US @%d %.2f (SA %.4f FD %.4f Vx %.4f)" %(
                     # fid, us_level, sa2, fd, Vx))
-
-        if self.conf.debug:
-            print("[debug] # ha:", ha)
-            print("[debug] # hb:", hb)
-            print("[debug] # ht:", ht)
-            print("[debug] # oversteer:", num_oversteer)
-            print("[debug] # understeer:", num_understeer)
-            pass
-
         ovs = int(num_oversteer)
         uds = int(num_understeer)
         deductions += ovs + uds

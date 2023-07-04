@@ -143,14 +143,10 @@ def _is_player_on_puddle(player_loc, actor_frictions):
         p4 = loc_y + len_y / 100
         p_x = player_loc.x
         p_y = player_loc.y
-        if p1 <= p_x <= p2 and p3 <= p_y and p_y <= p4:
+        if p1 <= p_x <= p2 and p3 <= p_y <= p4:
             return True
         else:
             return False
-
-
-def _try_to_add_actor():
-    pass
 
 
 def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
@@ -166,6 +162,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
     # tm = client.get_trafficmanager(tm.get_port())
     # print("TM_CLIENT:", tm, tm.get_port())
     # tm.reset_traffic_lights() # XXX: might need this later
+    p = 0.1
     retval = 0
     actors_now = []
     try:
@@ -174,7 +171,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         world = g.client.get_world()
         # set all traffic lights to green
         set_traffic_lights_state(world, carla.TrafficLightState.Green)
-        world.freeze_all_traffic_lights(True)
+        if conf.no_traffic_lights:
+            world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
             print("[debug] world:", world)
@@ -194,10 +192,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         settings.no_rendering_mode = False
         world.apply_settings(settings)
         frame_id = world.tick()
-        init_frame_id = frame_id
-        frame_0 = frame_id
-        start_time = time.time()
         clock = pygame.time.Clock()
+        add_car_frame = c.FRAME_RATE//conf.num_param_mutations
 
         # set weather
         weather = world.get_weather()
@@ -227,7 +223,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         player_bp = blueprint_library.filter('nissan')[0]
         # player_bp.set_attribute("role_name", "ego")
         player = None
-        ego = None
 
         goal_loc = wp.location
         goal_rot = wp.rotation
@@ -726,6 +721,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
                 state.speed.append(speed)
                 state.speed_lim.append(speed_limit)
+
                 print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
                     sp.location.x, sp.location.y, player_loc.x,
                     player_loc.y, goal_loc.x, goal_loc.y,
@@ -800,22 +796,19 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         actors_now.append(actor)
                         actor.fresh = False
                         end_time = time.time()
-                        execution_time = end_time - start_time
                         break
 
                 # add actor per 1s here
-                if (state.stuck_duration < 3) & (state.num_frames % 25 == 0) & (state.num_frames > 1):
+                if (state.stuck_duration < 1) & (state.num_frames % add_car_frame == 0) & (state.num_frames > 1):
                     # try to spawn a test linear car to see if the simulation is still running
                     # choose actor from actor_list first
                     # delete backgound car which is too far
-                    start_time = time.time()
-                    if abs(state.num_frames - found_frame) > 25:
-                        # actor_type: vehicle or walker
+                    if abs(state.num_frames - found_frame) > add_car_frame:
+                        add_type = random.randint(1, 100)
                         actor_vehicle = None
                         new_actor = None
                         # try 5 time
                         repeat_times = 0
-                        # if
                         while actor_vehicle is None:
                             repeat_times += 1
                             if repeat_times > 5:
@@ -833,20 +826,21 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                                              lane_type=carla.libcarla.LaneType.Driving)
-                            bg_speed = random.uniform(20 / 3.6, 40 / 3.6)
-                            # we don't want to add bg car in junction or near it
-                            # because it may cause red light problem
-                            if waypoint.is_junction or waypoint.next(bg_speed * 3)[-1].is_junction:
-                                repeat_times -= 1
-                                continue
+                            ego_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
+                                                                 lane_type=carla.libcarla.LaneType.Driving)
                             # check the z value
                             if abs(waypoint.transform.location.z - player_loc.z) > 0.5:
                                 continue
-                            # The background vehicle should not be generated directly within the vehicle's perception
-                            # very nearby, instead, the current use is within 10 meters
-                            if waypoint.transform.location.distance(player_loc) < 10:
+                            # we don't want to add bg car in junction or near it
+                            # because it may cause red light problem
+                            if waypoint.is_junction or waypoint.next(30 * 3 / 3.6)[-1].is_junction:
                                 repeat_times -= 1
                                 continue
+                            # we don't want to add bg car at the same lane of ego
+                            if waypoint.lane_id == ego_waypoint.lane_id:
+                                if waypoint.transform.location.distance(player_loc) < 10:
+                                    repeat_times -= 1
+                                    continue
                             road_direction = waypoint.transform.rotation.get_forward_vector()
                             road_direction_x = road_direction.x
                             road_direction_y = road_direction.y
@@ -857,18 +851,36 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                                z=waypoint.transform.location.z + 0.1 * repeat_times),
                                 carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
                             )
+                            if add_type <= g.immobile_percentage:
+                                bg_speed = 0
+                                new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.IMMOBILE,
+                                                  spawn_point=actor_spawn_point,
+                                                  dest_point=None, speed=bg_speed,
+                                                  actor_id=len(actor_list),
+                                                  ego_loc=player_loc, ego_vel=vel, spawn_frame=state.num_frames)
+                            elif add_type <= g.immobile_percentage + g.stop_percentage:
+                                bg_speed = 0
+                                new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.STOP,
+                                                  spawn_point=actor_spawn_point,
+                                                  dest_point=None, speed=bg_speed,
+                                                  actor_id=len(actor_list),
+                                                  ego_loc=player_loc, ego_vel=vel, spawn_frame=state.num_frames)
+                                new_actor.add_event(c.FRAME_RATE*g.stop_seconds, c.RESTART)
+                            else:
+                                bg_speed = random.uniform(20 / 3.6, 40 / 3.6)
+                                new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.LINEAR,
+                                                  spawn_point=actor_spawn_point,
+                                                  dest_point=None, speed=bg_speed,
+                                                  actor_id=len(actor_list),
+                                                  ego_loc=player_loc, ego_vel=vel, spawn_frame=state.num_frames)
                             # do safe check
-                            new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.LINEAR, spawn_point=actor_spawn_point,
-                                              dest_point=None, speed=bg_speed,
-                                              actor_id=len(actor_list),
-                                              ego_loc=player_loc, ego_vel=vel)
                             flag = True
-                            for actor_now in actors_now:
-                                if not new_actor.safe_check(actor_now):
-                                    flag = False
-                                    break
-                            if not new_actor.safe_check(ego):
-                                flag = False
+                            # for actor_now in actors_now:
+                            #     if not new_actor.safe_check(actor_now):
+                            #         flag = False
+                            #         break
+                            # if not new_actor.safe_check(ego):
+                            #     flag = False
                             if flag:
                                 actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
                             else:
@@ -876,7 +888,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         if actor_vehicle is not None:
                             actor_vehicles.append(actor_vehicle)
                             actor_vehicle.set_transform(actor_spawn_point)
-                            set_autopilot(actor_vehicle)
+                            if new_actor.nav_type == c.LINEAR:
+                                set_autopilot(actor_vehicle)
                             actor_vehicle.set_target_velocity(
                                 new_actor.speed * road_direction)
                             new_actor.set_instance(actor_vehicle)
@@ -891,6 +904,26 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 # color=carla.Color(255, 0, 0)
                 # )
                 # set_camera(player, spectator)
+
+                # deal with event
+                for actor in actors_now:
+                    if actor.instance is None:
+                        continue
+                    if actor.event_list is not None:
+                        for event in actor.event_list:
+                            if event[0] == state.num_frames - actor.spawn_frame:
+                                if event[1] == c.RESTART:
+                                    set_autopilot(actor.instance)
+                                elif event[1] == c.BRAKE:
+                                    print(actor.actor_id, " brake")
+                                    actor.instance.apply_control(
+                                        carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0))
+                                elif event[1] == c.MOVE_TO_THE_LEFT:
+                                    print(actor.actor_id, " move to the left")
+                                    g.tm.force_lane_change(actor.instance, False)
+                                elif event[1] == c.MOVE_TO_THE_RIGHT:
+                                    print(actor.actor_id, " move to the right")
+                                    g.tm.force_lane_change(actor.instance, True)
 
                 if conf.agent_type == c.BASIC:
                     # for carla agents, we should apply controls ourselves
@@ -918,7 +951,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         actor_speed = actor.instance.get_velocity()
                         actor_transform = actor.instance.get_transform()
                         player_fwd_vec = actor_transform.rotation.get_forward_vector()
-                        if actor_speed.x*player_fwd_vec.x + actor_speed.y*player_fwd_vec.y < 0:
+                        if actor_speed.x * player_fwd_vec.x + actor_speed.y * player_fwd_vec.y < 0:
                             actor.instance.apply_control(carla.VehicleControl(throttle=0.0, steer=0.0, brake=1.0))
 
                 state.cont_throttle.append(control.throttle)
@@ -981,83 +1014,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 lon_speed *= 3.6
                 state.lon_speed_list.append(lon_speed)
 
-                # Handle actor maneuvers
-                # if conf.strategy == c.TRAJECTORY:
-                #     # hard code the actor actor_id to 0,not good at all.
-                #     actor = actors_now[0]
-                #     maneuvers = actor["maneuvers"]
-                #
-                #     maneuver_id = int(state.num_frames / c.FRAMES_PER_TIMESTEP)
-                #     if maneuver_id < 5:
-                #         maneuver = maneuvers[maneuver_id]
-                #
-                #         if maneuver[2] == 0:
-                #             # mark as done
-                #             maneuver[2] = state.num_frames
-                #
-                #             # retrieve the actual actor vehicle object
-                #             # there is only one actor in Trajectory mode
-                #             actor_vehicle = actor_vehicles[0]
-                #
-                #             # perform the action
-                #             actor_direction = maneuver[0]
-                #             actor_speed = maneuver[1]
-                #
-                #             forward_vec = get_carla_transform(
-                #                 actor.spawn_point).rotation.get_forward_vector()
-                #
-                #             if actor_direction == 0:  # forward
-                #
-                #                 actor_vehicle.set_target_velocity(
-                #                     forward_vec * actor_speed
-                #                 )
-                #
-                #         elif maneuver[2] > 0 and abs(maneuver[2] - state.num_frames) < 40:
-                #             # continuously apply lateral force to the vehicle
-                #             # for 40 frames (2 secs)
-                #             actor_direction = maneuver[0]
-                #             apex_degree = maneuver[1]
-                #
-                #             """
-                #             Model smooth lane changing through varying thetas
-                #             (theta)
-                #             45           * *
-                #             30       * *     * *
-                #             15     *             * *
-                #             0  * *                   *
-                #                0 5 10 15 20 25 30 35 40 (t = # frame)
-                #             """
-                #
-                #             theta_max = apex_degree
-                #             force_constant = 5  # should weigh by actor_speed?
-                #
-                #             t = abs(maneuver[2] - state.num_frames)
-                #             if t < 20:
-                #                 theta = t * (theta_max / 20)
-                #             else:
-                #                 theta = t * -1 * (theta_max / 20) + 2 * theta_max
-                #
-                #             if actor_direction != 0:  # skip if fwd
-                #                 if actor_direction == -1:  # switch to left lane
-                #                     theta *= -1  # turn cc-wise
-                #                 elif actor_direction == 1:  # switch to right lane
-                #                     pass  # turn c-wise
-                #
-                #                 theta_rad = math.radians(theta)
-                #                 sin = math.sin(theta_rad)
-                #                 cos = math.cos(theta_rad)
-                #
-                #                 x0 = forward_vec.x
-                #                 y0 = forward_vec.y
-                #
-                #                 x1 = cos * x0 - sin * y0
-                #                 y1 = sin * x0 + cos * y0
-                #
-                #                 dir_vec = carla.Vector3D(x=x1, y=y1, z=0.0)
-                #                 actor_vehicle.set_target_velocity(
-                #                     dir_vec * force_constant
-                #                 )
-                #
                 # # Check Autoware-defined destination
                 # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
                 # VehicleReady\nWaitOrder\nStopping\nWaitDriveReady\n
@@ -1100,11 +1056,14 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     break
                 # change weight here
                 for actor in actors_now:
+                    # todo: change weight formula later
                     dis = actor.instance.get_location().distance(player_loc)
                     v = actor.instance.get_velocity()
                     sum_v = speed / 3.6 + math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
                     now_weight = sum_v / dis
                     actor.weight = max(actor.weight, now_weight)
+                    if actor.weight != now_weight:
+                        actor.max_weight_frame = state.num_frames - actor.spawn_frame
                     max_weight = max(actor.weight, max_weight)
 
                 # Check speeding
@@ -1151,11 +1110,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     state.stuck_duration = 0
 
                 if conf.check_dict["stuck"]:
-                    if state.stuck_duration > (conf.timeout * c.FRAME_RATE / 2):
-                        state.stuck = True
-                        print("\n[*] Stuck for too long: %d" % (state.stuck_duration))
-                        retval = 1
-                        break
+                    if state.stuck_duration > (conf.timeout * c.FRAME_RATE):
+                        if not state.on_red:
+                            state.stuck = True
+                            print("\n[*] Stuck for too long: %d" % (state.stuck_duration))
+                            retval = 1
+                            break
 
                 if conf.check_dict["other"]:
                     if state.num_frames > 6000:  # over 5 minutes
@@ -1374,149 +1334,149 @@ def set_autopilot(vehicle):
     g.tm.set_route(vehicle, ["Straight"])
     vehicle.set_simulate_physics(True)
 
-
-def set_args(argparser):
-    """
-    [arguments]
-    * Weather # XXX: really has to be float?
-    - float cloudiness: 0 (clear), 100 (cloudy)
-    - float precipitation: 0 (none), 100 (heaviest rain)
-    - float puddles: 0 (no puddle), 100 (completely covered with puddle)
-    - float wind_intensity: 0 (no wind), 100 (strongest wind)
-    - float fog_density: 0 (no fog), 100 (densest fog)
-    # - float fog_distance: 0 (starts in the beginning), +inf (does not start)
-    - float wetness: 0 (completely dry), 100 (completely wet)
-    - float sun_azimuth_angle: 0 ~ 360
-    - float sun_altitude_angle: -90 (midnight) ~ +90 (noon)
-
-    * Friction triggerbox (optional w/ var nargs)
-    - float level: 0.0 (zero friction), 1.0 (full friction)
-    - carla.Location extent: x, y, z (size of triggerbox in cm)
-    - carla.Transform transform: carla.Location(x, y, z) (where to spawn)
-
-    * Dynamic Actors (also optional w/ variable nargs)
-    - int actor_type: 0 (vehicle), 1 (walker), 2 (RESERVED: other)
-    - carla.Transform spawn_point: where actor is spawned
-    - if actor_type == 0:
-      - carla.Vector3D velocity: vehicle's velocity (might apply to walker too)
-        - set_target_velocity(velocity)
-    - elif actor_type == 1:
-      - carla.Vector3D direction: walker's direction
-      - float speed: walker's speed (m/s)
-
-    * Sensors (TBD)
-
-    * Static Actors (traffic signals and lights)
-      * NOTE: Dynamic spawning of traffic signals and lights is not possible.
-        When the simulation starts, stop, yields and traffic light are
-        automatically generated using the information in the OpenDRIVE file.
-      * Need to update carla to 0.9.9, which manages traffic lights through
-        OpenDRIVE (.xodr) files.
-    """
-    # add weather args
-    argparser.add_argument(
-        "--cloud",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--rain",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--puddle",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--wind",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--fog",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--wetness",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--angle",
-        default=0,
-        type=float)
-    argparser.add_argument(
-        "--altitude",
-        default=0,
-        type=float)
-
-    # Town map
-    argparser.add_argument(
-        "--town",
-        default="Town01",
-        type=str
-    )
-
-    # spawn point: x, y, z, pitch, yaw, roll
-    argparser.add_argument(
-        "--spawn",
-        nargs="*",
-        type=float
-    )
-
-    # destination: x, y, z
-    argparser.add_argument(
-        "--dest",
-        nargs="*",
-        type=float
-    )
-
-    # BasicAgent's target speed
-    argparser.add_argument(
-        "--speed",
-        default=60,
-        type=float)
-
-    argparser.add_argument(
-        "--view",
-        default=config.ONROOF,
-        type=int)
-
-    # Friction triggerbox
-    argparser.add_argument(
-        "--friction",
-        action="append",
-        nargs="*",
-        type=float
-    )
-    # Can set multiple triggerboxes.
-    # Each --friction arg should be followed by
-    # level (0-1.0), size of triggerbox (x, y, z in cm),
-    # and location (x, y, z).
-
-    # Dynamic actor_now
-    argparser.add_argument(
-        "--actor",
-        action="append",
-        nargs="*",
-        type=float
-    )
-
-    argparser.add_argument(
-        "--debug",
-        action="store_true"
-    )
-
-    argparser.add_argument(
-        "--no-speed-check",
-        action="store_true"
-    )
-    argparser.add_argument(
-        "--no-lane-check",
-        action="store_true"
-    )
-    argparser.add_argument(
-        "--no-crash-check",
-        action="store_true"
-    )
-    argparser.add_argument(
-        "--no-stuck-check",
-        action="store_true"
-    )
+#
+# def set_args(argparser):
+#     """
+#     [arguments]
+#     * Weather # XXX: really has to be float?
+#     - float cloudiness: 0 (clear), 100 (cloudy)
+#     - float precipitation: 0 (none), 100 (heaviest rain)
+#     - float puddles: 0 (no puddle), 100 (completely covered with puddle)
+#     - float wind_intensity: 0 (no wind), 100 (strongest wind)
+#     - float fog_density: 0 (no fog), 100 (densest fog)
+#     # - float fog_distance: 0 (starts in the beginning), +inf (does not start)
+#     - float wetness: 0 (completely dry), 100 (completely wet)
+#     - float sun_azimuth_angle: 0 ~ 360
+#     - float sun_altitude_angle: -90 (midnight) ~ +90 (noon)
+#
+#     * Friction triggerbox (optional w/ var nargs)
+#     - float level: 0.0 (zero friction), 1.0 (full friction)
+#     - carla.Location extent: x, y, z (size of triggerbox in cm)
+#     - carla.Transform transform: carla.Location(x, y, z) (where to spawn)
+#
+#     * Dynamic Actors (also optional w/ variable nargs)
+#     - int actor_type: 0 (vehicle), 1 (walker), 2 (RESERVED: other)
+#     - carla.Transform spawn_point: where actor is spawned
+#     - if actor_type == 0:
+#       - carla.Vector3D velocity: vehicle's velocity (might apply to walker too)
+#         - set_target_velocity(velocity)
+#     - elif actor_type == 1:
+#       - carla.Vector3D direction: walker's direction
+#       - float speed: walker's speed (m/s)
+#
+#     * Sensors (TBD)
+#
+#     * Static Actors (traffic signals and lights)
+#       * NOTE: Dynamic spawning of traffic signals and lights is not possible.
+#         When the simulation starts, stop, yields and traffic light are
+#         automatically generated using the information in the OpenDRIVE file.
+#       * Need to update carla to 0.9.9, which manages traffic lights through
+#         OpenDRIVE (.xodr) files.
+#     """
+#     # add weather args
+#     argparser.add_argument(
+#         "--cloud",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--rain",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--puddle",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--wind",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--fog",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--wetness",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--angle",
+#         default=0,
+#         type=float)
+#     argparser.add_argument(
+#         "--altitude",
+#         default=0,
+#         type=float)
+#
+#     # Town map
+#     argparser.add_argument(
+#         "--town",
+#         default="Town01",
+#         type=str
+#     )
+#
+#     # spawn point: x, y, z, pitch, yaw, roll
+#     argparser.add_argument(
+#         "--spawn",
+#         nargs="*",
+#         type=float
+#     )
+#
+#     # destination: x, y, z
+#     argparser.add_argument(
+#         "--dest",
+#         nargs="*",
+#         type=float
+#     )
+#
+#     # BasicAgent's target speed
+#     argparser.add_argument(
+#         "--speed",
+#         default=60,
+#         type=float)
+#
+#     argparser.add_argument(
+#         "--view",
+#         default=config.ONROOF,
+#         type=int)
+#
+#     # Friction triggerbox
+#     argparser.add_argument(
+#         "--friction",
+#         action="append",
+#         nargs="*",
+#         type=float
+#     )
+#     # Can set multiple triggerboxes.
+#     # Each --friction arg should be followed by
+#     # level (0-1.0), size of triggerbox (x, y, z in cm),
+#     # and location (x, y, z).
+#
+#     # Dynamic actor_now
+#     argparser.add_argument(
+#         "--actor",
+#         action="append",
+#         nargs="*",
+#         type=float
+#     )
+#
+#     argparser.add_argument(
+#         "--debug",
+#         action="store_true"
+#     )
+#
+#     argparser.add_argument(
+#         "--no-speed-check",
+#         action="store_true"
+#     )
+#     argparser.add_argument(
+#         "--no-lane-check",
+#         action="store_true"
+#     )
+#     argparser.add_argument(
+#         "--no-crash-check",
+#         action="store_true"
+#     )
+#     argparser.add_argument(
+#         "--no-stuck-check",
+#         action="store_true"
+#     )
