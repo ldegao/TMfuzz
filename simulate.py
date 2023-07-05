@@ -345,7 +345,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 "XAUTHORITY": xauth
             }
 
-            autoware_cla = "{} \'{}\'".format(town_map.name, sp_str)
+            autoware_cla = "{} \'{}\'".format(town_map.name.split("/")[-1], sp_str)
             print(autoware_cla)
             state.autoware_cmd = autoware_cla
 
@@ -354,7 +354,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             while autoware_container is None:
                 try:
                     autoware_container = docker_client.containers.run(
-                        "carla-autoware:improved",
+                        "carla-autoware:v20230704",
                         command=autoware_cla,
                         detach=True,
                         auto_remove=True,
@@ -393,7 +393,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     if vehicle.attributes["role_name"] == "ego_vehicle":
                         autoware_agent_found = True
                         player = vehicle
-                        print("\n    [*] found [{}] at {}".format(player.actor_id,
+                        print("\n    [*] found [{}] at {}".format(player.id,
                                                                   player.get_location()))
                         break
                 if autoware_agent_found:
@@ -612,7 +612,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 if i == 15:
                     print("    [-] something went wrong while launching Autoware.")
                     raise KeyboardInterrupt
-                time.sleep(1)
+                time.sleep(2.5)
 
             world.tick()
 
@@ -758,7 +758,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         actors_now.remove(actor)
                         actor.instance = None
                 for actor in actor_list:
-                    # TODO: add vel check to avoid bug from cross road
                     if actor.fresh & (actor.ego_loc.distance(player_loc) < 1.5):
                         found_frame = state.num_frames
                         # check if this actor is good to spawn
@@ -795,7 +794,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         actor.set_instance(actor_vehicle)
                         actors_now.append(actor)
                         actor.fresh = False
-                        end_time = time.time()
                         break
 
                 # add actor per 1s here
@@ -812,6 +810,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         while actor_vehicle is None:
                             repeat_times += 1
                             if repeat_times > 5:
+                                # add a fake actor
                                 new_actor = Actor(actor_type=None, nav_type=None,
                                                   spawn_point=None,
                                                   dest_point=None, speed=None,
@@ -1064,6 +1063,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     actor.weight = max(actor.weight, now_weight)
                     if actor.weight != now_weight:
                         actor.max_weight_frame = state.num_frames - actor.spawn_frame
+                        # calculate the relative position
+
+
                     max_weight = max(actor.weight, max_weight)
 
                 # Check speeding
@@ -1329,7 +1331,7 @@ def set_autopilot(vehicle):
 
     g.tm.auto_lane_change(vehicle, True)
 
-    g.tm.vehicle_percentage_speed_difference(vehicle, 1)
+    g.tm.vehicle_percentage_speed_difference(vehicle, 10)
 
     g.tm.set_route(vehicle, ["Straight"])
     vehicle.set_simulate_physics(True)

@@ -18,6 +18,9 @@ class Actor:
     weight = 0
     spawn_frame = 0
     max_weight_frame = 0
+    # Indicates the position relative to EGO when the vehicle weight is maximum
+    max_weight_loc = -1
+    max_weight_lane = -1
     instance = None
     is_player = False
     fresh = True
@@ -52,10 +55,10 @@ class Actor:
             another_is_ego = True
         # calculate points of two vehicles safe rectangle
         points_list1 = calculate_safe_rectangle(self.get_position_now(), self.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6,
+                                                c.HARD_ACC_THRES / 3.6/1.5,
                                                 width, self_is_ego)
         points_list2 = calculate_safe_rectangle(another_actor.get_position_now(), another_actor.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6, width, another_is_ego)
+                                                c.HARD_ACC_THRES / 3.6/1.5, width, another_is_ego)
         # calculate lines of two vehicles safe rectangle
         lines_list1 = []
         lines_list2 = []

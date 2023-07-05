@@ -92,6 +92,14 @@ ACTOR = 1
 PUDDLE = 2
 MUTATION_TARGET = [WEATHER, ACTOR, PUDDLE]
 
+# relative position
+BEHIND = 0
+FRONT = 1
+# relative lane
+MIDDLE = 0
+LEFT = 1
+RIGHT = 2
+
 # Input mutation strategies
 ALL = 0
 CONGESTION = 1

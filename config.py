@@ -56,7 +56,7 @@ class Config:
         self.num_param_mutations = 1
         self.num_mutation_car = 1
         self.density = 1
-        self.no_traffic_lights = True
+        self.no_traffic_lights = False
 
         # Fuzzing metadata
         self.cur_time = None
@@ -65,7 +65,7 @@ class Config:
         self.seed_dir = None
 
         # Target config
-        self.agent_type = c.AUTOWARE # c.AUTOWARE
+        self.agent_type = c.AUTOWARE  # c.AUTOWARE
 
         # Enable/disable Various Checks
         self.check_dict = {
@@ -100,7 +100,6 @@ class Config:
             sys.exit(-1)
 
         queue = [seed for seed in seed_scenarios if not seed.startswith(".")
-                and seed.endswith(".json")]
+                 and seed.endswith(".json")]
 
         return queue
-

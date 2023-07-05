@@ -155,6 +155,7 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
 def connect(conf):
     # global client, tm
     g.client = carla.Client(conf.sim_host, conf.sim_port)
+    print("Connecting to %s:%d" % (conf.sim_host, conf.sim_port))
     g.client.set_timeout(10.0)
     try:
         g.client.get_server_version()

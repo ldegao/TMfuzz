@@ -166,7 +166,7 @@ def set_args():
     argparser.add_argument("--no-stuck-check", action="store_true")
     argparser.add_argument("--no-red-check", action="store_true")
     argparser.add_argument("--no-other-check", action="store_true")
-    argparser.add_argument("--no_traffic_lights", action="store_true", default=True)
+    argparser.add_argument("--no_traffic_lights", action="store_true")
     return argparser
 
 
