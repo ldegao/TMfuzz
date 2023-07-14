@@ -362,7 +362,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         volumes=vol_dict,
                         privileged=True,
                         network_mode="host",
-                        runtime="nvidia",
+                        # runtime="nvidia",
+                        device_requests=[
+                           docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
                         environment=env_dict,
                     )
                 except docker.errors.APIError as e:
