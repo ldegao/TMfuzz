@@ -335,7 +335,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     "bind": xauth,
                     "mode": "rw"
                 },
-                "/tmp/fuzzerdata": {
+                "/tmp/fuzzerdata/{g.username}": {
                     "bind": "/tmp/fuzzerdata",
                     "mode": "rw"
                 }
