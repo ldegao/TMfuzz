@@ -342,7 +342,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             }
             env_dict = {
                 "DISPLAY": os.getenv("DISPLAY"),
-                "XAUTHORITY": xauth
+                "XAUTHORITY": xauth,
+                "QT_X11_NO_MITSHM":1
             }
 
             autoware_cla = "{} \'{}\'".format(town_map.name.split("/")[-1], sp_str)
@@ -354,7 +355,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             while autoware_container is None:
                 try:
                     autoware_container = docker_client.containers.run(
-                        "carla-autoware:v20230704",
+                        "carla-autoware:v20230704-bloody",
                         command=autoware_cla,
                         detach=True,
                         auto_remove=True,
