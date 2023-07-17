@@ -3,6 +3,8 @@ import json
 import math
 import pdb
 import sys
+
+import constants
 import globals as g
 import config
 from driving_quality import *
@@ -194,9 +196,66 @@ def switch_map(conf, town):
         g.client.set_timeout(10.0)
 
         town_map = world.get_map()
-        g.list_spawn_points = town_map.get_spawn_points()
+        g.town_map = town_map
 
     except Exception as e:
         print("[-] Error:", e)
         sys.exit(-1)
 
+
+def get_distance_to_target(vehicle_location, target_location):
+    dx = target_location.x - vehicle_location.x
+    dy = target_location.y - vehicle_location.y
+    return math.sqrt(dx ** 2 + dy ** 2)
+
+
+def get_angle_between_vectors(vector1, vector2):
+    dot_product = vector1.x * vector2.x + vector1.y * vector2.y
+    magnitudes_product = math.sqrt(vector1.x ** 2 + vector1.y ** 2) * math.sqrt(vector2.x ** 2 + vector2.y ** 2)
+    if magnitudes_product == 0:
+        return 0
+    else:
+        cos_angle = dot_product / magnitudes_product
+        return math.degrees(math.acos(cos_angle))
+
+
+def set_autopilot(vehicle):
+    #
+    vehicle.set_autopilot(True, g.tm.get_port())
+    g.tm.ignore_lights_percentage(vehicle, 0)
+    g.tm.ignore_signs_percentage(vehicle, 0)
+    g.tm.ignore_vehicles_percentage(vehicle, 0)
+    g.tm.ignore_walkers_percentage(vehicle, 0)
+
+    g.tm.auto_lane_change(vehicle, True)
+
+    g.tm.vehicle_percentage_speed_difference(vehicle, 10)
+
+    g.tm.set_route(vehicle, ["Straight"])
+    vehicle.set_simulate_physics(True)
+
+
+def get_relative_position(x1, y1, x2, y2, v_x, v_y):
+    # get relative vector
+    relative_x = x2 - x1
+    relative_y = y2 - y1
+
+    # get direction vector
+    direction_x = v_x
+    direction_y = v_y
+
+    # get cross product
+    cross_product = relative_x * direction_y - relative_y * direction_x
+
+    if cross_product >= 0:
+        position = constants.LEFT
+    else:
+        position = constants.RIGHT
+
+    # get dot product
+    dot_product = relative_x * direction_x + relative_y * direction_y
+    if dot_product > 0:
+        direction = constants.FRONT
+    else:
+        direction = constants.BACK
+    return direction, position
