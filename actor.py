@@ -1,8 +1,12 @@
 import pdb
+import random
 
 import config
 import constants as c
 import math
+from shapely.geometry import Point, LineString, Polygon
+
+from utils import get_carla_transform
 
 config.set_carla_api_path()
 import carla
@@ -12,6 +16,7 @@ class Actor:
     actor_id = 0
     actor_type = 0
     nav_type = 0
+    actor_bp = None
     spawn_point = None
     dest_point = None
     speed = 0
@@ -21,13 +26,15 @@ class Actor:
     # Indicates the position relative to EGO when the vehicle weight is maximum
     max_weight_loc = -1
     max_weight_lane = -1
+    player_lane_change = None
     instance = None
     is_player = False
     fresh = True
     ego_state = None
+    is_spilt = False
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0):
+                 ego_vel=None, spawn_frame=0, actor_bp=None):
         self.event_list = []
         self.spawn_frame = spawn_frame
         self.actor_type = actor_type
@@ -38,11 +45,13 @@ class Actor:
         self.actor_id = actor_id
         self.ego_loc = ego_loc
         self.ego_vel = ego_vel
+        self.actor_bp = actor_bp
 
-    def safe_check(self, another_actor, width=1.5):
+    def safe_check(self, another_actor, width=1.5, adjust=2):
         """
         :param another_actor: another actor
         :param width: the width of the vehicle
+        :param adjust: to adjust of the HARD_ACC_THRES
         :return: True if safe, False if not safe
 
         check if two vehicles are safe to each other, if not, return False
@@ -55,26 +64,18 @@ class Actor:
             another_is_ego = True
         # calculate points of two vehicles safe rectangle
         points_list1 = calculate_safe_rectangle(self.get_position_now(), self.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6/1.5,
+                                                c.HARD_ACC_THRES / 3.6 / adjust,
                                                 width, self_is_ego)
+        # for point in points_list1:
+        #     print("point1: ", point.x,",", point.y)
         points_list2 = calculate_safe_rectangle(another_actor.get_position_now(), another_actor.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6/1.5, width, another_is_ego)
-        # calculate lines of two vehicles safe rectangle
-        lines_list1 = []
-        lines_list2 = []
-        for i in range(4):
-            lines_list1.append((points_list1[i], points_list1[(i + 1) % 4]))
-            lines_list2.append((points_list2[i], points_list2[(i + 1) % 4]))
-        # check if there is line cross
-        for line1 in lines_list1:
-            for line2 in lines_list2:
-                if is_line_cross(line1, line2):
-                    return False
-        # check if there is point in rectangle
-        for point in points_list1:
-            if is_point_inside_rectangle(point, points_list2):
-                return False
-        return True
+                                                c.HARD_ACC_THRES / 3.6 / adjust, width, another_is_ego)
+        self_rect = Polygon(points_list1)
+        another_rect = Polygon(points_list2)
+        if self_rect.intersects(another_rect):
+            return False
+        else:
+            return True
 
     def get_position_now(self):
         if self.instance is None:
@@ -111,6 +112,28 @@ class Actor:
 
     def add_event(self, frame, event):
         self.event_list.append((frame, event))
+
+    def splitting(self, town_map, actor_id):
+        # split a car into two similar cars
+        # return the new car
+        while True:
+            actor_loc = self.spawn_point.location
+            x = 0
+            y = 0
+            while -2 <= x <= 2:
+                x = random.uniform(-5, 5)
+            while -2 <= y <= 2:
+                y = random.uniform(-5, 5)
+            new_speed = self.speed + random.uniform(-5, 5)
+            location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
+            waypoint = town_map.get_waypoint(location, project_to_road=True,
+                                             lane_type=carla.libcarla.LaneType.Driving)
+            new_car = Actor(self.actor_type, self.nav_type, waypoint.transform, self.dest_point, actor_id, new_speed,
+                            self.ego_loc, self.ego_vel, self.spawn_frame)
+            new_car.fresh = True
+            if new_car.safe_check(self):
+                print("split:", self.actor_id, "to", self.actor_id, actor_id)
+                return new_car
 
 
 def calculate_safe_rectangle(position, speed, acceleration, lane_width, is_player=False):
@@ -150,63 +173,12 @@ def calculate_rectangle_points(center, half_length, width, direction):
     """
     dx = math.cos(direction) * half_length
     dy = math.sin(direction) * half_length
-    point1 = carla.Vector2D(center[0] + dx - width / 2 * math.sin(direction),
-                            center[1] + dy + width / 2 * math.cos(direction))
-    point2 = carla.Vector2D(center[0] + dx + width / 2 * math.sin(direction),
-                            center[1] + dy - width / 2 * math.cos(direction))
-    point3 = carla.Vector2D(center[0] - dx + width / 2 * math.sin(direction),
-                            center[1] - dy - width / 2 * math.cos(direction))
-    point4 = carla.Vector2D(center[0] - dx - width / 2 * math.sin(direction),
-                            center[1] - dy + width / 2 * math.cos(direction))
+    point1 = (center[0] + dx - width / 2 * math.sin(direction),
+              center[1] + dy + width / 2 * math.cos(direction))
+    point2 = (center[0] + dx + width / 2 * math.sin(direction),
+              center[1] + dy - width / 2 * math.cos(direction))
+    point3 = (center[0] - dx + width / 2 * math.sin(direction),
+              center[1] - dy - width / 2 * math.cos(direction))
+    point4 = (center[0] - dx - width / 2 * math.sin(direction),
+              center[1] - dy + width / 2 * math.cos(direction))
     return [point1, point2, point3, point4]
-
-
-def is_point_inside_rectangle(point, rect_points):
-    """
-    :param point: the point to be checked
-    :param rect_points: the four points of the rectangle
-    """
-    x, y = point.x, point.y
-    x1, y1 = rect_points[0].x, rect_points[0].y
-    x2, y2 = rect_points[1].x, rect_points[1].y
-    x3, y3 = rect_points[2].x, rect_points[2].y
-    x4, y4 = rect_points[3].x, rect_points[3].y
-    if (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) >= 0 and (x3 - x2) * (y - y2) - (y3 - y2) * (x - x2) >= 0 and \
-            (x4 - x3) * (y - y3) - (y4 - y3) * (x - x3) >= 0 and (x1 - x4) * (y - y4) - (y1 - y4) * (x - x4) >= 0:
-        return True
-    else:
-        return False
-
-
-def is_point_on_line(p1, p2, p3):
-    """
-    :param p1: the first point of the line
-    :param p2: the second point of the line
-    :param p3: the point to be checked
-    """
-    if min(p1.x, p2.x) <= p3.x <= max(p1.x, p2.x) and min(p1.y, p2.y) <= p3.y <= max(p1.y, p2.y):
-        return True
-    else:
-        return False
-
-
-def is_line_cross(line1, line2):
-    """
-    :param line1: the first line
-    :param line2: the second line
-    :return: True if cross, False if not cross
-    """
-    p1, p2 = line1
-    p3, p4 = line2
-    if max(p1.x, p2.x) < min(p3.x, p4.x):
-        return False
-    if max(p1.y, p2.y) < min(p3.y, p4.y):
-        return False
-    if max(p3.x, p4.x) < min(p1.x, p2.x):
-        return False
-    if max(p3.y, p4.y) < min(p1.y, p2.y):
-        return False
-    if is_point_on_line(p1, p2, p3) or is_point_on_line(p1, p2, p4) or is_point_on_line(p3, p4, p1) or is_point_on_line(
-            p3, p4, p2):
-        return True
-    return False
