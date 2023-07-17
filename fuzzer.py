@@ -17,7 +17,7 @@ import signal
 from copy import deepcopy
 import traceback
 import shutil
-
+import globals as g
 import config
 import constants as c
 
@@ -158,7 +158,7 @@ def set_args():
     #                        help="Input mutation strategy (all / congestion / entropy / instability / trajectory)")
     argparser.add_argument("--town", default=3, type=int,
                            help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argparser.add_argument("--timeout", default="30", type=int,
+    argparser.add_argument("--timeout", default="60", type=int,
                            help="Seconds to timeout if vehicle is not moving")
     argparser.add_argument("--no-speed-check", action="store_true")
     argparser.add_argument("--no-lane-check", action="store_true")
@@ -318,24 +318,66 @@ def main():
                     random.shuffle(max_actors)
                 else:
                     max_actors.sort(key=lambda x: x.weight, reverse=True)
+                # choose some good cars
+                max_actors = max_actors[:abs(k * 2)]
+                random.shuffle(max_actors)
                 max_actors = max_actors[:abs(k)]
                 # randomly mutate the max weight actor
                 for actor in max_actors:
                     # todo: change the logic of mutation
-                    mutation_type = random.randint(1, 2)
+                    mutation_type = random.randint(2, 3)
                     if mutation_type == 0:
                         # change the actor's location
+                        # prove to be useless
                         pass
                     elif mutation_type == 1:
                         # change the actor's velocity
+                        # prove to be useless
                         velocity_change = random.randint(-5, 10)
                         actor.speed = actor.speed + velocity_change
                         print("speed change:", actor.actor_id, "velocity_change:", velocity_change)
                     elif mutation_type == 2:
-                        # randomly change the actor's behavior
-                        behavior_id = random.randint(1, 3)
+                        """
+                        Randomly change the actor's behavior according to the state of actor
+                        
+                        The vehicle is in front of the ego: brake
+                        The vehicle is in a different lane to the left of the ego, 
+                        and the lane change is allowed on the left of the ego: change lanes to the right
+                        The vehicle is in a different lane on the right side of the ego, 
+                        and the right side of the ego is allowed to change lanes: left lane change
+                        The vehicle is behind the ego: throttle
+                        """
+                        behavior_list = []
+                        if actor.max_weight_loc == c.FRONT:
+                            behavior_list.append(c.BRAKE)
+                        elif actor.max_weight_loc == c.BACK:
+                            behavior_list.append(c.THROTTLE)
+                        if actor.max_weight_lane == c.LEFT:
+                            if actor.player_lane_change == carla.LaneChange.Left or actor.player_lane_change == carla.LaneChange.Both:
+                                behavior_list.append(c.MOVE_TO_THE_LEFT)
+                        elif actor.max_weight_lane == c.RIGHT:
+                            if actor.player_lane_change == carla.LaneChange.Right or actor.player_lane_change == carla.LaneChange.Both:
+                                behavior_list.append(c.MOVE_TO_THE_RIGHT)
+                        # Randomly take a behavior from behavior_list
+                        behavior_id = random.choice(behavior_list)
                         actor.add_event(actor.max_weight_frame, behavior_id)
                         print("behavior change:", actor.actor_id, "id:", behavior_id)
+                    elif mutation_type == 3:
+                        # split the actor
+                        new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))
+                        test_scenario.actor_list.append(new_actor)
+                        g.test_split_1 = actor
+                        g.test_split_2 = new_actor
+                        new_actor.is_split = True
+                        # members = dir(actor)
+                        # for member in members:
+                        #     value = getattr(actor, member)
+                        #     print(f"{member}: {value}")
+                        # members = dir(new_actor)
+                        # for member in members:
+                        #     value = getattr(new_actor, member)
+                        #     print(f"{member}: {value}")
+                        # pdb.set_trace()
                 # change all weights to 0
                 for actor in test_scenario.actor_list:
                     actor.weight = 0
