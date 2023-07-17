@@ -319,7 +319,7 @@ def main():
                 else:
                     max_actors.sort(key=lambda x: x.weight, reverse=True)
                 # choose some good cars
-                max_actors = max_actors[:abs(k*2)]
+                max_actors = max_actors[:abs(k * 2)]
                 random.shuffle(max_actors)
                 max_actors = max_actors[:abs(k)]
                 # randomly mutate the max weight actor
@@ -364,8 +364,20 @@ def main():
                         print("behavior change:", actor.actor_id, "id:", behavior_id)
                     elif mutation_type == 3:
                         # split the actor
-                        test_scenario.actor_list.append(actor.split(g.town_map))
-                        pass
+                        new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))
+                        test_scenario.actor_list.append(new_actor)
+                        g.test_split_1 = actor
+                        g.test_split_2 = new_actor
+                        new_actor.is_split = True
+                        # members = dir(actor)
+                        # for member in members:
+                        #     value = getattr(actor, member)
+                        #     print(f"{member}: {value}")
+                        # members = dir(new_actor)
+                        # for member in members:
+                        #     value = getattr(new_actor, member)
+                        #     print(f"{member}: {value}")
+                        # pdb.set_trace()
                 # change all weights to 0
                 for actor in test_scenario.actor_list:
                     actor.weight = 0

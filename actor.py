@@ -31,6 +31,7 @@ class Actor:
     is_player = False
     fresh = True
     ego_state = None
+    is_spilt = False
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
                  ego_vel=None, spawn_frame=0, actor_bp=None):
@@ -112,21 +113,26 @@ class Actor:
     def add_event(self, frame, event):
         self.event_list.append((frame, event))
 
-    def split(self, town_map):
+    def splitting(self, town_map, actor_id):
         # split a car into two similar cars
         # return the new car
         while True:
             actor_loc = self.spawn_point.location
-            x = random.randint(-5, 5)
-            y = random.randint(-5, 5)
-            new_speed = self.speed + random.randint(-5, 5)
+            x = 0
+            y = 0
+            while -2 <= x <= 2:
+                x = random.uniform(-5, 5)
+            while -2 <= y <= 2:
+                y = random.uniform(-5, 5)
+            new_speed = self.speed + random.uniform(-5, 5)
             location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                              lane_type=carla.libcarla.LaneType.Driving)
-            new_car = Actor(self.actor_type, self.nav_type, waypoint.transform, self.dest_point, self.actor_id, new_speed,
+            new_car = Actor(self.actor_type, self.nav_type, waypoint.transform, self.dest_point, actor_id, new_speed,
                             self.ego_loc, self.ego_vel, self.spawn_frame)
-            print("try to split")
+            new_car.fresh = True
             if new_car.safe_check(self):
+                print("split:", self.actor_id, "to", self.actor_id, actor_id)
                 return new_car
 
 

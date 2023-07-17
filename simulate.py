@@ -2,6 +2,7 @@
 
 # Python packages
 import os
+import pdb
 import random
 import sys
 from subprocess import Popen, PIPE
@@ -538,56 +539,56 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 friction["level"])
                   )
 
-        # spawn actor_now
-        for actor in actors_now:
-            actor_sp = get_carla_transform(actor.spawn_point)
-            if actor.actor_type == c.VEHICLE:  # vehicle
-                actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_sp)
-                actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
-                if actor_vehicle is None:
-                    actor_str = c.ACTOR_NAMES[actor.actor_type]
-                    print("[-] Failed spawning {} {} at ({}, {})".format(
-                        actor_nav, actor_str, actor_sp.location.x,
-                        actor_sp.location.y)
-                    )
-
-                    state.spawn_failed = True
-                    state.spawn_failed_object = actor
-                    retval = -1
-                    return  # trap to finally
-
-                actor_vehicles.append(actor_vehicle)
-                print("[+] New %s vehicle [%d] @(%.2f, %.2f) yaw %.2f" % (
-                    actor_nav,
-                    actor_vehicle.actor_id,
-                    actor_sp.location.x,
-                    actor_sp.location.y,
-                    actor_sp.rotation.yaw)
-                      )
-
-            elif actor.actor_type == c.WALKER:  # walker
-                actor_walker = world.try_spawn_actor(walker_bp, actor_sp)
-                actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
-                if actor_walker is None:
-                    actor_str = c.ACTOR_NAMES[actor.actor_type]
-                    print("[-] Failed spawning {} {} at ({}, {})".format(
-                        actor_nav, actor_str, actor_sp.location.x,
-                        actor_sp.location.y)
-                    )
-
-                    state.spawn_failed = True
-                    state.spawn_failed_object = actor
-                    retval = -1
-                    return  # trap to finally
-
-                actor_walkers.append(actor_walker)
-                print("[+] New %s walker [%d] @(%.2f, %.2f) yaw %.2f" % (
-                    actor_nav,
-                    actor_walker.actor_id,
-                    actor_sp.location.x,
-                    actor_sp.location.y,
-                    actor_sp.rotation.yaw)
-                      )
+        # # spawn actor_now
+        # for actor in actors_now:
+        #     actor_sp = get_carla_transform(actor.spawn_point)
+        #     if actor.actor_type == c.VEHICLE:  # vehicle
+        #         actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_sp)
+        #         actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
+        #         if actor_vehicle is None:
+        #             actor_str = c.ACTOR_NAMES[actor.actor_type]
+        #             print("[-] Failed spawning {} {} at ({}, {})".format(
+        #                 actor_nav, actor_str, actor_sp.location.x,
+        #                 actor_sp.location.y)
+        #             )
+        #
+        #             state.spawn_failed = True
+        #             state.spawn_failed_object = actor
+        #             retval = -1
+        #             return  # trap to finally
+        #
+        #         actor_vehicles.append(actor_vehicle)
+        #         print("[+] New %s vehicle [%d] @(%.2f, %.2f) yaw %.2f" % (
+        #             actor_nav,
+        #             actor_vehicle.actor_id,
+        #             actor_sp.location.x,
+        #             actor_sp.location.y,
+        #             actor_sp.rotation.yaw)
+        #               )
+        #
+        #     elif actor.actor_type == c.WALKER:  # walker
+        #         actor_walker = world.try_spawn_actor(walker_bp, actor_sp)
+        #         actor_nav = c.NAVTYPE_NAMES[actor.nav_type]
+        #         if actor_walker is None:
+        #             actor_str = c.ACTOR_NAMES[actor.actor_type]
+        #             print("[-] Failed spawning {} {} at ({}, {})".format(
+        #                 actor_nav, actor_str, actor_sp.location.x,
+        #                 actor_sp.location.y)
+        #             )
+        #
+        #             state.spawn_failed = True
+        #             state.spawn_failed_object = actor
+        #             retval = -1
+        #             return  # trap to finally
+        #
+        #         actor_walkers.append(actor_walker)
+        #         print("[+] New %s walker [%d] @(%.2f, %.2f) yaw %.2f" % (
+        #             actor_nav,
+        #             actor_walker.actor_id,
+        #             actor_sp.location.x,
+        #             actor_sp.location.y,
+        #             actor_sp.rotation.yaw)
+        #               )
         # print("after spawning actor_now", time.time())
 
         if conf.agent_type == c.AUTOWARE:
@@ -783,10 +784,27 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             actor.fresh = False
                             break
                         # spawn this actor
+                        # if actor == g.test_split_1:
+                        #     pdb.set_trace()
+                        # if actor == g.test_split_2:
+                        #     pdb.set_trace()
                         actor_vehicle = world.try_spawn_actor(vehicle_bp, actor.spawn_point)
-                        if actor_vehicle is None:
-                            # print("spawn fail")
-                            continue
+                        waypoint = None
+                        if actor.is_spilt:
+                            while actor_vehicle is None:
+                                x = random.uniform(-5, 5)
+                                y = random.uniform(-5, 5)
+                                location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
+                                waypoint = town_map.get_waypoint(location, project_to_road=True,
+                                                                 lane_type=carla.libcarla.LaneType.Driving)
+                                actor_vehicle = world.try_spawn_actor(vehicle_bp, waypoint)
+                                print("a little change for split one")
+                        else:
+                            if actor_vehicle is None:
+                                print("spawn fail")
+                                continue
+                        if waypoint is not None:
+                            actor.spawn_point = waypoint
                         actor_vehicles.append(actor_vehicle)
                         # TODO: change the mode of actor_vehicle later
                         actor_spawn_rotation = actor.spawn_point.rotation
@@ -802,7 +820,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         actor.set_instance(actor_vehicle)
                         actors_now.append(actor)
                         actor.fresh = False
-                        break
+                        print("spawn old car:", actor.actor_id, "at", state.num_frames)
+                        continue
 
                 # add actor per 1s here
                 if (state.stuck_duration < 1) & (state.num_frames % add_car_frame == 0) & (state.num_frames > 1):
@@ -813,17 +832,18 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         add_type = random.randint(1, 100)  # this value controls the type of actor
                         actor_vehicle = None
                         new_actor = None
-                        # try 5 time
+                        # try 10 time
                         repeat_times = 0
                         while actor_vehicle is None:
                             repeat_times += 1
-                            if repeat_times > 5:
+                            if repeat_times > 10:
                                 # add a fake actor
                                 new_actor = Actor(actor_type=None, nav_type=None,
                                                   spawn_point=None,
                                                   dest_point=None, speed=None,
                                                   actor_id=len(actor_list),
                                                   ego_loc=player_loc, ego_vel=vel)
+                                print("dont spawn car", new_actor.actor_id, "at", state.num_frames)
                                 new_actor.instance = None
                                 actor_list.append(new_actor)
                                 new_actor.fresh = False
@@ -832,6 +852,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             y = random.uniform(-50, 50)
                             # add car in 50m range
                             if x ** 2 + y ** 2 > 50 ** 2:
+                                repeat_times -= 1
                                 continue
                             location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                             waypoint = town_map.get_waypoint(location, project_to_road=True,
@@ -848,11 +869,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             # we don't want to add bg car too near at the same lane of ego
                             if waypoint.road_id == ego_waypoint.road_id:
                                 if waypoint.lane_id == ego_waypoint.lane_id:
-                                    if waypoint.transform.location.distance(player_loc) < 10:
-                                        continue
+                                    # if waypoint.transform.location.distance(player_loc) < 10:
+                                    continue
                             # we don't want to add immobile bg car at lane that can't change lane
                             if waypoint.lane_change == carla.LaneChange.NONE:
                                 if add_type <= g.immobile_percentage:
+                                    repeat_times -= 1
                                     continue
                             road_direction = waypoint.transform.rotation.get_forward_vector()
                             road_direction_x = road_direction.x
@@ -899,6 +921,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             if flag:
                                 actor_vehicle = world.try_spawn_actor(vehicle_bp, actor_spawn_point)
                             else:
+                                repeat_times -= 1
                                 continue
                         if actor_vehicle is not None:
                             actor_vehicles.append(actor_vehicle)
@@ -911,6 +934,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             new_actor.fresh = False
                             actors_now.append(new_actor)
                             actor_list.append(new_actor)
+                            print("spawn new car", new_actor.actor_id, "at", state.num_frames)
                     found_frame = False
                 # world.debug.draw_point(
                 # player_loc + carla.Location(z=10),
