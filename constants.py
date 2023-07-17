@@ -93,8 +93,8 @@ PUDDLE = 2
 MUTATION_TARGET = [WEATHER, ACTOR, PUDDLE]
 
 # relative position
-BEHIND = 0
-FRONT = 1
+FRONT = 0
+BACK = 1
 # relative lane
 MIDDLE = 0
 LEFT = 1
@@ -109,8 +109,9 @@ TRAJECTORY = 4
 # event type
 RESTART = 0
 BRAKE = 1
-MOVE_TO_THE_LEFT = 2
-MOVE_TO_THE_RIGHT = 3
+THROTTLE = 2
+MOVE_TO_THE_LEFT = 3
+MOVE_TO_THE_RIGHT = 4
 
 # Misc
 DEVNULL = "2> /dev/null"
