@@ -765,7 +765,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 # update for any frame
                 for actor in actors_now:
                     if actor.instance.get_location().distance(player_loc) > 50 * math.sqrt(2):
-                        actor.instance.set_autopilot(False)
+                        print("set_autopilot false")
+                        actor.instance.set_autopilot(False,g.tm.get_port())
                         actor_vehicles.remove(actor.instance)
                         actor.instance.destroy()
                         actors_now.remove(actor)
@@ -1353,7 +1354,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             f.destroy()
         for v in actor_vehicles:
             try:
-                v.set_autopilot(False)
+                v.set_autopilot(False,g.tm.get_port())
                 ret = v.destroy()
                 print("destroyed {}: {}".format(v, ret))
             except Exception as e:

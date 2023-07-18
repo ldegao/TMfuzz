@@ -84,6 +84,7 @@ def init(conf, args):
 
     conf.sim_host = args.sim_host
     conf.sim_port = args.sim_port
+    conf.sim_tm_port = args.sim_tm_port
 
     conf.max_mutations = args.max_mutations
     conf.timeout = args.timeout
@@ -144,6 +145,8 @@ def set_args():
                            help="Hostname of Carla simulation server")
     argparser.add_argument("-p", "--sim-port", default=2000, type=int,
                            help="RPC port of Carla simulation server")
+    argparser.add_argument("--sim-tm-port", default=8000, type=int,
+                           help="RPC port of Carla traffic manager server")
     argparser.add_argument("-t", "--target", default="behavior", type=str,
                            help="Target autonomous driving system (behavior/Autoware)")
     argparser.add_argument("-f", "--function", default="general", type=str,
