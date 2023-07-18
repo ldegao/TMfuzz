@@ -358,7 +358,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             while autoware_container is None:
                 try:
                     autoware_container = docker_client.containers.run(
-                        "carla-autoware:v20230704-bloody",
+                        "carla-autoware:improved",
                         command=autoware_cla,
                         detach=True,
                         auto_remove=True,
