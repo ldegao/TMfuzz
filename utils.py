@@ -166,7 +166,7 @@ def connect(conf):
         sys.exit(-1)
     if conf.debug:
         print("Connected to:", g.client)
-
+    print(conf.sim_tm_port)
     g.tm = g.client.get_trafficmanager(conf.sim_tm_port)
     g.tm.set_synchronous_mode(True)
     g.tm.set_random_device_seed(0)
