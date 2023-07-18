@@ -349,7 +349,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             }
 
             # autoware_cla = "{} \'{}\'".format(town_map.name.split("/")[-1], sp_str)
-            autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str,time.strftime("%m%d_%H%M_", time.localtime()))
+            autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
             print(autoware_cla)
             state.autoware_cmd = autoware_cla
 
