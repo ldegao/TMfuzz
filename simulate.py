@@ -349,7 +349,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             }
 
             # autoware_cla = "{} \'{}\'".format(town_map.name.split("/")[-1], sp_str)
-            autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
+            autoware_cla = "{} \'{}\' {}".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
             print(autoware_cla)
             state.autoware_cmd = autoware_cla
 
@@ -1277,6 +1277,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         elif conf.agent_type == c.AUTOWARE:
             os.system("rosnode kill /recorder_video_front")
             os.system("rosnode kill /recorder_video_rear")
+            os.system("rosnode kill /recorder_video_top")
             os.system("rosnode kill /recorder_bag")
             while os.path.exists(f"/tmp/fuzzerdata/{g.username}/bagfile.lz4.bag.active"):
                 print("waiting for rosbag to dump data")
