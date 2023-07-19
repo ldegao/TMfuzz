@@ -62,6 +62,7 @@ class State:
         # debug info
         self.autoware_cmd = ""
         self.autoware_goal = ""
+        self.drawn_points = set()
 
     def sig_handler(self, signum, frame):
         print("[-] something happened: {}".format(signal.signum.name))
