@@ -242,7 +242,7 @@ class Scenario:
         # out_dir = self.conf.cov_dir
 
         with open(os.path.join(out_dir, filename), "w") as fp:
-            json.dump(state_dict, fp)
+            json.dump(state_dict, fp, intent=4)
 
         if self.conf.debug:
             print("[*] dumped")
