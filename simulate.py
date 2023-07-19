@@ -17,7 +17,7 @@ import config
 import constants as c
 import globals as g
 from utils import quaternion_from_euler, get_carla_transform, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, get_relative_position
+    set_autopilot, get_relative_position, draw_arrow
 
 config.set_carla_api_path()
 try:
@@ -170,9 +170,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         # print("before world setting", time.time())
         g.client.set_timeout(10.0)
         world = g.client.get_world()
-        # set all traffic lights to green
-        set_traffic_lights_state(world, carla.TrafficLightState.Green)
         if conf.no_traffic_lights:
+            # set all traffic lights to green
+            set_traffic_lights_state(world, carla.TrafficLightState.Green)
             world.freeze_all_traffic_lights(True)
         print("set_traffic_lights_state", time.time())
         if conf.debug:
@@ -345,11 +345,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             env_dict = {
                 "DISPLAY": os.getenv("DISPLAY"),
                 "XAUTHORITY": xauth,
-                "QT_X11_NO_MITSHM":1
+                "QT_X11_NO_MITSHM": 1
             }
 
             # autoware_cla = "{} \'{}\'".format(town_map.name.split("/")[-1], sp_str)
-            autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str,time.strftime("%m%d_%H%M_", time.localtime()))
+            autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str,
+                                                     time.strftime("%m%d_%H%M_", time.localtime()))
             print(autoware_cla)
             state.autoware_cmd = autoware_cla
 
@@ -368,7 +369,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         network_mode="host",
                         # runtime="nvidia",
                         device_requests=[
-                           docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
+                            docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
                         environment=env_dict,
                     )
                 except docker.errors.APIError as e:
@@ -766,7 +767,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 for actor in actors_now:
                     if actor.instance.get_location().distance(player_loc) > 50 * math.sqrt(2):
                         print("set_autopilot false")
-                        actor.instance.set_autopilot(False,g.tm.get_port())
+                        actor.instance.set_autopilot(False, g.tm.get_port())
                         actor_vehicles.remove(actor.instance)
                         actor.instance.destroy()
                         actors_now.remove(actor)
@@ -841,7 +842,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         repeat_times = 0
                         while actor_vehicle is None:
                             repeat_times += 1
-                            if repeat_times > 10:
+                            if repeat_times > 50:
                                 # add a fake actor
                                 new_actor = Actor(actor_type=None, nav_type=None,
                                                   spawn_point=None,
@@ -987,7 +988,14 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                     if len(lp._waypoints_queue) != 0:
                         control = agent.run_step()
                         player.apply_control(control)
-
+                        path_points = list(lp._waypoints_queue)[:10]
+                        for i in range(len(path_points) - 1):
+                            start_point = path_points[i][0].transform.location
+                            end_point = path_points[i + 1][0].transform.location
+                            if start_point not in state.drawn_points and end_point not in state.drawn_points:
+                                draw_arrow(world, start_point, end_point, color=carla.Color(255, 0, 0), arrow_size=0.2)
+                                state.drawn_points.add(start_point)
+                                state.drawn_points.add(end_point)
                 elif conf.agent_type == c.AUTOWARE:
                     # autoware does it on its own. we just retrieve the
                     # control for state computation
@@ -1354,7 +1362,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             f.destroy()
         for v in actor_vehicles:
             try:
-                v.set_autopilot(False,g.tm.get_port())
+                v.set_autopilot(False, g.tm.get_port())
                 ret = v.destroy()
                 print("destroyed {}: {}".format(v, ret))
             except Exception as e:

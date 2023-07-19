@@ -259,3 +259,34 @@ def get_relative_position(x1, y1, x2, y2, v_x, v_y):
     else:
         direction = constants.BACK
     return direction, position
+
+
+def normalize_vector(vector):
+    length = math.sqrt(vector.x ** 2 + vector.y ** 2 + vector.z ** 2)
+    if length != 0.0:
+        return carla.Vector3D(vector.x / length, vector.y / length, vector.z / length)
+    else:
+        return carla.Vector3D(0.0, 0.0, 0.0)
+
+
+def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
+    direction = end - start
+    direction = normalize_vector(direction)
+    perpendicular = carla.Vector3D(-direction.y, direction.x, 0.0)
+
+    arrow_start = end - arrow_size * direction
+    arrow_end = arrow_start + arrow_size * 0.5 * perpendicular
+    arrow_start_location = carla.Location(arrow_start.x, arrow_start.y, arrow_start.z)
+    world.debug.draw_box(
+        box=carla.BoundingBox(
+            arrow_start_location,
+            carla.Vector3D(0.05, 0.05, 0.05)
+        ),
+        rotation=carla.Rotation(0,0,0),
+        life_time=1.0,
+        thickness=0.2,
+        color=color
+    )
+
+    world.debug.draw_line(arrow_start, arrow_end, life_time=10.0, color=color)
+    # world.debug.draw_polygon(arrow_points, life_time=10.0, color=color)
