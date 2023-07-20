@@ -242,7 +242,7 @@ class Scenario:
         # out_dir = self.conf.cov_dir
 
         with open(os.path.join(out_dir, filename), "w") as fp:
-            json.dump(state_dict, fp, intent=4)
+            json.dump(state_dict, fp)
 
         if self.conf.debug:
             print("[*] dumped")
@@ -346,6 +346,10 @@ class Scenario:
             shutil.copyfile(
                 f"/tmp/fuzzerdata/{g.username}/rear.mp4",
                 os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-rear.mp4"))
+            )
+            shutil.copyfile(
+                f"/tmp/fuzzerdata/{g.username}/top.mp4",
+                os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-top.mp4"))
             )
 
         elif self.conf.agent_type == c.BASIC or self.conf.agent_type == c.BEHAVIOR:
