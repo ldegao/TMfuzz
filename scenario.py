@@ -347,6 +347,10 @@ class Scenario:
                 f"/tmp/fuzzerdata/{g.username}/rear.mp4",
                 os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-rear.mp4"))
             )
+            shutil.copyfile(
+                f"/tmp/fuzzerdata/{g.username}/top.mp4",
+                os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-top.mp4"))
+            )
 
         elif self.conf.agent_type == c.BASIC or self.conf.agent_type == c.BEHAVIOR:
             if error:
