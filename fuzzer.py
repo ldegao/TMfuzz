@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import cProfile
 import os
 import pdb
 import sys
@@ -104,7 +104,6 @@ def init(conf, args):
     conf.num_mutation_car = args.num_mutation_car
     conf.density = args.density
     conf.no_traffic_lights = args.no_traffic_lights
-    conf.debug = True
     conf.debug = args.debug
 
 
@@ -132,7 +131,7 @@ def mutate_weather_fixed(test_scenario):
 
 def set_args():
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--debug", action="store_true", default=True)
+    argparser.add_argument("--debug", action="store_true", default=False)
     argparser.add_argument("-o", "--out-dir", default="out-artifact", type=str,
                            help="Directory to save fuzzing logs")
     argparser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
@@ -157,8 +156,6 @@ def set_args():
                            help="Number of max weight vehicles to mutation per cycle, default=1,negative means random")
     argparser.add_argument("--density", default=1, type=float,
                            help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
-    # argparser.add_argument("--strategy", default="all", type=str,
-    #                        help="Input mutation strategy (all / congestion / entropy / instability / trajectory)")
     argparser.add_argument("--town", default=3, type=int,
                            help="Test on a specific town (e.g., '--town 3' forces Town03)")
     argparser.add_argument("--timeout", default="60", type=int,
@@ -169,7 +166,7 @@ def set_args():
     argparser.add_argument("--no-stuck-check", action="store_true")
     argparser.add_argument("--no-red-check", action="store_true")
     argparser.add_argument("--no-other-check", action="store_true")
-    argparser.add_argument("--no_traffic_lights", action="store_true")
+    argparser.add_argument("--no-traffic-lights", action="store_true")
     return argparser
 
 
@@ -177,15 +174,11 @@ def main():
     conf = config.Config()
     argparser = set_args()
     args = argparser.parse_args()
-
     init(conf, args)
-
     queue = deque(conf.enqueue_seed_scenarios())
     scene_id = 0
     campaign_cnt = 0
-
     signal.signal(signal.SIGALRM, handler)
-
     while True:
         # STEP 0: Restart Carla simulator at the beginning of each cycle
         # (Carla hangs after a while due to a memory leak)
@@ -280,11 +273,10 @@ def main():
             print("Test scenario creation timed out after 15 seconds.")
             continue
         if conf.debug:
-            print("[*] USING SEED FILE:", scenario)
+            print("[debug] USING SEED FILE:", scenario)
         # STEP 3: SCENE MUTATION
         round_cnt = 0
         while round_cnt < conf.max_mutations:  # mutation rounds
-            # todo: change the logic of mutation
             round_cnt += 1
             print("\n\033[1m\033[92mCampaign #{}  Mutation #{}/{}".format(
                 campaign_cnt, round_cnt,
@@ -353,14 +345,16 @@ def main():
                         behavior_list = []
                         if actor.max_weight_loc == c.FRONT:
                             behavior_list.append(c.BRAKE)
-                        elif actor.max_weight_loc == c.BACK:
-                            behavior_list.append(c.THROTTLE)
                         if actor.max_weight_lane == c.LEFT:
                             if actor.player_lane_change == carla.LaneChange.Left or actor.player_lane_change == carla.LaneChange.Both:
                                 behavior_list.append(c.MOVE_TO_THE_LEFT)
+                            if actor.max_weight_loc == c.BACK:
+                                behavior_list.append(c.THROTTLE)
                         elif actor.max_weight_lane == c.RIGHT:
                             if actor.player_lane_change == carla.LaneChange.Right or actor.player_lane_change == carla.LaneChange.Both:
                                 behavior_list.append(c.MOVE_TO_THE_RIGHT)
+                            if actor.max_weight_loc == c.BACK:
+                                behavior_list.append(c.THROTTLE)
                         # Randomly take a behavior from behavior_list
                         behavior_id = random.choice(behavior_list)
                         actor.add_event(actor.max_weight_frame, behavior_id)
@@ -372,15 +366,6 @@ def main():
                         g.test_split_1 = actor
                         g.test_split_2 = new_actor
                         new_actor.is_split = True
-                        # members = dir(actor)
-                        # for member in members:
-                        #     value = getattr(actor, member)
-                        #     print(f"{member}: {value}")
-                        # members = dir(new_actor)
-                        # for member in members:
-                        #     value = getattr(new_actor, member)
-                        #     print(f"{member}: {value}")
-                        # pdb.set_trace()
                 # change all weights to 0
                 for actor in test_scenario.actor_list:
                     actor.weight = 0
@@ -398,7 +383,6 @@ def main():
                 if ret == -1:
                     print("[-] Fatal error occurred during test")
                     exit(-1)
-
             # mutation loop ends
         if test_scenario.found_error:
             print("[-]error detected. start a new cycle with a new seed")

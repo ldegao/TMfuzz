@@ -6,7 +6,6 @@ def get_proj_root():
     config_path = os.path.abspath(__file__)
     src_dir = os.path.dirname(config_path)
     proj_root = os.path.dirname(src_dir)
-
     return proj_root
 
 
@@ -70,7 +69,7 @@ class Config:
         # Enable/disable Various Checks
         self.check_dict = {
             "speed": True,
-            "lane": False,
+            "lane": True,
             "crash": True,
             "stuck": True,
             "red": True,

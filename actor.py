@@ -23,6 +23,7 @@ class Actor:
     weight = 0
     spawn_frame = 0
     max_weight_frame = 0
+    spawn_stuck_frame = 0
     # Indicates the position relative to EGO when the vehicle weight is maximum
     max_weight_loc = -1
     max_weight_lane = -1
@@ -34,7 +35,8 @@ class Actor:
     is_spilt = False
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0, actor_bp=None):
+                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0):
+        self.spawn_stuck_frame = spawn_stuck_frame
         self.event_list = []
         self.spawn_frame = spawn_frame
         self.actor_type = actor_type
@@ -66,8 +68,6 @@ class Actor:
         points_list1 = calculate_safe_rectangle(self.get_position_now(), self.get_speed_now(),
                                                 c.HARD_ACC_THRES / 3.6 / adjust,
                                                 width, self_is_ego)
-        # for point in points_list1:
-        #     print("point1: ", point.x,",", point.y)
         points_list2 = calculate_safe_rectangle(another_actor.get_position_now(), another_actor.get_speed_now(),
                                                 c.HARD_ACC_THRES / 3.6 / adjust, width, another_is_ego)
         self_rect = Polygon(points_list1)
@@ -129,7 +129,8 @@ class Actor:
             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                              lane_type=carla.libcarla.LaneType.Driving)
             new_car = Actor(self.actor_type, self.nav_type, waypoint.transform, self.dest_point, actor_id, new_speed,
-                            self.ego_loc, self.ego_vel, self.spawn_frame)
+                            self.ego_loc, self.ego_vel, self.spawn_frame, actor_bp=self.actor_bp,
+                            spawn_stuck_frame=self.spawn_stuck_frame)
             new_car.fresh = True
             if new_car.safe_check(self):
                 print("split:", self.actor_id, "to", self.actor_id, actor_id)
@@ -149,13 +150,12 @@ def calculate_safe_rectangle(position, speed, acceleration, lane_width, is_playe
     """
     t = math.sqrt(speed.x ** 2 + speed.y ** 2) / acceleration
     rect_length = acceleration * (t ** 2) / 2
-    # if rect_length<lane_width,change the length to 2*lane_width
-    if rect_length < lane_width:
-        rect_length = 2 * lane_width
-    # we don't want to cause ego's hard break,so we set the length to at least 10m
-    if is_player and rect_length < 10:
-        rect_length = 10
-    rect_width = lane_width
+    # add car length
+    rect_length = rect_length + 2 * lane_width
+    # # we don't want to cause ego's hard break,so we set the length to at least 10m
+    # if is_player and rect_length < 10:
+    #     rect_length = 10
+    rect_width = 2 * lane_width
     rect_direction = math.atan2(speed.y, speed.x)
     rect_half_length = rect_length / 2
     rect_center = (position.x + speed.x * t / 2, position.y + speed.y * t / 2)
