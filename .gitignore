@@ -5,3 +5,4 @@ seed-artifact/
 __pycache__/
 .vscode/
 run_carla.sh
+test.sh

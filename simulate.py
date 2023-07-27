@@ -161,6 +161,9 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
     p = 0.1
     retval = 0
+    # for autoware
+    frame_gap = 0
+    autoware_last_frames = 0
     actors_now = []
     try:
         # print("before world setting", time.time())
@@ -743,7 +746,16 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             print("[debug] spawn old car:", actor.actor_id, "at", state.num_frames)
                         continue
                 # add actor per 1s here
-                if state.num_frames % add_car_frame == add_car_frame - 1:
+                # because of autoware's strange frame, we should use a interesting method
+                if conf.agent_type== c.AUTOWARE:
+                    frame_gap = frame_gap + state.num_frames - autoware_last_frames
+                    autoware_last_frames = state.num_frames
+                    add_flag = frame_gap > add_car_frame - 1
+                    if add_flag:
+                        frame_gap = frame_gap - add_car_frame
+                else:
+                    add_flag = state.num_frames % add_car_frame == add_car_frame - 1
+                if add_flag:
                     # mark goal position
                     world.debug.draw_box(
                         box=carla.BoundingBox(
