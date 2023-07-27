@@ -1,3 +1,4 @@
+import cProfile
 import json
 import os
 import random
@@ -11,11 +12,6 @@ from simulate import simulate
 import constants as c
 import utils
 import globals as g
-from driving_quality import get_vx_light, get_ay_list, get_ay_diff_list, get_ay_heavy, get_swa_diff_list, get_swa_heavy, \
-    get_ay_gain, get_ay_peak, get_frac_drop, get_abs_yr, check_hard_acc, check_hard_braking, check_hard_turn, \
-    get_oversteer_level, get_understeer_level
-from utils import get_carla_transform
-from actor import Actor
 
 
 class Scenario:
@@ -142,41 +138,15 @@ class Scenario:
 
     def dump_states(self, state, log_type):
         if self.conf.debug:
-            print("[*] dumping {} data".format(log_type))
+            print("[debug] dumping {} data".format(log_type))
 
         state_dict = {}
-
         state_dict["fuzzing_start_time"] = self.conf.cur_time
         state_dict["determ_seed"] = self.conf.determ_seed
         state_dict["seed"] = self.seed_data
         state_dict["weather"] = self.weather
         state_dict["autoware_cmd"] = state.autoware_cmd
         state_dict["autoware_goal"] = state.autoware_goal
-
-        # actor_list = []
-        # for actor in self.actor_now:
-        #     # re-convert from carla.transform to xyz
-        #     # TODO: after actor was chaged to new style, this part should be changed
-        #     actor_dict = {
-        #         "type": actor["type"],
-        #         "nav_type": actor["nav_type"],
-        #         "speed": actor["speed"],
-        #     }
-        #     if actor["spawn_point"] is not None:
-        #         actor_dict["sp_x"] = actor["spawn_point"][0][0]
-        #         actor_dict["sp_y"] = actor["spawn_point"][0][1]
-        #         actor_dict["sp_z"] = actor["spawn_point"][0][2]
-        #         actor_dict["sp_roll"] = actor["spawn_point"][1][0]
-        #         actor_dict["sp_pitch"] = actor["spawn_point"][1][1]
-        #         actor_dict["sp_yaw"] = actor["spawn_point"][1][2]
-        #
-        #     if actor["dest_point"] is not None:
-        #         actor_dict["dp_x"] = actor["dest_point"][0][0]
-        #         actor_dict["dp_y"] = actor["dest_point"][0][1]
-        #         actor_dict["dp_z"] = actor["dest_point"][0][2]
-        #     actor_list.append(actor_dict)
-        # state_dict["actor_now"] = actor_list
-
         puddle_list = []
         for puddle in self.puddles:
             puddle_dict = {"level": puddle["level"], "sp_x": puddle["spawn_point"][0][0],
@@ -184,15 +154,12 @@ class Scenario:
                            "size_x": puddle["size"][0], "size_y": puddle["size"][1], "size_z": puddle["size"][2]}
             puddle_list.append(puddle_dict)
         state_dict["puddles"] = puddle_list
-
         state_dict["first_frame_id"] = state.first_frame_id
         state_dict["first_sim_elapsed_time"] = state.first_sim_elapsed_time
         state_dict["sim_start_time"] = state.sim_start_time
         state_dict["num_frames"] = state.num_frames
         state_dict["elapsed_time"] = state.elapsed_time
-
         state_dict["deductions"] = state.deductions
-
         vehicle_state_dict = {
             "speed": state.speed,
             "steer_wheel_angle": state.steer_angle_list,
@@ -202,15 +169,14 @@ class Scenario:
             "lon_speed": state.lon_speed_list,
             "min_dist": state.min_dist
         }
-        state_dict["vehicle_states"] = vehicle_state_dict
+        # state_dict["vehicle_states"] = vehicle_state_dict
 
         control_dict = {
             "throttle": state.cont_throttle,
             "brake": state.cont_brake,
             "steer": state.cont_steer
         }
-        state_dict["control_cmds"] = control_dict
-
+        # state_dict["control_cmds"] = control_dict
         event_dict = {
             "crash": state.crashed,
             "stuck": state.stuck,
@@ -230,33 +196,30 @@ class Scenario:
             "wait_autoware_num_topics": c.WAIT_AUTOWARE_NUM_TOPICS
         }
         state_dict["config"] = config_dict
-
         filename = "{}_{}_{}.json".format(state.campaign_cnt, state.mutation, time.time())
-
         if log_type == "queue":
             out_dir = self.conf.queue_dir
-
         # elif log_type == "error":
         # out_dir = self.conf.error_dir
         # elif log_type == "cov":
         # out_dir = self.conf.cov_dir
-
         with open(os.path.join(out_dir, filename), "w") as fp:
             json.dump(state_dict, fp)
-
         if self.conf.debug:
-            print("[*] dumped")
-
+            print("[debug] dumped")
         return filename
 
     def run_test(self, state):
         if self.conf.debug:
-            print("[*] call simutale.simulate()")
+            print("[debug] call simutale.simulate()")
             # print("Weather:", self.weather)
         # print("before sim", time.time())
         state.end = False
         sp = self.get_seed_sp_transform(self.seed_data)
         wp = self.get_seed_wp_transform(self.seed_data)
+
+        # profiler = cProfile.Profile()
+        # profiler.enable()
         ret = simulate(
             conf=self.conf,
             state=state,
@@ -266,9 +229,10 @@ class Scenario:
             frictions_list=self.puddles,
             actor_list=self.actor_list
         )
+        # profiler.disable()
+        # profiler.print_stats(sort='time')
+
         print("actor_list", len(self.actor_list))
-        # print("after sim", time.time())
-        # print("before logging", time.time())
         log_filename = self.dump_states(state, log_type="queue")
         self.log_filename = log_filename
         # print("after logging", time.time())
@@ -276,7 +240,7 @@ class Scenario:
         if state.spawn_failed:
             obj = state.spawn_failed_object
             if self.conf.debug:
-                print("failed object:", obj)
+                print("[debug] failed object:", obj)
 
             # don't try to spawn an infeasible actor in the next run
             # XXX: and we need a map of coordinates that represent
@@ -286,26 +250,24 @@ class Scenario:
             else:
                 self.actor_now.remove(obj)
             return -1
-
-        # print("before error checking", time.time())
         if self.conf.debug:
             print("----- Check for errors -----")
         error = False
         if self.conf.check_dict["crash"] and state.crashed:
             if self.conf.debug:
-                print("Crashed:", state.collision_event)
+                print("[debug] Crashed:", state.collision_event)
                 oa = state.collision_event.other_actor
                 print(f"  - against {oa.type_id}")
             error = True
         if self.conf.check_dict["stuck"] and state.stuck:
             if self.conf.debug:
-                print("Vehicle stuck:", state.stuck_duration)
+                print("[debug] Vehicle stuck:", state.stuck_duration)
             error = True
         if self.conf.check_dict["lane"] and state.laneinvaded:
             if self.conf.debug:
                 le_list = state.laneinvasion_event
                 le = le_list[0]  # only consider the very first invasion
-                print("Lane invasion:", le)
+                print("[debug] Lane invasion:", le)
                 lm_list = le.crossed_lane_markings
                 for lm in lm_list:
                     print("  - crossed {} lane (allows {} change)".format(
@@ -315,15 +277,15 @@ class Scenario:
             error = True
         if self.conf.check_dict["speed"] and state.speeding:
             if self.conf.debug:
-                print("Speeding: {} km/h".format(state.speed[-1]))
+                print("[debug] Speeding: {} km/h".format(state.speed[-1]))
             error = True
         if self.conf.check_dict["other"] and state.other_error:
             if state.other_error == "timeout":
                 if self.conf.debug:
-                    print("Simulation took too long")
+                    print("[debug] Simulation took too long")
             elif state.other_error == "goal":
                 if self.conf.debug:
-                    print("Goal is too far:", state.other_error_val, "m")
+                    print("[debug] Goal is too far:", state.other_error_val, "m")
             error = True
 
         # print("before file ops", time.time())
@@ -389,88 +351,6 @@ class Scenario:
             print("[-] Not enough data for scoring ({} frames)".format(
                 state.num_frames))
             return 1
-
-        # print("before scoring", time.time())
-        if self.conf.debug:
-            print("----- Scoring -----")
-            # print("[debug] # frames:", state.num_frames)
-            # print("[debug] elapsed time:", state.elapsed_time)
-            # print("[debug] dist:", state.min_dist)
-        np.set_printoptions(precision=3, suppress=True)
-
-        # Attributes
-        speed_list = np.array(state.speed)
-        acc_list = np.diff(speed_list)
-
-        Vx_list = np.array(state.lon_speed_list)
-        Vy_list = np.array(state.lat_speed_list)
-        SWA_list = np.array(state.steer_angle_list)
-
-        # filter & process attributes
-        Vx_light = get_vx_light(Vx_list)
-        Ay_list = get_ay_list(Vy_list)
-        Ay_diff_list = get_ay_diff_list(Ay_list)
-        Ay_heavy = get_ay_heavy(Ay_list)
-        SWA_diff_list = get_swa_diff_list(Vy_list)
-        SWA_heavy_list = get_swa_heavy(SWA_list)
-        Ay_gain = get_ay_gain(SWA_heavy_list, Ay_heavy)
-        Ay_peak = get_ay_peak(Ay_gain)
-        frac_drop = get_frac_drop(Ay_gain, Ay_peak)
-        abs_yr = get_abs_yr(state.yaw_rate_list)
-
-        deductions = 0
-
-        # avoid infinitesimal md
-        if int(state.min_dist) > 100:
-            md = 0
-        else:
-            md = (1 / int(state.min_dist))
-
-        ha = int(check_hard_acc(acc_list))
-        hb = int(check_hard_braking(acc_list))
-        ht = int(check_hard_turn(Vy_list, SWA_list))
-
-        deductions += ha + hb + ht + md
-
-        # check oversteer and understeer
-        os_thres = 4
-        us_thres = 4
-        num_oversteer = 0
-        num_understeer = 0
-        for fid in range(len(Vy_list) - 2):
-            SWA_diff = SWA_diff_list[fid]
-            Ay_diff = Ay_diff_list[fid]
-            yr = abs_yr[fid]
-
-            Vx = Vx_light[fid]
-            SWA2 = SWA_heavy_list[fid]
-            fd = frac_drop[fid]
-            os_level = get_oversteer_level(SWA_diff, Ay_diff, yr)
-            us_level = get_understeer_level(fd)
-
-            if os_level >= os_thres:
-                if Vx > 5 and Ay_diff > 0.1:
-                    num_oversteer += 1
-                    # print("OS @%d %.2f (SWA %.4f Ay %.4f AVz %.4f Vx %.4f)" %(
-                    # fid, os_level, SWA_diff, Ay_diff, yr, Vx))
-            if us_level >= us_thres:
-                if Vx > 5 and SWA2 > 10:
-                    num_understeer += 1
-                    # print("US @%d %.2f (SA %.4f FD %.4f Vx %.4f)" %(
-                    # fid, us_level, sa2, fd, Vx))
-        ovs = int(num_oversteer)
-        uds = int(num_understeer)
-        deductions += ovs + uds
-        state.deductions = {
-            "ha": ha, "hb": hb, "ht": ht, "os": ovs, "us": uds, "md": md
-        }
-
-        self.driving_quality_score = -deductions
-
-        print("[*] driving quality score: {}".format(
-            self.driving_quality_score))
-
-        # print("after scoring", time.time())
 
         with open(os.path.join(self.conf.score_dir, log_filename), "w") as fp:
             json.dump(state.deductions, fp)

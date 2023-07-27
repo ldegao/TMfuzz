@@ -4,10 +4,11 @@ import math
 import pdb
 import sys
 
+import numpy as np
+
 import constants
 import globals as g
 import config
-from driving_quality import *
 
 config.set_carla_api_path()
 try:
@@ -19,37 +20,8 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 
-# def dry_run(conf, client, tm, town, sp, wp, weather):
-# """
-# Dry-runs the base scenario to infer the oracle state
-# params: None
-# return: packed object of feedbacks (tbd)
-# """
-# return # debug
-
-# dry_run_states = []
-
-# for i in range(conf.num_dry_runs):
-# print("performing {}-th dry run".format(i+1))
-# simutale.simulate(client, town, tm, sp, wp, weather, [], [])
-# state = {
-# "num_frames": states.NUM_FRAMES,
-# "elapsed_time": states.ELAPSED_TIME,
-# "crash": states.COLLISION_EVENT,
-# "lane_invasions": states.LANEINVASION_EVENT,
-# "isstuck": states.STUCK,
-# # "avg_iae_lon": sum(states.IAE_LON) / len(states.IAE_LON),
-# # "avg_iae_lat": sum(states.IAE_LAT) / len(states.IAE_LAT)
-# }
-# dry_run_states.append(state)
-
-# # get oracle states out of dry_run_states, and return
-# # now just consider raw states as an oracle
-# return dry_run_states
-
 def set_traffic_lights_state(world, state):
     traffic_lights = world.get_actors().filter("*traffic_light*")
-    print(len(traffic_lights))
     for traffic_light in traffic_lights:
         traffic_light.set_state(state)
 
@@ -165,13 +137,13 @@ def connect(conf):
         print("[-] Error: Check client connection.")
         sys.exit(-1)
     if conf.debug:
-        print("Connected to:", g.client)
+        print("[debug] Connected to:", g.client)
     print(conf.sim_tm_port)
     g.tm = g.client.get_trafficmanager(conf.sim_tm_port)
     g.tm.set_synchronous_mode(True)
     g.tm.set_random_device_seed(0)
     if conf.debug:
-        print("Traffic Manager Server:", g.tm)
+        print("[debug] Traffic Manager Server:", g.tm)
 
     return g.client, g.tm
 
@@ -188,11 +160,11 @@ def switch_map(conf, town):
         world = g.client.get_world()
         # if world.get_map().name != town: # force load every time
         if conf.debug:
-            print("[*] Switching town to {} (slow)".format(town))
+            print("[debug] Switching town to {} (slow)".format(town))
         g.client.set_timeout(20)  # Handle sluggish loading bug
         g.client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
         if conf.debug:
-            print("[+] Switched")
+            print("[debug] Switched")
         g.client.set_timeout(10.0)
 
         town_map = world.get_map()
@@ -230,8 +202,8 @@ def set_autopilot(vehicle):
     g.tm.auto_lane_change(vehicle, True)
 
     g.tm.vehicle_percentage_speed_difference(vehicle, 10)
-
-    g.tm.set_route(vehicle, ["Straight"])
+    # todo:Path selection through network topology
+    # g.tm.set_route(vehicle, ["Left"])
     vehicle.set_simulate_physics(True)
 
 
@@ -282,7 +254,7 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
             arrow_start_location,
             carla.Vector3D(0.05, 0.05, 0.05)
         ),
-        rotation=carla.Rotation(0,0,0),
+        rotation=carla.Rotation(0, 0, 0),
         life_time=1.0,
         thickness=0.2,
         color=color
