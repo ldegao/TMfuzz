@@ -8,6 +8,7 @@ import numpy as np
 
 import constants
 import globals as g
+import constants as c
 import config
 
 config.set_carla_api_path()
@@ -18,7 +19,12 @@ except ModuleNotFoundError as e:
     proj_root = config.get_proj_root()
     print("Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
-
+try:
+    proj_root = config.get_proj_root()
+    sys.path.append(os.path.join(proj_root, "carla", "PythonAPI", "carla"))
+except IndexError:
+    pass
+from agents.navigation.behavior_agent import BehaviorAgent
 
 def set_traffic_lights_state(world, state):
     traffic_lights = world.get_actors().filter("*traffic_light*")
@@ -191,20 +197,32 @@ def get_angle_between_vectors(vector1, vector2):
         return math.degrees(math.acos(cos_angle))
 
 
-def set_autopilot(vehicle):
+def set_autopilot(vehicle, nav_type=c.BASIC_AGENT, sp_location=None, wp_location=None,world=None):
     #
-    vehicle.set_autopilot(True, g.tm.get_port())
-    g.tm.ignore_lights_percentage(vehicle, 0)
-    g.tm.ignore_signs_percentage(vehicle, 0)
-    g.tm.ignore_vehicles_percentage(vehicle, 0)
-    g.tm.ignore_walkers_percentage(vehicle, 0)
-
-    g.tm.auto_lane_change(vehicle, True)
-
-    g.tm.vehicle_percentage_speed_difference(vehicle, 10)
-    # todo:Path selection through network topology
-    # g.tm.set_route(vehicle, ["Left"])
-    vehicle.set_simulate_physics(True)
+    if nav_type == c.BASIC_AGENT:
+        vehicle.set_autopilot(True, g.tm.get_port())
+        g.tm.ignore_lights_percentage(vehicle, 0)
+        g.tm.ignore_signs_percentage(vehicle, 0)
+        g.tm.ignore_vehicles_percentage(vehicle, 0)
+        g.tm.ignore_walkers_percentage(vehicle, 0)
+        g.tm.auto_lane_change(vehicle, True)
+        g.tm.vehicle_percentage_speed_difference(vehicle, 10)
+        # todo:Path selection through network topology
+        # g.tm.set_route(vehicle, ["Left"])
+        vehicle.set_simulate_physics(True)
+        return None
+    elif nav_type == constants.BEHAVIOR_AGENT:
+        world.tick()  # sync once with simulator
+        vehicle.set_simulate_physics(True)
+        agent = BehaviorAgent(
+            vehicle,
+            behavior="cautious"
+        )
+        agent.set_destination(
+            start_location=sp_location,
+            end_location=wp_location,
+        )
+        return agent
 
 
 def get_relative_position(x1, y1, x2, y2, v_x, v_y):
@@ -255,10 +273,10 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
             carla.Vector3D(0.05, 0.05, 0.05)
         ),
         rotation=carla.Rotation(0, 0, 0),
-        life_time=1.0,
+        life_time=0.5,
         thickness=0.2,
         color=color
     )
 
-    world.debug.draw_line(arrow_start, arrow_end, life_time=10.0, color=color)
+    world.debug.draw_line(arrow_start, arrow_end, life_time=0.5, color=color)
     # world.debug.draw_polygon(arrow_points, life_time=10.0, color=color)

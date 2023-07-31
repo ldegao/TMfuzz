@@ -34,7 +34,7 @@ MAX_DIST_FROM_PLAYER = 40
 MIN_DIST_FROM_PLAYER = 5
 FRAME_RATE = 24
 INIT_SKIP_SECONDS = 2
-WAIT_AUTOWARE_NUM_TOPICS = 195
+WAIT_AUTOWARE_NUM_TOPICS = 208
 
 # Actors
 NULL = -1  # special type for traction testing
@@ -44,14 +44,13 @@ ACTOR_LIST = [VEHICLE, WALKER]
 ACTOR_NAMES = ["vehicle", "walker"]
 
 # Actor Navigation Type
-LINEAR = 0
-AUTOPILOT = 1
+BASIC_AGENT = 0
+BEHAVIOR_AGENT = 1
 IMMOBILE = 2
-MANEUVER = 3
+STOP = 3
 EGO = 4
-STOP = 5
-NAVTYPE_LIST = [LINEAR, AUTOPILOT, IMMOBILE, STOP]
-NAVTYPE_NAMES = ["linear", "autopilot", "immobile", "maneuver"]
+NAVTYPE_LIST = [BASIC_AGENT, BEHAVIOR_AGENT, IMMOBILE, STOP]
+NAVTYPE_NAMES = ["basic_agent", "behavior_agent", "immobile", "stop"]
 
 # Actor Attributes
 VEHICLE_MAX_SPEED = 30  # multiplied with forward vector
