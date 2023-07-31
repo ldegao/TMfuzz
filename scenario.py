@@ -18,7 +18,7 @@ class Scenario:
     seed_data = {}
     town = None
     weather = {}
-    actor_now = []
+    actors_now = []
     actor_list = []
     puddles = []
     driving_quality_score = None
@@ -44,7 +44,7 @@ class Scenario:
         self.weather["angle"] = 0
         self.weather["altitude"] = 90
 
-        self.actor_now = []
+        self.actors_now = []
         self.actor_list = []
         self.puddles = []
         self.driving_quality_score = 0
@@ -248,7 +248,7 @@ class Scenario:
             if "level" in obj:
                 self.puddles.remove(obj)
             else:
-                self.actor_now.remove(obj)
+                self.actors_now.remove(obj)
             return -1
         if self.conf.debug:
             print("----- Check for errors -----")

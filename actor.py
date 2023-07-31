@@ -35,7 +35,7 @@ class Actor:
     is_spilt = False
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0):
+                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None):
         self.spawn_stuck_frame = spawn_stuck_frame
         self.event_list = []
         self.spawn_frame = spawn_frame
@@ -48,6 +48,7 @@ class Actor:
         self.ego_loc = ego_loc
         self.ego_vel = ego_vel
         self.actor_bp = actor_bp
+        self.agent = agent
 
     def safe_check(self, another_actor, width=1.5, adjust=2):
         """
