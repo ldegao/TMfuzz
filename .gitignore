@@ -2,7 +2,7 @@ save/
 out-artifact/
 seed-artifact/
 .idea/
-__pycache__/
+__pycache__
 .vscode/
 run_carla.sh
 test.sh
