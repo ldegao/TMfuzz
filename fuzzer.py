@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import cProfile
 import os
 import pdb
 import sys
@@ -9,18 +8,15 @@ import argparse
 import json
 from collections import deque
 import concurrent.futures
-import docker
-import subprocess as sp
 import math
 import datetime
 import signal
-from copy import deepcopy
 import traceback
-import shutil
+import networkx as nx
+from shapely.geometry import LineString
 import globals as g
 import config
 import constants as c
-
 import states
 
 config.set_carla_api_path()
@@ -136,7 +132,7 @@ def set_args():
                            help="Directory to save fuzzing logs")
     argparser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
                            help="Seed directory")
-    argparser.add_argument("-m", "--max-mutations", default=8, type=int,
+    argparser.add_argument("-m", "--max-mutations", default=1, type=int,
                            help="Size of the mutated population per cycle")
     argparser.add_argument("-d", "--determ-seed", type=float,
                            help="Set seed num for deterministic mutation (e.g., for replaying)")
@@ -158,7 +154,7 @@ def set_args():
                            help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argparser.add_argument("--town", default=3, type=int,
                            help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argparser.add_argument("--timeout", default="60", type=int,
+    argparser.add_argument("--timeout", default="30", type=int,
                            help="Seconds to timeout if vehicle is not moving")
     argparser.add_argument("--no-speed-check", action="store_true")
     argparser.add_argument("--no-lane-check", action="store_true")
@@ -221,8 +217,54 @@ def main():
             client.set_timeout(20)
             client.load_world(town_map)
             world = client.get_world()
-            # TODO this will cause segmentation fault but i don't know why
             town = world.get_map()
+            map_topology = town.get_topology()
+            G = nx.DiGraph()
+            lane_list = {}
+            for edge in map_topology:
+                # 1.add_edge for every lane that is connected
+                G.add_edge((edge[0].road_id, edge[0].lane_id), (edge[1].road_id, edge[1].lane_id))
+                if (edge[0].road_id, edge[0].lane_id) not in lane_list:
+                    edge_end = edge[0].next_until_lane_end(500)[-1]
+                    lane_list[(edge[0].road_id, edge[0].lane_id)] = (edge[0], edge_end)
+            added_edges = []
+            for lane_A in lane_list:
+                for lane_B in lane_list:
+                    # 2.add_edge for every lane that is cross in junction
+                    if lane_A != lane_B:
+                        point_a = lane_list[lane_A][0].transform.location.x, lane_list[lane_A][0].transform.location.y
+                        point_b = lane_list[lane_A][1].transform.location.x, lane_list[lane_A][1].transform.location.y
+                        point_c = lane_list[lane_B][0].transform.location.x, lane_list[lane_B][0].transform.location.y
+                        point_d = lane_list[lane_B][1].transform.location.x, lane_list[lane_B][1].transform.location.y
+                        line_ab = LineString([point_a, point_b])
+                        line_cd = LineString([point_c, point_d])
+                        if line_ab.crosses(line_cd):
+                            if (lane_B, lane_A) not in added_edges:
+                                G.add_edge(lane_A, lane_B)
+                                G.add_edge(lane_B, lane_A)
+                                # added_edges.append((lane_A, lane_B))
+            for lane in lane_list:
+                # 3.add_edge for evert lane that could change to
+                lane_change_left = lane_list[lane][0].lane_change == carla.LaneChange.Left or \
+                                   lane_list[lane][0].lane_change == carla.LaneChange.Both or \
+                                   lane_list[lane][1].lane_change == carla.LaneChange.Left or \
+                                   lane_list[lane][1].lane_change == carla.LaneChange.Both
+                lane_change_right = lane_list[lane][0].lane_change == carla.LaneChange.Right or \
+                                    lane_list[lane][0].lane_change == carla.LaneChange.Both or \
+                                    lane_list[lane][1].lane_change == carla.LaneChange.Right or \
+                                    lane_list[lane][1].lane_change == carla.LaneChange.Both
+                if lane_change_left:
+                    if (lane[0], lane[1] + 1) in lane_list:
+                        G.add_edge(lane, (lane[0], lane[1] + 1))
+                if lane_change_right:
+                    if (lane[0], lane[1] - 1) in lane_list:
+                        G.add_edge(lane, (lane[0], lane[1] - 1))
+            g.topography = G
+            # pos = nx.kamada_kawai_layout(G)
+            # nx.draw(G, pos, with_labels=False, node_size=200, node_color="gray",
+            #         edge_color="skyblue")
+            # plt.show()
+            # pdb.set_trace()
             spawn_points = town.get_spawn_points()
             sp = random.choice(spawn_points)
             sp_x = sp.location.x
@@ -355,10 +397,10 @@ def main():
                                 behavior_list.append(c.MOVE_TO_THE_RIGHT)
                             if actor.max_weight_loc == c.BACK:
                                 behavior_list.append(c.THROTTLE)
-                        # Randomly take a behavior from behavior_list
-                        behavior_id = random.choice(behavior_list)
-                        actor.add_event(actor.max_weight_frame, behavior_id)
-                        print("behavior change:", actor.actor_id, "id:", behavior_id)
+                        # # Randomly take a behavior from behavior_list
+                        # behavior_id = random.choice(behavior_list)
+                        # actor.add_event(actor.max_weight_frame, behavior_id)
+                        # print("behavior change:", actor.actor_id, "id:", behavior_id)
                     elif mutation_type == 3:
                         # split the actor
                         new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))

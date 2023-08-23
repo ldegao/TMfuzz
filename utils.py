@@ -26,6 +26,7 @@ except IndexError:
     pass
 from agents.navigation.behavior_agent import BehaviorAgent
 
+
 def set_traffic_lights_state(world, state):
     traffic_lights = world.get_actors().filter("*traffic_light*")
     for traffic_light in traffic_lights:
@@ -197,7 +198,7 @@ def get_angle_between_vectors(vector1, vector2):
         return math.degrees(math.acos(cos_angle))
 
 
-def set_autopilot(vehicle, nav_type=c.BASIC_AGENT, sp_location=None, wp_location=None,world=None):
+def set_autopilot(vehicle, nav_type=c.BASIC_AGENT, sp_location=None, wp_location=None, world=None):
     #
     if nav_type == c.BASIC_AGENT:
         vehicle.set_autopilot(True, g.tm.get_port())
@@ -263,7 +264,6 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
     direction = end - start
     direction = normalize_vector(direction)
     perpendicular = carla.Vector3D(-direction.y, direction.x, 0.0)
-
     arrow_start = end - arrow_size * direction
     arrow_end = arrow_start + arrow_size * 0.5 * perpendicular
     arrow_start_location = carla.Location(arrow_start.x, arrow_start.y, arrow_start.z)
@@ -277,6 +277,19 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
         thickness=0.2,
         color=color
     )
-
     world.debug.draw_line(arrow_start, arrow_end, life_time=0.5, color=color)
     # world.debug.draw_polygon(arrow_points, life_time=10.0, color=color)
+
+
+def delete_actor(actor, actor_vehicles, agents_now=None, actors_now=None):
+    if actor.nav_type == c.BASIC_AGENT:
+        actor.instance.set_autopilot(False, g.tm.get_port())
+    elif actor.nav_type == c.BEHAVIOR_AGENT:
+        for agent_tuple in agents_now:
+            if agent_tuple[1] == actor.instance:
+                agents_now.remove(agent_tuple)
+                break
+    actor_vehicles.remove(actor.instance)
+    actor.instance.destroy()
+    actors_now.remove(actor)
+    actor.instance = None
