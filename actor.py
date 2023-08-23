@@ -35,13 +35,14 @@ class Actor:
     is_spilt = False
 
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None):
+                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None,wp=None):
         self.spawn_stuck_frame = spawn_stuck_frame
         self.event_list = []
         self.spawn_frame = spawn_frame
         self.actor_type = actor_type
         self.nav_type = nav_type
         self.spawn_point = spawn_point
+        self.wp = wp
         self.dest_point = dest_point
         self.speed = speed
         self.actor_id = actor_id
