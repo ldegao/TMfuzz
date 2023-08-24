@@ -12,11 +12,11 @@ while true; do
         echo "Total duration exceeded $t seconds. Exiting..."
         break
     fi
-    ./fuzzer.py --sim-tm-port 4050 --sim-port 4000 -t behavior   --debug --density 1 --town 5 --no-lane-check --no-traffic-lights
+    ./fuzzer.py --sim-tm-port 4050 --sim-port 4000 -t behavior   --debug --density 0.75 --town 3
     status=$(docker inspect -f '{{.State.Status}}' carla-$USER)
     if [[ $status != "running" ]]; then
         echo "carla-$USER is not in 'running' state. Restarting..."
     fi
 done
-# --no-traffic-lights
+# --no-traffic-lights --no-lane-check
 

@@ -42,40 +42,6 @@ from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-e
 import pygame
 
 
-def _on_collision(event, state):
-    # TODO: find the bug here(can not deal with frame correctly)
-    if state.end:
-        # ignore collision happened AFTER simulation ends
-        # (can happen because of sluggish garbage collection of Carla)
-        return
-    print("COLLISION:", event.other_actor.type_id)
-    if event.other_actor.type_id != "static.road":
-        # do not count collision while spawning ego vehicle (hard drop)
-        print("crashed")
-        state.crashed = True
-        state.collision_event = event
-
-
-def _on_invasion(event, state):
-    # lane_types = set(x.type for x in event.crossed_lane_markings)
-    # text = ['%r' % str(x).split()[-1] for x in lane_types]
-    # self.hud.notification('Crossed line %s' % ' and '.join(text))
-
-    if event.frame > state.first_frame_id + state.num_frames:
-        return
-
-    crossed_lanes = event.crossed_lane_markings
-    for crossed_lane in crossed_lanes:
-        if crossed_lane.lane_change == carla.LaneChange.NONE:
-            print("LANE INVASION:", event)
-            state.laneinvaded = True
-            state.laneinvasion_event.append(event)
-
-    # print(crossed_lane.color, crossed_lane.lane_change, crossed_lane.type)
-    # print(type(crossed_lane.color), type(crossed_lane.lane_change),
-    # type(crossed_lane.type))
-
-
 def _on_front_camera_capture(image):
     image.save_to_disk(f"/tmp/fuzzerdata/{g.username}/front-{image.frame:05d}.jpg")
 
@@ -162,6 +128,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
 
     p = 0.1
     retval = 0
+    wait_until_end = 0
     # for autoware
     frame_gap = 0
     autoware_last_frames = 0
@@ -229,38 +196,37 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         goal_loc = wp.location
         goal_rot = wp.rotation
 
-        if conf.agent_type == c.BASIC:
+        # if conf.agent_type == c.BASIC:
+        #     player = world.try_spawn_actor(player_bp, sp)
+        #     if player is None:
+        #         print("[-] Failed spawning player")
+        #         state.spawn_failed = True
+        #         state.spawn_failed_object = 0  # player
+        #         retval = -1
+        #         return  # trap to finally
+        #     world.tick()  # sync once with simulator
+        #     player.set_simulate_physics(True)
+        #     ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
+        #                 dest_point=wp, actor_id=-1)
+        #     ego.set_instance(player)
+        #     agent = BasicAgent(player)
+        #     location = carla.Location(x=wp.location.x, y=wp.location.y, z=wp.location.z)
+        #     waypoint = town_map.get_waypoint(location)
+        #     agent.set_destination(waypoint.transform.location)
+        #     print("[+] spawned BasicAgent")
+        if conf.agent_type == c.BEHAVIOR:
             player = world.try_spawn_actor(player_bp, sp)
+            ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
+                        dest_point=wp, actor_id=-1)
+            ego.set_instance(player)
+            ego.attach_collision(world, sensors, state)
+            ego.attach_lane_invasion(world, sensors, state)
             if player is None:
                 print("[-] Failed spawning player")
                 state.spawn_failed = True
                 state.spawn_failed_object = 0  # player
                 retval = -1
                 return  # trap to finally
-
-            world.tick()  # sync once with simulator
-            player.set_simulate_physics(True)
-            ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
-                        dest_point=wp, actor_id=-1)
-            ego.set_instance(player)
-            agent = BasicAgent(player)
-            location = carla.Location(x=wp.location.x, y=wp.location.y, z=wp.location.z)
-            waypoint = town_map.get_waypoint(location)
-            agent.set_destination(waypoint.transform.location)
-            print("[+] spawned BasicAgent")
-
-        elif conf.agent_type == c.BEHAVIOR:
-            player = world.try_spawn_actor(player_bp, sp)
-            ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
-                        dest_point=wp, actor_id=-1)
-            ego.set_instance(player)
-            if player is None:
-                print("[-] Failed spawning player")
-                state.spawn_failed = True
-                state.spawn_failed_object = 0  # player
-                retval = -1
-                return  # trap to finally
-
             world.tick()  # sync once with simulator
             player.set_simulate_physics(True)
             agent = BehaviorAgent(
@@ -306,7 +272,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                                 rot.pitch, rot.yaw * -1)
             goal_str = "{},{},{},{},{},{},{}".format(goal_loc.x, goal_loc.y,
                                                      goal_loc.z, goal_ox, goal_oy, goal_oz, goal_ow)
-
             docker_client = docker.from_env()
             proj_root = config.get_proj_root()
             xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
@@ -389,6 +354,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         ego = Actor(actor_type=c.VEHICLE, nav_type=c.EGO, spawn_point=sp,
                                     dest_point=wp, actor_id=-1)
                         ego.set_instance(player)
+                        ego.attach_collision(world, sensors, state)
+                        ego.attach_lane_invasion(world, sensors, state)
                         print("\n    [*] found [{}] at {}".format(player.id,
                                                                   player.get_location()))
                         break
@@ -406,20 +373,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 world.tick()  # spin until the player is moved to the sp
                 if player.get_location().distance(sp.location) < 1:
                     break
-        # Attach collision detector
-        collision_bp = blueprint_library.find('sensor.other.collision')
-        sensor_collision = world.spawn_actor(collision_bp, carla.Transform(),
-                                             attach_to=player)
-        sensor_collision.listen(lambda event: _on_collision(event, state))
-        sensors.append(sensor_collision)
-
-        # Attach lane invasion sensor
-        lanesensor_bp = blueprint_library.find("sensor.other.lane_invasion")
-        sensor_lane = world.spawn_actor(lanesensor_bp, carla.Transform(),
-                                        attach_to=player)
-        sensor_lane.listen(lambda event: _on_invasion(event, state))
-        sensors.append(sensor_lane)
-
         if conf.agent_type == c.BASIC or conf.agent_type == c.BEHAVIOR:
             # Attach RGB camera (front)
             rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
@@ -471,7 +424,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
         # (optional) attach spectator
         # spectator = world.get_spectator()
         # set_camera(conf, player, spectator)
-
         # spawn friction triggers
         friction_bp = blueprint_library.find('static.trigger.friction')
         for friction in frictions_list:
@@ -488,7 +440,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 friction["size"][1],
                 friction["size"][2]
             )
-
             friction_trigger = world.try_spawn_actor(
                 friction_bp, friction_sp_transform)
 
@@ -557,7 +508,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             # thinks it has reached the goal
             proc_state = Popen(["rostopic echo /decision_maker/state"],
                                shell=True, stdout=PIPE, stderr=PIPE)
-
             # set_camera(conf, player, spectator)
 
             # Wait for Autoware (esp, for Town04)
@@ -587,17 +537,12 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             print("[carla] Goal published")
             time.sleep(3)  # give some time (Autoware initialization is slow)
             state.autoware_goal = pub_cmd
-
             world.tick()
-
         start_time = time.time()
-
         yaw = sp.rotation.yaw
-
         player_loc = player.get_transform().location
         init_x = player_loc.x
         init_y = player_loc.y
-
         # SIMULATION LOOP FOR AUTOWARE and BasicAgent
         signal.signal(signal.SIGINT, signal.default_int_handler)
         signal.signal(signal.SIGSEGV, state.sig_handler)
@@ -622,7 +567,6 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
             while True:
                 # Use sampling frequency of FPS*2 for precision!
                 clock.tick(c.FRAME_RATE * 2)
-
                 # Carla agents are running in synchronous mode,
                 # so we need to send ticks. Not needed for Autoware
                 if conf.agent_type == c.BASIC or conf.agent_type == c.BEHAVIOR:
@@ -689,14 +633,13 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                 # Delete useless vehicles for any frame
                 for actor in actors_now:
                     vehicle = actor.instance
-                    # try this method, if not work,use the other method
                     vehicle_waypoint = town_map.get_waypoint(vehicle.get_location(), project_to_road=True,
                                                              lane_type=carla.libcarla.LaneType.Driving)
                     vehicle_lane_id = vehicle_waypoint.lane_id
                     vehicle_road_id = vehicle_waypoint.road_id
                     # 1. Delete vehicles that are physically too far away
                     if vehicle.get_location().distance(player_loc) > 50 * math.sqrt(2):
-                        delete_actor(actor, actor_vehicles, agents_now, actors_now)
+                        delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
                         continue
                     # 2. Delete vehicles that are topologically too far away
                     neighbors_A = nx.single_source_shortest_path_length(g.topography,
@@ -708,7 +651,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                                                         cutoff=g.topo_k)
                     neighbors_B[(vehicle_road_id, vehicle_lane_id)] = 0
                     if not any(node in neighbors_A and node in neighbors_B for node in g.topography.nodes()):
-                        delete_actor(actor, actor_vehicles, agents_now, actors_now)
+                        delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
                 # add old vehicles for any frame
                 for actor in actor_list:
                     if actor.fresh & (actor.ego_loc.distance(player_loc) < 1.5):
@@ -748,6 +691,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                 continue
                         if waypoint is not None:
                             actor.spawn_point = waypoint
+                        actor.attach_collision(world, sensors, state)
+                        # actor.attach_lane_invasion(world, sensors, state)
                         actor_vehicles.append(actor_vehicle)
                         actor_spawn_rotation = actor.spawn_point.rotation
                         roll_degrees = actor_spawn_rotation.yaw
@@ -800,11 +745,11 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         add_type = random.randint(1, 100)  # this value controls the type of actor
                         actor_vehicle = None
                         new_actor = None
-                        # try 10 time
                         repeat_times = 0
                         while actor_vehicle is None:
                             repeat_times += 1
-                            if repeat_times > 1000:
+                            # stuck too long
+                            if repeat_times > 1000 or state.stuck_duration > 100:
                                 # add a fake actor
                                 new_actor = Actor(actor_type=None, nav_type=None,
                                                   spawn_point=None,
@@ -832,23 +777,25 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                                                                 cutoff=g.topo_k)
                             neighbors_A[(player_road_id, player_lane_id)] = 0
                             neighbors_B = nx.single_source_shortest_path_length(g.topography, source=(
-                            waypoint.road_id, waypoint.lane_id), cutoff=g.topo_k)
+                                waypoint.road_id, waypoint.lane_id), cutoff=g.topo_k)
                             neighbors_B[(waypoint.road_id, waypoint.lane_id)] = 0
                             if not any(node in neighbors_A and node in neighbors_B for node in g.topography.nodes()):
                                 repeat_times -= 1
                                 continue
-                            # # check the z value
-                            # if abs(waypoint.transform.location.z - player_loc.z) > 5:
-                            #     continue
                             # we don't want to add bg car in junction or near it
                             # because it may cause a red light problem
                             if waypoint.is_junction or waypoint.next(30 * 3 / 3.6)[-1].is_junction:
                                 continue
-                            # we don't want to add bg car too near at the same lane of ego
-                            if waypoint.road_id == player_waypoint.road_id:
-                                if waypoint.lane_id == player_waypoint.lane_id:
-                                    if waypoint.transform.location.distance(player_loc) < 5:
-                                        continue
+                            temp_flag = False
+                            for other_actor in actor_list:
+                                if other_actor.instance is not None:
+                                    if other_actor.instance.get_location().distance(waypoint.transform.location) < 5:
+                                        temp_flag = True
+                                        break
+                            if player_loc.distance(waypoint.transform.location) < 5:
+                                temp_flag = True
+                            if temp_flag:
+                                continue
                             # we don't want to add an immobile bg car at lane that can't change lane
                             if waypoint.lane_change == carla.LaneChange.NONE:
                                 if add_type <= g.immobile_percentage:
@@ -887,7 +834,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                                                   actor_bp=actor_bp, spawn_stuck_frame=state.stuck_duration)
                                 new_actor.add_event(c.FRAME_RATE * g.stop_seconds, c.RESTART)
                             else:
-                                bg_speed = random.uniform(20 / 3.6, 40 / 3.6)
+                                bg_speed = random.uniform(10 / 3.6, 30 / 3.6)
                                 new_actor = Actor(actor_type=c.VEHICLE, nav_type=c.BEHAVIOR_AGENT,
                                                   spawn_point=actor_spawn_point,
                                                   dest_point=None, speed=bg_speed,
@@ -926,6 +873,8 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             new_actor.fresh = False
                             actors_now.append(new_actor)
                             actor_list.append(new_actor)
+                            new_actor.attach_collision(world, sensors, state)
+                            new_actor.attach_lane_invasion(world, sensors, state)
                             if conf.debug:
                                 print("[debug] spawn new car", new_actor.actor_id, "at", state.num_frames)
                     found_frame = False
@@ -1128,7 +1077,7 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                             else:
                                 delete_indices.append(i)
                     for index in delete_indices:
-                        delete_actor(agents_now[index][2], actor_vehicles, agents_now, actors_now)
+                        delete_actor(agents_now[index][2], actor_vehicles, sensors, agents_now, actors_now)
                     if break_flag:
                         break
 
@@ -1163,69 +1112,74 @@ def simulate(conf, state, sp, wp, weather_dict, frictions_list, actor_list):
                         # Mark if the left and right lines are solid lines for behavior mutation
                         actor.player_lane_change = player_lane_change
                     max_weight = max(actor.weight, max_weight)
+                if wait_until_end == 0:
+                    # Check speeding
+                    if conf.check_dict["speed"]:
+                        # allow T seconds to slow down if speed limit suddenly
+                        # decreases
+                        T = 3  # 0 for strict checking
+                        if (speed > speed_limit + 2 and
+                                cur_frame_id > frame_speed_lim_changed + T * c.FRAME_RATE):
+                            print("\n[*] Speed violation: {} km/h on a {} km/h road".format(
+                                speed, speed_limit))
+                            state.speeding = True
+                            retval = 1
+                            wait_until_end = 1
 
-                # Check speeding
-                if conf.check_dict["speed"]:
-                    # allow T seconds to slow down if speed limit suddenly
-                    # decreases
-                    T = 3  # 0 for strict checking
-                    if (speed > speed_limit + 2 and
-                            cur_frame_id > frame_speed_lim_changed + T * c.FRAME_RATE):
-                        print("\n[*] Speed violation: {} km/h on a {} km/h road".format(
-                            speed, speed_limit))
-                        state.speeding = True
-                        retval = 1
-                        break
+                    # Check crash
+                    if conf.check_dict["crash"]:
+                        if state.crashed:
+                            print("\n[*] Collision detected: %.2f" % (
+                                state.elapsed_time))
+                            retval = 1
+                            wait_until_end = 1
 
-                # Check crash
-                if conf.check_dict["crash"]:
-                    if state.crashed:
-                        print("\n[*] Collision detected: %.2f" % (
-                            state.elapsed_time))
-                        retval = 1
-                        break
+                    # Check lane violation
+                    if conf.check_dict["lane"]:
+                        if state.laneinvaded:
+                            print("\n[*] Lane invasion detected: %.2f" % (
+                                state.elapsed_time))
+                            retval = 1
+                            wait_until_end = 1
 
-                # Check lane violation
-                if conf.check_dict["lane"]:
-                    if state.laneinvaded:
-                        print("\n[*] Lane invasion detected: %.2f" % (
-                            state.elapsed_time))
-                        retval = 1
-                        break
+                    # Check traffic light violation
+                    if conf.check_dict["red"]:
+                        if state.red_violation:
+                            print("\n[*] Red light violation detected: %.2f" % (
+                                state.elapsed_time))
+                            retval = 1
+                            wait_until_end = 1
 
-                # Check traffic light violation
-                if conf.check_dict["red"]:
-                    if state.red_violation:
-                        print("\n[*] Red light violation detected: %.2f" % (
-                            state.elapsed_time))
-                        retval = 1
-                        break
+                    # Check inactivity
+                    if speed < 1:  # km/h
+                        state.stuck_duration += 1
+                    else:
+                        state.stuck_duration = 0
 
-                # Check inactivity
-                if speed < 1:  # km/h
-                    state.stuck_duration += 1
-                else:
-                    state.stuck_duration = 0
+                    if conf.check_dict["stuck"]:
+                        if state.stuck_duration > (conf.timeout * c.FRAME_RATE):
+                            if not state.on_red:
+                                state.stuck = True
+                                print("\n[*] Stuck for too long: %d" % (state.stuck_duration))
+                                retval = 1
+                                break
 
-                if conf.check_dict["stuck"]:
-                    if state.stuck_duration > (conf.timeout * c.FRAME_RATE):
-                        if not state.on_red:
-                            state.stuck = True
-                            print("\n[*] Stuck for too long: %d" % (state.stuck_duration))
+                    if conf.check_dict["other"]:
+                        if state.num_frames > 6000:  # over 5 minutes
+                            print("\n[*] Simulation taking too long")
+                            state.other_error = "timeout"
+                            state.other_error_val = state.num_frames
                             retval = 1
                             break
+                        if state.other_error:
+                            print("\n[*] Other error: %d" % (state.signal))
+                            retval = 1
+                            break
+                else:
+                    wait_until_end += 1
+                if wait_until_end > 24:
+                    break
 
-                if conf.check_dict["other"]:
-                    if state.num_frames > 6000:  # over 5 minutes
-                        print("\n[*] Simulation taking too long")
-                        state.other_error = "timeout"
-                        state.other_error_val = state.num_frames
-                        retval = 1
-                        break
-                    if state.other_error:
-                        print("\n[*] Other error: %d" % (state.signal))
-                        retval = 1
-                        break
 
         except KeyboardInterrupt:
             print("quitting")

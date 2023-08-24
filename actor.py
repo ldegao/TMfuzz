@@ -6,6 +6,7 @@ import constants as c
 import math
 from shapely.geometry import Point, LineString, Polygon
 
+from utils import _on_collision, _on_invasion
 from utils import get_carla_transform
 
 config.set_carla_api_path()
@@ -34,8 +35,11 @@ class Actor:
     ego_state = None
     is_spilt = False
 
+    sensor_collision = None
+    sensor_lane_invasion = None
+
     def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None,wp=None):
+                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None, wp=None):
         self.spawn_stuck_frame = spawn_stuck_frame
         self.event_list = []
         self.spawn_frame = spawn_frame
@@ -60,18 +64,12 @@ class Actor:
 
         check if two vehicles are safe to each other, if not, return False
         """
-        self_is_ego = False
-        another_is_ego = False
-        if self.actor_id == -1:
-            self_is_ego = True
-        if another_actor.actor_id == -1:
-            another_is_ego = True
         # calculate points of two vehicles safe rectangle
         points_list1 = calculate_safe_rectangle(self.get_position_now(), self.get_speed_now(),
                                                 c.HARD_ACC_THRES / 3.6 / adjust,
-                                                width, self_is_ego)
+                                                width)
         points_list2 = calculate_safe_rectangle(another_actor.get_position_now(), another_actor.get_speed_now(),
-                                                c.HARD_ACC_THRES / 3.6 / adjust, width, another_is_ego)
+                                                c.HARD_ACC_THRES / 3.6 / adjust, width)
         self_rect = Polygon(points_list1)
         another_rect = Polygon(points_list2)
         if self_rect.intersects(another_rect):
@@ -138,14 +136,33 @@ class Actor:
                 print("split:", self.actor_id, "to", self.actor_id, actor_id)
                 return new_car
 
+    def attach_collision(self, world, sensors, state):
+        # Attach collision detector
+        blueprint_library = world.get_blueprint_library()
+        collision_bp = blueprint_library.find('sensor.other.collision')
+        sensor_collision = world.spawn_actor(collision_bp, carla.Transform(),
+                                             attach_to=self.instance)
+        sensor_collision.listen(lambda event: _on_collision(event, state))
+        sensors.append(sensor_collision)
+        self.sensor_collision = sensor_collision
 
-def calculate_safe_rectangle(position, speed, acceleration, lane_width, is_player=False):
+    def attach_lane_invasion(self, world, sensors, state):
+        # Attach lane invasion detector
+        blueprint_library = world.get_blueprint_library()
+        lane_invasion_bp = blueprint_library.find('sensor.other.lane_invasion')
+        sensor_lane_invasion = world.spawn_actor(lane_invasion_bp, carla.Transform(),
+                                                 attach_to=self.instance)
+        sensor_lane_invasion.listen(lambda event: _on_invasion(event, state))
+        sensors.append(sensor_lane_invasion)
+        self.sensor_lane_invasion = sensor_lane_invasion
+
+
+def calculate_safe_rectangle(position, speed, acceleration, lane_width):
     """
-    :param position: the position of the vehicle
-    :param speed: the speed of the vehicle
-    :param acceleration: the acceleration of the vehicle
-    :param lane_width: the width of the lane
-    :param is_player: if the vehicle is ego vehicle
+    :param position: the position of the vehicle,
+    :param speed: the speed of the vehicle,
+    :param acceleration: the acceleration of the vehicle,
+    :param lane_width: the width of the lane,
     :return: the four points of the rectangle
 
     calculate the safe rectangle points of vehicle in the next time step
@@ -153,10 +170,7 @@ def calculate_safe_rectangle(position, speed, acceleration, lane_width, is_playe
     t = math.sqrt(speed.x ** 2 + speed.y ** 2) / acceleration
     rect_length = acceleration * (t ** 2) / 2
     # add car length
-    rect_length = rect_length + 2 * lane_width
-    # # we don't want to cause ego's hard break,so we set the length to at least 10m
-    # if is_player and rect_length < 10:
-    #     rect_length = 10
+    rect_length = rect_length + 4 * lane_width
     rect_width = 2 * lane_width
     rect_direction = math.atan2(speed.y, speed.x)
     rect_half_length = rect_length / 2

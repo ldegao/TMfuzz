@@ -281,7 +281,7 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
     # world.debug.draw_polygon(arrow_points, life_time=10.0, color=color)
 
 
-def delete_actor(actor, actor_vehicles, agents_now=None, actors_now=None):
+def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=None):
     if actor.nav_type == c.BASIC_AGENT:
         actor.instance.set_autopilot(False, g.tm.get_port())
     elif actor.nav_type == c.BEHAVIOR_AGENT:
@@ -293,3 +293,45 @@ def delete_actor(actor, actor_vehicles, agents_now=None, actors_now=None):
     actor.instance.destroy()
     actors_now.remove(actor)
     actor.instance = None
+    if actor.sensor_collision:
+        sensors.remove(actor.sensor_collision)
+        actor.sensor_collision.stop()
+        actor.sensor_collision.destroy()
+        actor.sensor_collision = None
+    if actor.sensor_lane_invasion:
+        sensors.remove(actor.sensor_lane_invasion)
+        actor.sensor_lane_invasion.stop()
+        actor.sensor_lane_invasion.destroy()
+        actor.sensor_lane_invasion = None
+
+
+def _on_collision(event, state):
+    if state.end:
+        # ignore collision happened AFTER simulation ends
+        # (can happen because of sluggish garbage collection of Carla)
+        return
+    print("COLLISION:", event.other_actor.type_id)
+    if event.other_actor.type_id != "static.road":
+        # do not count collision while spawning ego vehicle (hard drop)
+        print("crashed")
+        state.crashed = True
+        state.collision_event = event
+
+
+def _on_invasion(event, state):
+    # lane_types = set(x.type for x in event.crossed_lane_markings)
+    # text = ['%r' % str(x).split()[-1] for x in lane_types]
+    # self.hud.notification('Crossed line %s' % ' and '.join(text))
+
+    if event.frame > state.first_frame_id + state.num_frames:
+        return
+    crossed_lanes = event.crossed_lane_markings
+    for crossed_lane in crossed_lanes:
+        if crossed_lane.lane_change == carla.LaneChange.NONE:
+            print("LANE INVASION:", event)
+            state.laneinvaded = True
+            state.laneinvasion_event.append(event)
+
+    # print(crossed_lane.color, crossed_lane.lane_change, crossed_lane.type)
+    # print(type(crossed_lane.color), type(crossed_lane.lane_change),
+    # type(crossed_lane.type))
