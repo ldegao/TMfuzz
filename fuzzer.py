@@ -132,7 +132,7 @@ def set_args():
                            help="Directory to save fuzzing logs")
     argparser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
                            help="Seed directory")
-    argparser.add_argument("-m", "--max-mutations", default=1, type=int,
+    argparser.add_argument("-m", "--max-mutations", default=5, type=int,
                            help="Size of the mutated population per cycle")
     argparser.add_argument("-d", "--determ-seed", type=float,
                            help="Set seed num for deterministic mutation (e.g., for replaying)")
@@ -154,7 +154,7 @@ def set_args():
                            help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argparser.add_argument("--town", default=3, type=int,
                            help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argparser.add_argument("--timeout", default="30", type=int,
+    argparser.add_argument("--timeout", default="60", type=int,
                            help="Seconds to timeout if vehicle is not moving")
     argparser.add_argument("--no-speed-check", action="store_true")
     argparser.add_argument("--no-lane-check", action="store_true")
@@ -360,54 +360,54 @@ def main():
                 random.shuffle(max_actors)
                 max_actors = max_actors[:abs(k)]
                 # randomly mutate the max weight actor
-                for actor in max_actors:
-                    # todo: change the logic of mutation
-                    mutation_type = random.randint(2, 3)
-                    if mutation_type == 0:
-                        # change the actor's location
-                        # prove to be useless
-                        pass
-                    elif mutation_type == 1:
-                        # change the actor's velocity
-                        # prove to be useless
-                        velocity_change = random.randint(-5, 10)
-                        actor.speed = actor.speed + velocity_change
-                        print("speed change:", actor.actor_id, "velocity_change:", velocity_change)
-                    elif mutation_type == 2:
-                        """
-                        Randomly change the actor's behavior according to the state of actor
-                        
-                        The vehicle is in front of the ego: brake
-                        The vehicle is in a different lane to the left of the ego, 
-                        and the lane change is allowed on the left of the ego: change lanes to the right
-                        The vehicle is in a different lane on the right side of the ego, 
-                        and the right side of the ego is allowed to change lanes: left lane change
-                        The vehicle is behind the ego: throttle
-                        """
-                        behavior_list = []
-                        if actor.max_weight_loc == c.FRONT:
-                            behavior_list.append(c.BRAKE)
-                        if actor.max_weight_lane == c.LEFT:
-                            if actor.player_lane_change == carla.LaneChange.Left or actor.player_lane_change == carla.LaneChange.Both:
-                                behavior_list.append(c.MOVE_TO_THE_LEFT)
-                            if actor.max_weight_loc == c.BACK:
-                                behavior_list.append(c.THROTTLE)
-                        elif actor.max_weight_lane == c.RIGHT:
-                            if actor.player_lane_change == carla.LaneChange.Right or actor.player_lane_change == carla.LaneChange.Both:
-                                behavior_list.append(c.MOVE_TO_THE_RIGHT)
-                            if actor.max_weight_loc == c.BACK:
-                                behavior_list.append(c.THROTTLE)
-                        # # Randomly take a behavior from behavior_list
-                        # behavior_id = random.choice(behavior_list)
-                        # actor.add_event(actor.max_weight_frame, behavior_id)
-                        # print("behavior change:", actor.actor_id, "id:", behavior_id)
-                    elif mutation_type == 3:
-                        # split the actor
-                        new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))
-                        test_scenario.actor_list.append(new_actor)
-                        g.test_split_1 = actor
-                        g.test_split_2 = new_actor
-                        new_actor.is_split = True
+                # for actor in max_actors:
+                #     # todo: change the logic of mutation
+                #     mutation_type = random.randint(2, 3)
+                #     if mutation_type == 0:
+                #         # change the actor's location
+                #         # prove to be useless
+                #         pass
+                #     elif mutation_type == 1:
+                #         # change the actor's velocity
+                #         # prove to be useless
+                #         velocity_change = random.randint(-5, 10)
+                #         actor.speed = actor.speed + velocity_change
+                #         print("speed change:", actor.actor_id, "velocity_change:", velocity_change)
+                #     elif mutation_type == 2:
+                #         """
+                #         Randomly change the actor's behavior according to the state of actor
+                #
+                #         The vehicle is in front of the ego: brake
+                #         The vehicle is in a different lane to the left of the ego,
+                #         and the lane change is allowed on the left of the ego: change lanes to the right
+                #         The vehicle is in a different lane on the right side of the ego,
+                #         and the right side of the ego is allowed to change lanes: left lane change
+                #         The vehicle is behind the ego: throttle
+                #         """
+                #         behavior_list = []
+                #         if actor.max_weight_loc == c.FRONT:
+                #             behavior_list.append(c.BRAKE)
+                #         if actor.max_weight_lane == c.LEFT:
+                #             if actor.player_lane_change == carla.LaneChange.Left or actor.player_lane_change == carla.LaneChange.Both:
+                #                 behavior_list.append(c.MOVE_TO_THE_LEFT)
+                #             if actor.max_weight_loc == c.BACK:
+                #                 behavior_list.append(c.THROTTLE)
+                #         elif actor.max_weight_lane == c.RIGHT:
+                #             if actor.player_lane_change == carla.LaneChange.Right or actor.player_lane_change == carla.LaneChange.Both:
+                #                 behavior_list.append(c.MOVE_TO_THE_RIGHT)
+                #             if actor.max_weight_loc == c.BACK:
+                #                 behavior_list.append(c.THROTTLE)
+                #         # # Randomly take a behavior from behavior_list
+                #         # behavior_id = random.choice(behavior_list)
+                #         # actor.add_event(actor.max_weight_frame, behavior_id)
+                #         # print("behavior change:", actor.actor_id, "id:", behavior_id)
+                #     elif mutation_type == 3:
+                #         # split the actor
+                #         new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))
+                #         test_scenario.actor_list.append(new_actor)
+                #         g.test_split_1 = actor
+                #         g.test_split_2 = new_actor
+                #         new_actor.is_split = True
                 # change all weights to 0
                 for actor in test_scenario.actor_list:
                     actor.weight = 0
