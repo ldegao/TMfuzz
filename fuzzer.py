@@ -176,28 +176,9 @@ def main():
     campaign_cnt = 0
     signal.signal(signal.SIGALRM, handler)
     while True:
-        # STEP 0: Restart Carla simulator at the beginning of each cycle
-        # (Carla hangs after a while due to a memory leak)
-        # UPDATE: can't do this due to a bug in Carla. TimeoutException will
-        # be raised when we stop the container.
-        # print("[*] Stopping existing Carla simulator")
-        # os.system(f"docker rm -f carla-{os.getenv('USER')}")
-        # for i in range(10):
-        # print(".", end="", flush=True)
-        # time.sleep(1)
-        # print()
-
-        # print("[*] Starting Carla simulator")
-        # os.system("../run_carla.sh")
-        # for i in range(30):
-        # print(".", end="", flush=True)
-        # time.sleep(1)
-        # print()
-
         # STEP 1: SEED
         # Pop a seed from the seed queue. If seed queue is empty, ramdonly
         # generate a seed, enqueue it, and come back here.
-
         # print("before seed gen", time.time())
         try:
             scenario = queue.popleft()
@@ -330,7 +311,7 @@ def main():
             state.mutation = round_cnt
             # for test
             mutate_weather_fixed(test_scenario)
-            signal.alarm(15 * 60)  # timeout after 15 mins
+            signal.alarm(15 * 60*60)  # timeout after 15 hours
             try:
                 ret = test_scenario.run_test(state)
             except Exception as e:
@@ -358,57 +339,6 @@ def main():
                 # choose some good cars
                 max_actors = max_actors[:abs(k * 2)]
                 random.shuffle(max_actors)
-                max_actors = max_actors[:abs(k)]
-                # randomly mutate the max weight actor
-                # for actor in max_actors:
-                #     # todo: change the logic of mutation
-                #     mutation_type = random.randint(2, 3)
-                #     if mutation_type == 0:
-                #         # change the actor's location
-                #         # prove to be useless
-                #         pass
-                #     elif mutation_type == 1:
-                #         # change the actor's velocity
-                #         # prove to be useless
-                #         velocity_change = random.randint(-5, 10)
-                #         actor.speed = actor.speed + velocity_change
-                #         print("speed change:", actor.actor_id, "velocity_change:", velocity_change)
-                #     elif mutation_type == 2:
-                #         """
-                #         Randomly change the actor's behavior according to the state of actor
-                #
-                #         The vehicle is in front of the ego: brake
-                #         The vehicle is in a different lane to the left of the ego,
-                #         and the lane change is allowed on the left of the ego: change lanes to the right
-                #         The vehicle is in a different lane on the right side of the ego,
-                #         and the right side of the ego is allowed to change lanes: left lane change
-                #         The vehicle is behind the ego: throttle
-                #         """
-                #         behavior_list = []
-                #         if actor.max_weight_loc == c.FRONT:
-                #             behavior_list.append(c.BRAKE)
-                #         if actor.max_weight_lane == c.LEFT:
-                #             if actor.player_lane_change == carla.LaneChange.Left or actor.player_lane_change == carla.LaneChange.Both:
-                #                 behavior_list.append(c.MOVE_TO_THE_LEFT)
-                #             if actor.max_weight_loc == c.BACK:
-                #                 behavior_list.append(c.THROTTLE)
-                #         elif actor.max_weight_lane == c.RIGHT:
-                #             if actor.player_lane_change == carla.LaneChange.Right or actor.player_lane_change == carla.LaneChange.Both:
-                #                 behavior_list.append(c.MOVE_TO_THE_RIGHT)
-                #             if actor.max_weight_loc == c.BACK:
-                #                 behavior_list.append(c.THROTTLE)
-                #         # # Randomly take a behavior from behavior_list
-                #         # behavior_id = random.choice(behavior_list)
-                #         # actor.add_event(actor.max_weight_frame, behavior_id)
-                #         # print("behavior change:", actor.actor_id, "id:", behavior_id)
-                #     elif mutation_type == 3:
-                #         # split the actor
-                #         new_actor = actor.splitting(g.town_map, len(test_scenario.actor_list))
-                #         test_scenario.actor_list.append(new_actor)
-                #         g.test_split_1 = actor
-                #         g.test_split_2 = new_actor
-                #         new_actor.is_split = True
-                # change all weights to 0
                 for actor in test_scenario.actor_list:
                     actor.weight = 0
                 pass
