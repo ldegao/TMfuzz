@@ -324,6 +324,7 @@ def _on_invasion(event, state):
     # self.hud.notification('Crossed line %s' % ' and '.join(text))
 
     if event.frame > state.first_frame_id + state.num_frames:
+        print("get!")
         return
     crossed_lanes = event.crossed_lane_markings
     for crossed_lane in crossed_lanes:

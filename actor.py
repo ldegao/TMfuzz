@@ -73,6 +73,7 @@ class Actor:
         self_rect = Polygon(points_list1)
         another_rect = Polygon(points_list2)
         if self_rect.intersects(another_rect):
+            # print("not safe")
             return False
         else:
             return True
@@ -170,7 +171,7 @@ def calculate_safe_rectangle(position, speed, acceleration, lane_width):
     t = math.sqrt(speed.x ** 2 + speed.y ** 2) / acceleration
     rect_length = acceleration * (t ** 2) / 2
     # add car length
-    rect_length = rect_length + 4 * lane_width
+    rect_length = rect_length + 10
     rect_width = 2 * lane_width
     rect_direction = math.atan2(speed.y, speed.x)
     rect_half_length = rect_length / 2
