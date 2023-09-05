@@ -18,12 +18,10 @@ MSG_BAD_SPAWN_ARG = "--spawn expects six args: x, y, z, pitch, yaw, roll"
 MSG_BAD_DEST_ARG = "--dest expects three args: x, y, z"
 
 # Agent Types
-BASIC = 0
 BEHAVIOR = 1
 AUTOWARE = 2
 OTHER = 9
 
-# BasicAgent config
 TARGET_SPEED = 60
 MAX_THROTTLE = 1  # 0.75
 MAX_BRAKE = 1  # 0.3
@@ -44,21 +42,20 @@ ACTOR_LIST = [VEHICLE, WALKER]
 ACTOR_NAMES = ["vehicle", "walker"]
 
 # Actor Navigation Type
-BASIC_AGENT = 0
 BEHAVIOR_AGENT = 1
 IMMOBILE = 2
 STOP = 3
 EGO = 4
-NAVTYPE_LIST = [BASIC_AGENT, BEHAVIOR_AGENT, IMMOBILE, STOP]
-NAVTYPE_NAMES = ["basic_agent", "behavior_agent", "immobile", "stop"]
+NAVTYPE_LIST = [BEHAVIOR_AGENT, IMMOBILE, STOP]
+NAVTYPE_NAMES = [ "behavior_agent", "immobile", "stop"]
 
 # Actor Attributes
 VEHICLE_MAX_SPEED = 30  # multiplied with forward vector
 WALKER_MAX_SPEED = 10  # m/s
 
-# Puddle Attributes
-PROB_PUDDLE = 25  # probability of adding a new puddle
-PUDDLE_MAX_SIZE = 500  # centimeters
+# # Puddle Attributes
+# PROB_PUDDLE = 25  # probability of adding a new puddle
+# PUDDLE_MAX_SIZE = 500  # centimeters
 
 # Maneuver Attributes
 FRAMES_PER_TIMESTEP = 100  # 5 seconds (tentative)
@@ -88,8 +85,8 @@ CUTOFF_FREQ_HEAVY = 0.5
 # Mutation targets
 WEATHER = 0
 ACTOR = 1
-PUDDLE = 2
-MUTATION_TARGET = [WEATHER, ACTOR, PUDDLE]
+# PUDDLE = 2
+MUTATION_TARGET = [WEATHER, ACTOR]
 
 # relative position
 FRONT = 0
@@ -105,12 +102,7 @@ CONGESTION = 1
 ENTROPY = 2
 INSTABILITY = 3
 TRAJECTORY = 4
-# event type
-RESTART = 0
-BRAKE = 1
-THROTTLE = 2
-MOVE_TO_THE_LEFT = 3
-MOVE_TO_THE_RIGHT = 4
+
 
 # Misc
 DEVNULL = "2> /dev/null"

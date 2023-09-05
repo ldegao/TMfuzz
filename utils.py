@@ -7,7 +7,6 @@ import sys
 import numpy as np
 
 import constants
-import globals as g
 import constants as c
 import config
 
@@ -58,7 +57,7 @@ def get_valid_xy_range(town):
         with open(os.path.join("town_info", town + ".json")) as fp:
             town_data = json.load(fp)
     except:
-        return (-999, 999, -999, 999)
+        return -999, 999, -999, 999
 
     x_list = []
     y_list = []
@@ -66,7 +65,7 @@ def get_valid_xy_range(town):
         x_list.append(town_data[coord][0])
         y_list.append(town_data[coord][1])
 
-    return (min(x_list), max(x_list), min(y_list), max(y_list))
+    return min(x_list), max(x_list), min(y_list), max(y_list)
 
 
 def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
@@ -134,48 +133,40 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
 
 
 def connect(conf):
-    # global client, tm
-    g.client = carla.Client(conf.sim_host, conf.sim_port)
+    client = carla.Client(conf.sim_host, conf.sim_port)
     print("Connecting to %s:%d" % (conf.sim_host, conf.sim_port))
-    g.client.set_timeout(10.0)
+    client.set_timeout(10.0)
     try:
-        g.client.get_server_version()
-    except Exception as e:
+        client.get_server_version()
+    except Exception:
         print("[-] Error: Check client connection.")
         sys.exit(-1)
     if conf.debug:
-        print("[debug] Connected to:", g.client)
-    print(conf.sim_tm_port)
-    g.tm = g.client.get_trafficmanager(conf.sim_tm_port)
-    g.tm.set_synchronous_mode(True)
-    g.tm.set_random_device_seed(0)
-    if conf.debug:
-        print("[debug] Traffic Manager Server:", g.tm)
+        print("[debug] Connected to:", client)
 
-    return g.client, g.tm
+    return client
 
 
-def switch_map(conf, town):
+def switch_map(conf, town, client):
     """
     Switch map in the simulator and retrieve legitimate waypoints (a list of
     carla.Transform objects) in advance.
     """
 
-    assert (g.client is not None)
+    # assert (g.client is not None)
 
     try:
-        world = g.client.get_world()
+        world = client.get_world()
         # if world.get_map().name != town: # force load every time
         if conf.debug:
             print("[debug] Switching town to {} (slow)".format(town))
-        g.client.set_timeout(20)  # Handle sluggish loading bug
-        g.client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
+        client.set_timeout(20)  # Handle sluggish loading bug
+        client.load_world(str(town))  # e.g., "/Game/Carla/Maps/Town01"
         if conf.debug:
             print("[debug] Switched")
-        g.client.set_timeout(10.0)
+        client.set_timeout(10.0)
 
         town_map = world.get_map()
-        g.town_map = town_map
 
     except Exception as e:
         print("[-] Error:", e)
@@ -198,21 +189,8 @@ def get_angle_between_vectors(vector1, vector2):
         return math.degrees(math.acos(cos_angle))
 
 
-def set_autopilot(vehicle, nav_type=c.BASIC_AGENT, sp_location=None, wp_location=None, world=None):
-    #
-    if nav_type == c.BASIC_AGENT:
-        vehicle.set_autopilot(True, g.tm.get_port())
-        g.tm.ignore_lights_percentage(vehicle, 0)
-        g.tm.ignore_signs_percentage(vehicle, 0)
-        g.tm.ignore_vehicles_percentage(vehicle, 0)
-        g.tm.ignore_walkers_percentage(vehicle, 0)
-        g.tm.auto_lane_change(vehicle, True)
-        g.tm.vehicle_percentage_speed_difference(vehicle, 10)
-        # todo:Path selection through network topology
-        # g.tm.set_route(vehicle, ["Left"])
-        vehicle.set_simulate_physics(True)
-        return None
-    elif nav_type == constants.BEHAVIOR_AGENT:
+def set_autopilot(vehicle, nav_type=c.BEHAVIOR_AGENT, sp_location=None, wp_location=None, world=None):
+    if nav_type == constants.BEHAVIOR_AGENT:
         world.tick()  # sync once with simulator
         vehicle.set_simulate_physics(True)
         agent = BehaviorAgent(
@@ -282,13 +260,10 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
 
 
 def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=None):
-    if actor.nav_type == c.BASIC_AGENT:
-        actor.instance.set_autopilot(False, g.tm.get_port())
-    elif actor.nav_type == c.BEHAVIOR_AGENT:
-        for agent_tuple in agents_now:
-            if agent_tuple[1] == actor.instance:
-                agents_now.remove(agent_tuple)
-                break
+    for agent_tuple in agents_now:
+        if agent_tuple[1] == actor.instance:
+            agents_now.remove(agent_tuple)
+            break
     actor_vehicles.remove(actor.instance)
     actor.instance.destroy()
     actors_now.remove(actor)
@@ -322,10 +297,9 @@ def _on_invasion(event, state):
     # lane_types = set(x.type for x in event.crossed_lane_markings)
     # text = ['%r' % str(x).split()[-1] for x in lane_types]
     # self.hud.notification('Crossed line %s' % ' and '.join(text))
-
-    if event.frame > state.first_frame_id + state.num_frames:
-        print("get!")
-        return
+    # if event.frame > state.first_frame_id + state.num_frames:
+    #     print("get!")
+    #     return
     crossed_lanes = event.crossed_lane_markings
     for crossed_lane in crossed_lanes:
         if crossed_lane.lane_change == carla.LaneChange.NONE:
