@@ -1,4 +1,6 @@
-import os, sys, glob
+import os
+import sys
+
 import constants as c
 
 
@@ -41,6 +43,13 @@ class Config:
     """
 
     def __init__(self):
+        self.score_dir = None
+        self.rosbag_dir = None
+        self.cam_dir = None
+        self.meta_file = None
+        self.cov_dir = None
+        self.error_dir = None
+        self.queue_dir = None
         self.debug = True
 
         # simulator config
@@ -49,6 +58,8 @@ class Config:
         self.sim_tm_port = 0
 
         # Fuzzer config
+        self.topo_k = 2
+        self.immobile_percentage = 0  # the percentage of the actors is immobile forever
         self.max_cycles = 0
         self.max_mutation = 0
         self.num_dry_runs = 1
@@ -91,14 +102,14 @@ class Config:
         self.rosbag_dir = os.path.join(self.out_dir, "rosbags")
         self.score_dir = os.path.join(self.out_dir, "scores")
 
-    def enqueue_seed_scenarios(self):
-        try:
-            seed_scenarios = os.listdir(self.seed_dir)
-        except:
-            print("[-] Error - cannot find seed directory ({})".format(self.seed_dir))
-            sys.exit(-1)
-
-        queue = [seed for seed in seed_scenarios if not seed.startswith(".")
-                 and seed.endswith(".json")]
-
-        return queue
+    # def enqueue_seed_scenarios(self):
+    #     try:
+    #         seed_scenarios = os.listdir(self.seed_dir)
+    #     except:
+    #         print("[-] Error - cannot find seed directory ({})".format(self.seed_dir))
+    #         sys.exit(-1)
+    #
+    #     queue = [seed for seed in seed_scenarios if not seed.startswith(".")
+    #              and seed.endswith(".json")]
+    #
+    #     return queue

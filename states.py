@@ -11,6 +11,10 @@ class State:
 
     def __init__(self):
         # exec states
+        self.other = None
+        self.client = None
+        self.world = None
+        self.G = None
         self.loop = 0
         self.mutation = 0
         self.first_frame_id = 0
@@ -47,7 +51,6 @@ class State:
         self.cont_throttle = []
         self.cont_brake = []
         self.cont_steer = []
-
         self.steer_angle_list = []
         self.yaw_list = []
         self.yaw_rate_list = []
@@ -56,10 +59,6 @@ class State:
 
         self.min_dist = 99999
 
-        # score
-        self.deductions = {}
-
-        # debug info
         self.autoware_cmd = ""
         self.autoware_goal = ""
         self.drawn_points = set()
