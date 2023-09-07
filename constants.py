@@ -37,8 +37,8 @@ WAIT_AUTOWARE_NUM_TOPICS = 208
 # Actors
 NULL = -1  # special type for traction testing
 VEHICLE = 0
-WALKER = 1
-ACTOR_LIST = [VEHICLE, WALKER]
+PEDESTRIAN = 1
+ACTOR_LIST = [VEHICLE, PEDESTRIAN]
 ACTOR_NAMES = ["vehicle", "walker"]
 
 # Actor Navigation Type
@@ -54,11 +54,11 @@ VEHICLE_MAX_SPEED = 30  # multiplied with forward vector
 WALKER_MAX_SPEED = 10  # m/s
 
 # # Puddle Attributes
-# PROB_PUDDLE = 25  # probability of adding a new puddle
-# PUDDLE_MAX_SIZE = 500  # centimeters
+# PROB_PUDDLE = 25 # probability of adding a new puddle
+# PUDDLE_MAX_SIZE = 500 # centimeters
 
 # Maneuver Attributes
-FRAMES_PER_TIMESTEP = 100  # 5 seconds (tentative)
+FRAMES_PER_TIMESTEP = 100  # Five seconds (tentative)
 
 # Number of waypoints per town
 NUM_WAYPOINTS = {

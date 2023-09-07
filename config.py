@@ -69,6 +69,7 @@ class Config:
         self.no_traffic_lights = False
 
         # Fuzzing metadata
+        self.town = None
         self.cur_time = None
         self.determ_seed = None
         self.out_dir = None
