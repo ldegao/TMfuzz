@@ -14,44 +14,29 @@ import carla
 
 
 class Actor:
-    actor_id = 0
-    actor_type = 0
-    nav_type = 0
-    actor_bp = None
-    spawn_point = None
-    dest_point = None
-    speed = 0
-    weight = 0
-    spawn_frame = 0
-    max_weight_frame = 0
-    spawn_stuck_frame = 0
-    # Indicates the position relative to EGO when the vehicle weight is maximum
-    max_weight_loc = -1
-    max_weight_lane = -1
-    player_lane_change = None
-    instance = None
-    is_player = False
-    fresh = True
-    ego_state = None
+    actor_id: int
+    actor_type: int
+    actor_bp = carla.ActorBlueprint
+    spawn_point = carla.Waypoint
+    speed: float
+    spawn_stuck_frame: int
+    instance: carla.Actor
+    ego_loc: carla.Location
+    fresh: bool
 
-    sensor_collision = None
-    sensor_lane_invasion = None
+    sensor_collision: carla.Actor
+    sensor_lane_invasion: carla.Actor
 
-    def __init__(self, actor_type, nav_type, spawn_point, dest_point=None, actor_id=0, speed=0, ego_loc=None,
-                 ego_vel=None, spawn_frame=0, actor_bp=None, spawn_stuck_frame=0, agent=None, wp=None):
-        self.spawn_stuck_frame = spawn_stuck_frame
-        self.spawn_frame = spawn_frame
-        self.actor_type = actor_type
-        self.nav_type = nav_type
-        self.spawn_point = spawn_point
-        self.wp = wp
-        self.dest_point = dest_point
-        self.speed = speed
+    def __init__(self, actor_type, spawn_point, actor_id=0, speed=0, ego_loc=None,
+                 actor_bp=None, spawn_stuck_frame=0):
         self.actor_id = actor_id
-        self.ego_loc = ego_loc
-        self.ego_vel = ego_vel
+        self.actor_type = actor_type
         self.actor_bp = actor_bp
-        self.agent = agent
+        self.spawn_point = spawn_point
+        self.speed = speed
+        self.spawn_stuck_frame = spawn_stuck_frame
+        self.ego_loc = ego_loc
+        self.fresh = True
 
     def safe_check(self, another_actor, width=1.5, adjust=2):
         """
@@ -128,6 +113,20 @@ class Actor:
         sensor_lane_invasion.listen(lambda event: _on_invasion(event, state))
         sensors.append(sensor_lane_invasion)
         self.sensor_lane_invasion = sensor_lane_invasion
+
+
+class Pedestrian(Actor):
+    def __init__(self, actor_id, spawn_point, speed, ego_loc, spawn_stuck_frame):
+        super().__init__(actor_type=c.PEDESTRIAN, spawn_point=spawn_point,
+                         actor_id=actor_id, speed=speed, ego_loc=ego_loc,
+                         spawn_stuck_frame=spawn_stuck_frame)
+
+
+class Vehicle(Actor):
+    def __init__(self, actor_id, spawn_point, speed, ego_loc, spawn_stuck_frame):
+        super().__init__(actor_type=c.VEHICLE, spawn_point=spawn_point,
+                         actor_id=actor_id, speed=speed, ego_loc=ego_loc,
+                         spawn_stuck_frame=spawn_stuck_frame)
 
 
 def calculate_safe_rectangle(position, speed, acceleration, lane_width):
