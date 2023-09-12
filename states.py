@@ -59,6 +59,7 @@ class State:
 
         self.min_dist = 99999
 
+        self.proc_state = None
         self.autoware_cmd = ""
         self.autoware_goal = ""
         self.drawn_points = set()

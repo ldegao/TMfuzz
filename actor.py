@@ -37,6 +37,9 @@ class Actor:
         self.spawn_stuck_frame = spawn_stuck_frame
         self.ego_loc = ego_loc
         self.fresh = True
+        self.instance = None
+        self.sensor_collision = None
+        self.sensor_lane_invasion = None
 
     def safe_check(self, another_actor, width=1.5, adjust=2):
         """
