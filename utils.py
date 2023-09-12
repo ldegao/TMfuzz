@@ -156,6 +156,7 @@ def switch_map(conf, town, client):
     # assert (g.client is not None)
 
     try:
+
         world = client.get_world()
         # if world.get_map().name != town: # force load every time
         if conf.debug:

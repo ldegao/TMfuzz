@@ -7,7 +7,7 @@ import time
 
 import carla
 import numpy as np
-
+import deap.base
 from simulate import simulate
 import constants as c
 import utils
@@ -31,7 +31,27 @@ def get_seed_wp_transform(seed):
     return wp
 
 
+class ScenarioFitness(deap.base.Fitness):
+    """
+    Class to represent weight of each fitness function
+    """
+    # minimize closest distance between pair of ADC
+    # maximize number of unique decisions being made
+    # maximize pairs of conflict trajectory
+    # maximize unique violation
+    weights = (-1.0, 1.0, 1.0, 1.0)
+    """
+    :note: minimize closest distance, maximize number of decisions,
+      maximize pairs having conflicting trajectory,
+      maximize unique violation. Refer to our paper for more
+      detailed explanation.
+    """
+
+
 class Scenario:
+    generation_id: int = -1
+    scenario_id: int = -1
+    fitness: deap.base.Fitness = ScenarioFitness()
     seed_data = {}
     town = None
     weather = {}
@@ -48,7 +68,6 @@ class Scenario:
         self.log_filename = None
         self.conf = conf
         self.seed_data = seed_data
-        client = utils.connect(self.conf)
 
         self.weather["cloud"] = 0
         self.weather["rain"] = 0
@@ -68,7 +87,7 @@ class Scenario:
             "Rotation": (self.seed_data["roll"], self.seed_data["yaw"], self.seed_data["pitch"])
         }
         self.town = self.seed_data["map"]
-        utils.switch_map(conf, self.town, client)
+        # utils.switch_map(conf, self.town, client)
 
         print("[+] test case initialized")
 

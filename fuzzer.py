@@ -9,7 +9,13 @@ import json
 # from collections import deque
 import concurrent.futures
 import math
+from typing import List
+from subprocess import Popen, PIPE
 import datetime
+from copy import deepcopy
+
+import docker
+import numpy as np
 from deap import base, tools, algorithms
 import signal
 import traceback
@@ -17,10 +23,11 @@ import networkx as nx
 from shapely.geometry import LineString
 import config
 import constants as c
+from actor import Actor
+from scenario import Scenario
 import states
-
-import scenario
 import utils
+from simulate import autoware_goal_publish
 
 config.set_carla_api_path()
 try:
@@ -31,9 +38,11 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
+client, world, G = None, None, None
+state = states.State()
 
 def create_test_scenario(conf, seed_dict):
-    return scenario.Scenario(conf, seed_dict)
+    return Scenario(conf, seed_dict)
 
 
 def handler(signum, frame):
@@ -159,108 +168,90 @@ def set_args():
     argument_parser.add_argument("--no-traffic-lights", action="store_true")
     return argument_parser
 
-#
-# def eval_scenario(ind: Scenario):
-#     g_name = f'Generation_{ind.gid:05}'
-#     s_name = f'Scenario_{ind.cid:05}'
-#     srunner = ScenarioRunner.get_instance()
-#     srunner.set_scenario(ind)
-#     srunner.init_scenario()
-#     runners = srunner.run_scenario(g_name, s_name, True)
-#
-#     obs_routing_map = dict()
-#     for a, r in runners:
-#         obs_routing_map[a.nid] = r.routing_str
-#
-#     unique_violation = 0
-#     duplicate_violation = 0
-#     min_distance = list()
-#     decisions = set()
-#     for a, r in runners:
-#         min_distance.append(a.get_min_distance())
-#         decisions.update(a.get_decisions())
-#         c_name = a.container.container_name
-#         r_name = f"{c_name}.{s_name}.00000"
-#         record_path = os.path.join(RECORDS_DIR, g_name, s_name, r_name)
-#         ra = RecordAnalyzer(record_path)
-#         ra.analyze()
-#         for v in ra.get_results():
-#             main_type = v[0]
-#             sub_type = v[1]
-#             if main_type == 'collision':
-#                 if sub_type < 100:
-#                     # pedestrian collisoin
-#                     related_data = frozenset(
-#                         [r.routing_str, ind.pd_section.pds[sub_type].cw_id])
-#                     sub_type = 'A&P'
-#                 else:
-#                     # adc to adc collision
-#                     related_data = frozenset(
-#                         [r.routing_str, obs_routing_map[sub_type]]
-#                     )
-#                     sub_type = 'A&A'
-#             else:
-#                 related_data = r.routing_str
-#             if ViolationTracker.get_instance().add_violation(
-#                     gname=g_name,
-#                     sname=s_name,
-#                     record_file=record_path,
-#                     mt=main_type,
-#                     st=sub_type,
-#                     data=related_data
-#             ):
-#                 unique_violation += 1
-#
-#     ma = MapParser.get_instance()
-#     conflict = ind.has_ad_conflict()
-#
-#     if unique_violation == 0:
-#         # no unique violation, remove records
-#         remove_record_files(g_name, s_name)
-#         pass
-#
-#     return min(min_distance), len(decisions), conflict, unique_violation
-#
-#
-# # MUTATION OPERATOR
-#
-#
-# def mut_ad_section(ind: ADSection):
-#     mut_pb = random()
-#
-#     # remove a random 1
-#     if mut_pb < 0.1 and len(ind.adcs) > 2:
-#         shuffle(ind.adcs)
-#         ind.adcs.pop()
-#         ind.adjust_time()
-#         return ind
-#
-#     # add a random 1
-#     if mut_pb < 0.4 and len(ind.adcs) < MAX_ADC_COUNT:
-#         while True:
-#             new_ad = ADAgent.get_one()
-#             if ind.has_conflict(new_ad) and ind.add_agent(new_ad):
-#                 break
-#         ind.adjust_time()
-#         return ind
-#
-#     # mutate a random agent
-#     index = randint(0, len(ind.adcs) - 1)
-#     routing = ind.adcs[index].routing
-#     original_adc = ind.adcs.pop(index)
-#     mut_counter = 0
-#     while True:
-#         if ind.add_agent(ADAgent.get_one_for_routing(routing)):
-#             break
-#         mut_counter += 1
-#         if mut_counter == 5:
-#             # mutation kept failing, dont mutate
-#             ind.add_agent(original_adc)
-#             pass
-#     ind.adjust_time()
-#     return ind
-#
-#
+
+def evaluation(ind: Scenario):
+    g_name = f'Generation_{ind.generation_id:05}'
+    s_name = f'Scenario_{ind.scenario_id:05}'
+    # todo: run test here
+    ret = None
+    # for test
+    mutate_weather_fixed(ind)
+    signal.alarm(12 * 60)  # timeout after 12 min
+    try:
+        ret = ind.run_test(state)
+    except Exception as e:
+        if e.args[0] == "HANG":
+            print("[-] simulation hanging. abort.")
+            ret = -1
+        else:
+            print("[-] run_test error:")
+            traceback.print_exc()
+    signal.alarm(0)
+    if ret is None:
+        pass
+    elif ret == -1:
+        print("Spawn / simulation failure - don't add round cnt")
+        # round_cnt -= 1
+    elif ret == 1:
+        print("fuzzer - found an error")
+    elif ret == 128:
+        print("Exit by user request")
+        exit(0)
+    else:
+        if ret == -1:
+            print("[-] Fatal error occurred during test")
+            exit(-1)
+    # mutation loop ends
+    if ind.found_error:
+        print("[-]error detected. start a new cycle with a new seed")
+    # todo: get violation here
+
+    return 1, 1, 1, 1
+
+
+# MUTATION OPERATOR
+
+
+def mut_actor_list(ind: List[Actor]):
+    mut_pb = random.random()
+
+    # todo:remove a random 1
+
+    # if mut_pb < 0.1 and len(ind.adcs) > 2:
+    #     random.shuffle(ind.adcs)
+    #     ind.adcs.pop()
+    #     ind.adjust_time()
+    #     return ind
+
+    # todo:add a random 1
+
+    # if mut_pb < 0.4
+    #     while True:
+    #         new_ad = ADAgent.get_one()
+    #         if ind.has_conflict(new_ad) and ind.add_agent(new_ad):
+    #             break
+    #     ind.adjust_time()
+    #     return ind
+
+    # todo:mutate a random agent
+
+    # index = random.randint(0, len(ind.adcs) - 1)
+    # routing = ind.adcs[index].routing
+    # original_adc = ind.adcs.pop(index)
+    # mut_counter = 0
+    # while True:
+    #     if ind.add_agent(ADAgent.get_one_for_routing(routing)):
+    #         break
+    #     mut_counter += 1
+    #     if mut_counter == 5:
+    #         # mutation kept failing, dont mutate
+    #         ind.add_agent(original_adc)
+    #         pass
+    # ind.adjust_time()
+
+    return ind
+
+
 # def mut_pd_section(ind: PDSection):
 #     if len(ind.pds) == 0:
 #         ind.add_agent(PDAgent.get_one())
@@ -269,7 +260,7 @@ def set_args():
 #     mut_pb = random()
 #     # remove a random
 #     if mut_pb < 0.2 and len(ind.pds) > 0:
-#         shuffle(ind.pds)
+#         random.shuffle(ind.pds)
 #         ind.pds.pop()
 #         return ind
 #
@@ -279,7 +270,7 @@ def set_args():
 #         return ind
 #
 #     # mutate a random
-#     index = randint(0, len(ind.pds) - 1)
+#     index = random.randint(0, len(ind.pds) - 1)
 #     ind.pds[index] = PDAgent.get_one_for_cw(ind.pds[index].cw_id)
 #     return ind
 #
@@ -296,73 +287,74 @@ def set_args():
 #         ind.duration_g = TCSection.get_random_duration_g()
 #
 #     return TCSection.get_one()
-#
-#
-# def mut_scenario(ind: Scenario):
-#     mut_pb = random()
-#     if mut_pb < 1 / 3:
-#         ind.ad_section = mut_ad_section(ind.ad_section)
-#     elif mut_pb < 2 / 3:
-#         ind.pd_section = mut_pd_section(ind.pd_section)
-#     else:
-#         ind.tc_section = mut_tc_section(ind.tc_section)
-#     return ind,
-#
-#
-# # CROSSOVER OPERATOR
-#
-# def cx_ad_section(ind1: ADSection, ind2: ADSection):
-#     # swap entire ad section
-#     cx_pb = random()
-#     if cx_pb < 0.05:
-#         return ind2, ind1
-#
-#     cxed = False
-#
-#     for adc1 in ind1.adcs:
-#         for adc2 in ind2.adcs:
-#             if adc1.routing_str == adc2.routing_str:
-#                 # same routing in both parents
-#                 # swap start_s and start_t
-#                 if random() < 0.5:
-#                     adc1.start_s = adc2.start_s
-#                 else:
-#                     adc1.start_t = adc2.start_t
-#                 mutated = True
-#     if cxed:
-#         ind1.adjust_time()
-#         return ind1, ind2
-#
-#     if len(ind1.adcs) < MAX_ADC_COUNT:
-#         for adc in ind2.adcs:
-#             if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
-#                 # add an agent from parent 2 to parent 1 if there exists a conflict
-#                 ind1.adjust_time()
-#                 return ind1, ind2
-#
-#     # if none of the above happened, no common adc, no conflict in either
-#     # combine to make a new populations
-#     available_adcs = ind1.adcs + ind2.adcs
-#     shuffle(available_adcs)
-#     split_index = randint(2, min(len(available_adcs), MAX_ADC_COUNT))
-#
-#     result1 = ADSection([])
-#     for x in available_adcs[:split_index]:
-#         result1.add_agent(deepcopy(x))
-#
-#     # make sure offspring adc count is valid
-#
-#     while len(result1.adcs) > MAX_ADC_COUNT:
-#         result1.adcs.pop()
-#
-#     while len(result1.adcs) < 2:
-#         new_ad = ADAgent.get_one()
-#         if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
-#             break
-#     result1.adjust_time()
-#     return result1, ind2
-#
-#
+
+
+def mut_scenario(ind: Scenario):
+    mut_pb = random.random()
+    if mut_pb < 1 / 3:
+        ind.actor_list = mut_actor_list(ind.actor_list)
+    # elif mut_pb < 2 / 3:
+    #     ind.pd_section = mut_pd_section(ind.pd_section)
+    # else:
+    #     ind.tc_section = mut_tc_section(ind.tc_section)
+    return ind,
+
+
+# CROSSOVER OPERATOR
+
+def cx_actor(ind1: List[Actor], ind2: List[Actor]):
+    # todo: swap entire ad section
+    # cx_pb = random.random()
+    # if cx_pb < 0.05:
+    #     return ind2, ind1
+    #
+    # cxed = False
+    #
+    # for adc1 in ind1.adcs:
+    #     for adc2 in ind2.adcs:
+    #         if adc1.routing_str == adc2.routing_str:
+    #             # same routing in both parents
+    #             # swaps start_s and start_t
+    #             if random.random() < 0.5:
+    #                 adc1.start_s = adc2.start_s
+    #             else:
+    #                 adc1.start_t = adc2.start_t
+    #             mutated = True
+    # if cxed:
+    #     ind1.adjust_time()
+    #     return ind1, ind2
+    #
+    # if len(ind1.adcs) < MAX_ADC_COUNT:
+    #     for adc in ind2.adcs:
+    #         if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
+    #             # add an agent from parent 2 to parent 1 if there exists a conflict
+    #             ind1.adjust_time()
+    #             return ind1, ind2
+    #
+    # # if none of the above happened, no common adc, no conflict in either
+    # # combine to make a new populations
+    # available_adcs = ind1.adcs + ind2.adcs
+    # random.shuffle(available_adcs)
+    # split_index = random.randint(2, min(len(available_adcs), MAX_ADC_COUNT))
+    #
+    # result1 = ADSection([])
+    # for x in available_adcs[:split_index]:
+    #     result1.add_agent(deepcopy(x))
+    #
+    # # make sure offspring adc count is valid
+    #
+    # while len(result1.adcs) > MAX_ADC_COUNT:
+    #     result1.adcs.pop()
+    #
+    # while len(result1.adcs) < 2:
+    #     new_ad = ADAgent.get_one()
+    #     if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
+    #         break
+    # result1.adjust_time()
+    # return result1, ind2
+    return Actor, Actor
+
+
 # def cx_pd_section(ind1: PDSection, ind2: PDSection):
 #     cx_pb = random()
 #     if cx_pb < 0.1:
@@ -371,14 +363,14 @@ def set_args():
 #     available_pds = ind1.pds + ind2.pds
 #
 #     result1 = PDSection(
-#         sample(available_pds, k=randint(0, min(MAX_PD_COUNT, len(available_pds)))))
+#         sample(available_pds, k=random.randint(0, min(MAX_PD_COUNT, len(available_pds)))))
 #     result2 = PDSection(
-#         sample(available_pds, k=randint(0, min(MAX_PD_COUNT, len(available_pds)))))
+#         sample(available_pds, k=random.randint(0, min(MAX_PD_COUNT, len(available_pds)))))
 #     return result1, result2
 #
 #
 # def cx_tc_section(ind1: TCSection, ind2: TCSection):
-#     cx_pb = random()
+#     cx_pb = random.random()
 #     if cx_pb < 0.1:
 #         return ind2, ind1
 #     elif cx_pb < 0.4:
@@ -388,96 +380,248 @@ def set_args():
 #     else:
 #         ind1.duration_g, ind2.duration_g = ind2.duration_g, ind1.duration_g
 #     return ind1, ind2
-#
-#
-# def cx_scenario(ind1: Scenario, ind2: Scenario):
-#     cx_pb = random()
-#     if cx_pb < 0.6:
-#         ind1.ad_section, ind2.ad_section = cx_ad_section(
-#             ind1.ad_section, ind2.ad_section
-#         )
-#     elif cx_pb < 0.6 + 0.2:
-#         ind1.pd_section, ind2.pd_section = cx_pd_section(
-#             ind1.pd_section, ind2.pd_section
-#         )
-#     else:
-#         ind1.tc_section, ind2.tc_section = cx_tc_section(
-#             ind1.tc_section, ind2.tc_section
-#         )
-#     return ind1, ind2
-#
+
+
+def cx_scenario(ind1: Scenario, ind2: Scenario):
+    cx_pb = random.random()
+    if cx_pb < 0.6:
+        ind1.actor_list, ind2.actor_list = cx_actor(
+            ind1.actor_list, ind2.actor_list
+        )
+    # elif cx_pb < 0.6 + 0.2:
+    #     ind1.pd_section, ind2.pd_section = cx_pd_section(
+    #         ind1.pd_section, ind2.pd_section
+    #     )
+    # else:
+    #     ind1.tc_section, ind2.tc_section = cx_tc_section(
+    #         ind1.tc_section, ind2.tc_section
+    #     )
+    return ind1, ind2
+
+
+def autoware_launch(carla_error, world, conf, town_map):
+    username = os.getenv("USER")
+    autoware_container = None
+    # print("before launching autoware", time.time())
+    num_walker_topics = 0
+    # clock = pygame.time.Clock()
+    docker_client = docker.from_env()
+    proj_root = config.get_proj_root()
+    xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
+    vol_dict = {
+        "{}/carla-autoware/autoware-contents".format(proj_root): {
+            "bind": "/home/autoware/autoware-contents",
+            "mode": "ro"
+        },
+        "/tmp/.X11-unix": {
+            "bind": "/tmp/.X11-unix",
+            "mode": "rw"
+        },
+        f"/home/{username}/.Xauthority": {
+            "bind": xauth,
+            "mode": "rw"
+        },
+        "/tmp/fuzzerdata/{}".format(username): {
+            "bind": "/tmp/fuzzerdata",
+            "mode": "rw"
+        }
+    }
+    env_dict = {
+        "DISPLAY": os.getenv("DISPLAY"),
+        "XAUTHORITY": xauth,
+        "QT_X11_NO_MITSHM": 1
+    }
+    list_spawn_points = town_map.get_spawn_points()
+    sp = list_spawn_points[6]
+    loc = sp.location
+    rot = sp.rotation
+    sp_str = "{},{},{},{},{},{}".format(loc.x, loc.y, loc.z, rot.roll,
+                                        rot.pitch, rot.yaw * -1)
+    autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
+    print(autoware_cla)
+    state.autoware_cmd = autoware_cla
+    while autoware_container is None:
+        try:
+            autoware_container = docker_client.containers.run(
+                "carla-autoware:improved",
+                command=autoware_cla,
+                detach=True,
+                auto_remove=True,
+                name="autoware-{}".format(os.getenv("USER")),
+                volumes=vol_dict,
+                privileged=True,
+                network_mode="host",
+                # runtime="nvidia",
+                device_requests=[
+                    docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
+                environment=env_dict,
+            )
+        except docker.errors.APIError as e:
+            print("[-] Could not launch docker:", e)
+            if "Conflict" in str(e):
+                os.system("docker rm -f autoware-{}".format(
+                    os.getenv("USER")))
+                killed = True
+            time.sleep(1)
+        except:
+            # https://github.com/docker/for-mac/issues/4957
+            print("[-] Fatal error. Check dmesg")
+            exit(-1)
+    while True:
+        running_container_list = docker_client.containers.list()
+        if autoware_container in running_container_list:
+            break
+        print("[*] Waiting for Autoware container to be launched")
+        time.sleep(1)
+
+    # wait for autoware bridge to spawn player vehicle
+    autoware_agent_found = False
+    i = 0
+    # while True:
+    #     print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
+    #     vehicles = world.get_actors().filter("*vehicle.*")
+    #     for vehicle in vehicles:
+    #         if vehicle.attributes["role_name"] == "ego_vehicle":
+    #             autoware_agent_found = True
+    #             player = vehicle
+    #             print("\n    [*] found [{}] at {}".format(player.id,
+    #                                                       player.get_location()))
+    #             break
+    #     if autoware_agent_found:
+    #         break
+    #     if i > 60:
+    #         print("\n something is wrong")
+    #         exit(-1)
+    #     i += 1
+
+    i = 0
+    time.sleep(3)
+    while True:
+        proc1 = Popen(["rostopic", "list"], stdout=PIPE)
+        proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
+        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
+        output = proc2.communicate()[0]
+        print(int(output))
+        if int(output) >= c.WAIT_AUTOWARE_NUM_TOPICS:
+            # FIXME: hardcoding the num of topics :/
+            # on top of that, each vehicle adds one topic, and any walker
+            # contribute to two pedestrian topics.
+            print("")
+            break
+        i += 1
+        if i == 60:
+            carla_error = True
+            print("    [-] something went wrong while launching Autoware.")
+            raise KeyboardInterrupt
+        time.sleep(1)
+        world.tick()
+    proc1.stdout.close()
+    proc2.stdout.close()
+    # exec a detached process that monitors the output of Autoware's
+    # decision-maker state, with which we can get an idea of when Autoware
+    # thinks it has reached the goal
+    state.proc_state = Popen(["rostopic echo /decision_maker/state"],
+                             shell=True, stdout=PIPE, stderr=PIPE)
+    # set_camera(conf, player, spectator)
+    # Wait for Autoware (esp, for Town04)
+    # i = 0
+    # while True:
+    #     output_state = state.proc_state.stdout.readline()
+    #     if b"---" in output_state:
+    #         output_state = state.proc_state.stdout.readline()
+    #     if b"VehicleReady" in output_state:
+    #         break
+    #     i += 1
+    #     if i == 45:
+    #         carla_error = True
+    #         print("    [-] something went wrong while launching Autoware.")
+    #         raise KeyboardInterrupt
+    #     time.sleep(1)
+    return carla_error, state.proc_state
+
 
 def main():
     # STEP 0: init env
+    global client, world, G
+
+    carla_error = False
     conf, town, town_map, client, world, G = init_env()
+    state.client = client
+    state.world = world
+    state.G = G
+    if conf.agent_type == c.AUTOWARE:
+        carla_error, state.proc_state = autoware_launch(carla_error, world, conf, town)
+    population = []
     # GA Hyperparameters
     POP_SIZE = 10  # amount of population
     OFF_SIZE = 10  # number of offspring to produce
-    CXPB = 0.8  # crossover probablitiy
+    CXPB = 0.8  # crossover probability
     MUTPB = 0.2  # mutation probability
 
     toolbox = base.Toolbox()
-    # toolbox.register("evaluate", eval_scenario)
-    # toolbox.register("mate", cx_scenario)
-    # toolbox.register("mutate", mut_scenario)
+    toolbox.register("evaluate", evaluation)
+    toolbox.register("mate", cx_scenario)
+    toolbox.register("mutate", mut_scenario)
     toolbox.register("select", tools.selNSGA2)
+    hof = tools.ParetoFront()
+    # Evaluate Initial Population
+    print(f' ====== Analyzing Initial Population ====== ')
+    invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+    stats.register("avg", np.mean, axis=0)
+    stats.register("max", np.max, axis=0)
+    stats.register("min", np.min, axis=0)
+    logbook = tools.Logbook()
+    logbook.header = 'gen', 'avg', 'max', 'min'
+    # begin a generational process
+    curr_gen = 0
+    # init some seed if seed pool is empty
+    for i in range(POP_SIZE):
+        seed_dict = seed_initialize(town, town_map)
+        # Creates and initializes a Scenario instance based on the metadata
+        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
+            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
+            test_scenario = future.result(timeout=15)
+        population.append(test_scenario)
+    utils.switch_map(conf, town_map, client)
     while True:
         # Main loop
         # STEP 1: choice a seed in seed pool
-        # init a seed if seed pool is empty
-        seed_dict = seed_initialize(town, town_map)
-        # wait for a moment
-        time.sleep(3)
-        # STEP 2: TEST CASE INITIALIZATION
-        # Creates and initializes a Scenario instance based on the metadata
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as my_simulate:
-                future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-                test_scenario = future.result(timeout=15)
-        except concurrent.futures.TimeoutError:
-            print("Test scenario creation timed out after 15 seconds.")
-            continue
-        if conf.debug:
-            print("[debug] USING SEED FILE:", scenario)
-        while True:
-            # STEP 3: EXECUTE SIMULATION
-            ret = None
-            state = states.State()
-            state.client = client
-            state.world = world
-            state.G = G
-            # for test
-            mutate_weather_fixed(test_scenario)
-            signal.alarm(12 * 60 * 60)  # timeout after 12 hours
-            try:
-                ret = test_scenario.run_test(state)
-            except Exception as e:
-                if e.args[0] == "HANG":
-                    print("[-] simulation hanging. abort.")
-                    ret = -1
-                else:
-                    print("[-] run_test error:")
-                    traceback.print_exc()
-            signal.alarm(0)
-            if ret is None:
-                pass
-            elif ret == -1:
-                print("Spawn / simulation failure - don't add round cnt")
-                # round_cnt -= 1
-            elif ret == 1:
-                print("fuzzer - found an error")
-                break
-            elif ret == 128:
-                print("Exit by user request")
-                exit(0)
-            else:
-                if ret == -1:
-                    print("[-] Fatal error occurred during test")
-                    exit(-1)
-            # mutation loop ends
-        if test_scenario.found_error:
-            print("[-]error detected. start a new cycle with a new seed")
-            continue
+        curr_gen += 1
+        print(f' ====== GA Generation {curr_gen} ====== ')
+        # Vary the population
+        offspring = algorithms.varOr(
+            population, toolbox, OFF_SIZE, CXPB, MUTPB)
+        # update chromosome gid and cid
+        for index, d in enumerate(offspring):
+            d.gid = curr_gen
+            d.cid = index
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+        hof.update(offspring)
+        # Select the next generation population
+        population[:] = toolbox.select(population + offspring, POP_SIZE)
+        record = stats.compile(population)
+        logbook.record(gen=curr_gen, **record)
+        print(logbook.stream)
+
+        # vt.save_to_file()
+        # with open('./data/log.bin', 'wb') as fp:
+        #     pickle.dump(logbook, fp)
+        # with open('./data/hof.bin', 'wb') as fp:
+        #     pickle.dump(hof, fp)
+
+        # curr_time = datetime.now()
+        # tdelta = (curr_time - start_time).total_seconds()
+        # if tdelta / 3600 > RUN_FOR_HOUR:
+        #     break
 
 
 def seed_initialize(town, town_map):
