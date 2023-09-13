@@ -41,13 +41,14 @@ from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=im
 username = os.getenv("USER")
 
 
-def simulate(conf, state, sp, wp, weather_dict, actor_list):
+def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     # simulate() is always called by Scenario instance,
     # so we won't need to switch a map unless a new instance is created.
     # switch_map(conf, client, town)
 
     # always reuse the existing client instance
-    assert (state.client is not None)
+    assert (exec_state.client is not None)
+    # pdb.set_trace()
     retval = 0
     wait_until_end = 0
     max_wheels_for_non_motorized = 2
@@ -66,8 +67,8 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
     autoware_stuck = 0
     pub_cmd = None
 
-    client = state.client
-    world = state.world
+    client = exec_state.client
+    world = exec_state.world
     goal_loc = wp.location
     goal_rot = wp.rotation
 
@@ -134,11 +135,11 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
 
                 # Check destination
                 break_flag, retval = check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, conf,
-                                                       goal_loc, player_loc, state.proc_state, retval,
+                                                       goal_loc, player_loc, exec_state.proc_state, retval,
                                                        s_started, sensors, speed, state)
                 # Delete useless vehicles for any frame
                 delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_lane_id, player_loc,
-                                     player_road_id, sensors, state, town_map)
+                                     player_road_id, sensors, exec_state.G, town_map)
                 # add old vehicles for any frame
                 found_frame = add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf,
                                           found_frame, max_wheels_for_non_motorized, player_loc,
@@ -154,8 +155,7 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
                                                                            max_wheels_for_non_motorized, player_lane_id,
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
-                                                                           vel,
-                                                                           world, wp, )
+                                                                           world, wp,exec_state.G)
                 control_actor(agents_now, speed_limit)
                 if break_flag:
                     break
@@ -192,14 +192,14 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
         world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world)
         # Don't reload and exit if user requests so
         if retval == 128:
-            return retval,actor_list
+            return retval, actor_list
         else:
             if conf.debug:
                 print("[debug] reload")
             client.reload_world()
             if conf.debug:
                 print('[debug] done.')
-            return retval,actor_list
+            return retval, actor_list
 
 
 def control_actor(agents_now, speed_limit):
@@ -218,7 +218,7 @@ def control_actor(agents_now, speed_limit):
 
 def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_now, autoware_last_frames, conf, ego,
                 found_frame, frame_gap, goal_loc, goal_rot, max_wheels_for_non_motorized, player_lane_id, player_loc,
-                player_road_id, sensors, state, town_map, vehicle_bp_library, vel, world, wp):
+                player_road_id, sensors, state, town_map, vehicle_bp_library, world, wp,G):
     if conf.agent_type == c.AUTOWARE:
         frame_gap = frame_gap + state.num_frames - autoware_last_frames
         autoware_last_frames = state.num_frames
@@ -272,14 +272,14 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                 location = carla.Location(x=player_loc.x + x, y=player_loc.y + y, z=player_loc.z)
                 waypoint = town_map.get_waypoint(location, project_to_road=True,
                                                  lane_type=carla.libcarla.LaneType.Driving)
-                neighbors_A = nx.single_source_shortest_path_length(state.G,
+                neighbors_A = nx.single_source_shortest_path_length(G,
                                                                     source=(player_road_id, player_lane_id),
                                                                     cutoff=conf.topo_k)
                 neighbors_A[(player_road_id, player_lane_id)] = 0
-                neighbors_B = nx.single_source_shortest_path_length(state.G, source=(
+                neighbors_B = nx.single_source_shortest_path_length(G, source=(
                     waypoint.road_id, waypoint.lane_id), cutoff=conf.topo_k)
                 neighbors_B[(waypoint.road_id, waypoint.lane_id)] = 0
-                if not any(node in neighbors_A and node in neighbors_B for node in state.G.nodes()):
+                if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
                     repeat_times -= 1
                     continue
                 # we don't want to add bg car in junction or near it
@@ -393,7 +393,7 @@ def add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf, found_
 
 
 def delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_lane_id, player_loc, player_road_id,
-                         sensors, state, town_map):
+                         sensors, G, town_map):
     for actor in actors_now:
         vehicle = actor.instance
         vehicle_waypoint = town_map.get_waypoint(vehicle.get_location(), project_to_road=True,
@@ -405,15 +405,15 @@ def delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_la
             delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
             continue
         # 2. Delete vehicles that are topologically too far away
-        neighbors_A = nx.single_source_shortest_path_length(state.G,
+        neighbors_A = nx.single_source_shortest_path_length(G,
                                                             source=(player_road_id, player_lane_id),
                                                             cutoff=conf.topo_k)
         neighbors_A[(player_road_id, player_lane_id)] = 0
-        neighbors_B = nx.single_source_shortest_path_length(state.G,
+        neighbors_B = nx.single_source_shortest_path_length(G,
                                                             source=(vehicle_road_id, vehicle_lane_id),
                                                             cutoff=conf.topo_k)
         neighbors_B[(vehicle_road_id, vehicle_lane_id)] = 0
-        if not any(node in neighbors_A and node in neighbors_B for node in state.G.nodes()):
+        if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
             delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
 
 
@@ -642,7 +642,7 @@ def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
 
 
 def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, state,
-                world, wp):
+                   world, wp):
     # for autoware
     autoware_container = None
     player = None
@@ -713,30 +713,31 @@ def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, 
         ego.set_instance(player)
         ego.attach_collision(world, sensors, state)
         ego.attach_lane_invasion(world, sensors, state)
-        player.set_transform(sp)
+        # player.set_transform(sp)
         world.tick()
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
         i = 0
-        while True:
-            # state.proc_state = Popen(["rostopic echo /decision_maker/state"],
-            #                          shell=True, stdout=PIPE, stderr=PIPE)
-            output_state = state.proc_state.stdout.readline()
-            print(output_state)
-            if b"---" in output_state:
-                output_state = state.proc_state.stdout.readline()
-            if b"VehicleReady" in output_state:
-                break
-            if i == 30:
-                print("    [-] something went wrong while launching Autoware.")
-                raise KeyboardInterrupt
-            i +=1
-            time.sleep(1)
-        world.tick()  # sync with simulator
-        while True:
-            world.tick()  # spin until the player is moved to the sp
-            if player.get_location().distance(sp.location) < 1:
-                break
+        # while True:
+        #     # state.proc_state = Popen(["rostopic echo /decision_maker/state"],
+        #     #                          shell=True, stdout=PIPE, stderr=PIPE)
+        #     output_state = exec_state.proc_state.stdout.readline()
+        #     print(output_state)
+        #     if b"---" in output_state:
+        #         output_state = exec_state.proc_state.stdout.readline()
+        #     if b"VehicleReady" in output_state:
+        #         break
+        #     if i == 30:
+        #         print("    [-] something went wrong while launching Autoware.")
+        #         raise KeyboardInterrupt
+        #     i += 1
+        #     time.sleep(1)
+        # world.tick()  # sync with simulator
+        time.sleep(3)
+        # while True:
+        #     world.tick()  # spin until the player is moved to the sp
+        #     if player.get_location().distance(sp.location) < 1:
+        #         break
     # get vehicle's maximum steering angle
     physics_control = player.get_physics_control()
     max_steer_angle = 0

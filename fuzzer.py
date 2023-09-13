@@ -39,7 +39,8 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 client, world, G = None, None, None
-state = states.ScenarioState()
+
+exec_state = states.ExecState()
 
 
 def create_test_scenario(conf, seed_dict):
@@ -179,7 +180,8 @@ def evaluation(ind: Scenario):
     mutate_weather_fixed(ind)
     signal.alarm(12 * 60)  # timeout after 12 min
     try:
-        ret = ind.run_test(state)
+        # print("self.actor_list:", ind.actor_list)
+        ret = ind.run_test(exec_state)
     except Exception as e:
         if e.args[0] == "HANG":
             print("[-] simulation hanging. abort.")
@@ -292,8 +294,8 @@ def mut_actor_list(ind: List[Actor]):
 
 def mut_scenario(ind: Scenario):
     mut_pb = random.random()
-    if mut_pb < 1 / 3:
-        ind.actor_list = mut_actor_list(ind.actor_list)
+    # if mut_pb < 1 / 3:
+    #     ind.actor_list = mut_actor_list(ind.actor_list)
     # elif mut_pb < 2 / 3:
     #     ind.pd_section = mut_pd_section(ind.pd_section)
     # else:
@@ -385,10 +387,10 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
 
 def cx_scenario(ind1: Scenario, ind2: Scenario):
     cx_pb = random.random()
-    if cx_pb < 0.6:
-        ind1.actor_list, ind2.actor_list = cx_actor(
-            ind1.actor_list, ind2.actor_list
-        )
+    # if cx_pb < 0.6:
+    #     ind1.actor_list, ind2.actor_list = cx_actor(
+    #         ind1.actor_list, ind2.actor_list
+    #     )
     # elif cx_pb < 0.6 + 0.2:
     #     ind1.pd_section, ind2.pd_section = cx_pd_section(
     #         ind1.pd_section, ind2.pd_section
@@ -440,7 +442,7 @@ def autoware_launch(carla_error, world, conf, town_map):
                                         rot.pitch, rot.yaw * -1)
     autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
     print(autoware_cla)
-    state.autoware_cmd = autoware_cla
+    exec_state.autoware_cmd = autoware_cla
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
@@ -519,7 +521,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     # exec a detached process that monitors the output of Autoware's
     # decision-maker state, with which we can get an idea of when Autoware
     # thinks it has reached the goal
-    state.proc_state = Popen(["rostopic echo /decision_maker/state"],
+    exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
                              shell=True, stdout=PIPE, stderr=PIPE)
     # set_camera(conf, player, spectator)
     # Wait for Autoware (esp, for Town04)
@@ -536,7 +538,8 @@ def autoware_launch(carla_error, world, conf, town_map):
     #         print("    [-] something went wrong while launching Autoware.")
     #         raise KeyboardInterrupt
     #     time.sleep(1)
-    return carla_error, state.proc_state
+    time.sleep(3)
+    return carla_error
 
 
 def seed_initialize(town, town_map):
@@ -642,12 +645,9 @@ def main():
     global client, world, G
 
     carla_error = False
-    conf, town, town_map, client, world, G = init_env()
-    state.client = client
-    state.world = world
-    state.G = G
+    conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
     if conf.agent_type == c.AUTOWARE:
-        carla_error, state.proc_state = autoware_launch(carla_error, world, conf, town)
+        carla_error= autoware_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
     POP_SIZE = 10  # amount of population
