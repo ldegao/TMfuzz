@@ -9,7 +9,7 @@ if [[ ! -d "$fuzzerdata_dir" ]]; then
   echo "Created directory $fuzzerdata_dir"
 fi
 # Check if the Docker container is in the exited state
-if [[ "$(docker inspect -f '{{.ScenarioState.Status}}' "$docker_name" 2>/dev/null)" == "exited" ]]; then
+if [[ "$(docker inspect -f '{{.State.Status}}' "$docker_name" 2>/dev/null)" == "exited" ]]; then
   echo "Docker container $docker_name is in exited state. Running stop_carla.sh..."
   "./stop_carla.sh"
 fi

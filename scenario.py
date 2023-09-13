@@ -4,10 +4,13 @@ import os
 import random
 import shutil
 import time
+from typing import List
 
 import carla
 import numpy as np
 import deap.base
+
+from actor import Actor
 from simulate import simulate
 import constants as c
 import utils
@@ -57,7 +60,7 @@ class Scenario:
     town = None
     weather = {}
     actors_now = []
-    actor_list = []
+    actor_list: List[Actor]
     driving_quality_score = None
     found_error = False
     username = os.getenv("USER")
@@ -132,18 +135,19 @@ class Scenario:
             print("[debug] dumped")
         return filename
 
-    def run_test(self, state):
+    def run_test(self, exec_state):
         if self.conf.debug:
             print("[debug] use scenario:id=", self.scenario_id)
             # print("Weather:", self.weather)
         # print("before sim", time.time())
-        state.end = False
+        self.state.end = False
         sp = get_seed_sp_transform(self.seed_data)
         wp = get_seed_wp_transform(self.seed_data)
 
         ret, self.actor_list = simulate(
             conf=self.conf,
-            state=state,
+            state=self.state,
+            exec_state=exec_state,
             sp=sp,
             wp=wp,
             weather_dict=self.weather,
@@ -152,10 +156,10 @@ class Scenario:
         )
 
         print("actor_list", len(self.actor_list))
-        log_filename = self.dump_states(state, log_type="queue")
+        log_filename = self.dump_states(self.state, log_type="queue")
         self.log_filename = log_filename
 
-        error = self.check_error(state)
+        error = self.check_error(self.state)
 
         self.save_video(error, log_filename)
 
