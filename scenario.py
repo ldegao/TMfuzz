@@ -11,6 +11,7 @@ import deap.base
 from simulate import simulate
 import constants as c
 import utils
+from states import ScenarioState
 
 
 def get_seed_sp_transform(seed):
@@ -68,6 +69,7 @@ class Scenario:
         self.log_filename = None
         self.conf = conf
         self.seed_data = seed_data
+        self.state = ScenarioState()
 
         self.weather["cloud"] = 0
         self.weather["rain"] = 0
@@ -132,14 +134,14 @@ class Scenario:
 
     def run_test(self, state):
         if self.conf.debug:
-            print("[debug] call simulate.simulate()")
+            print("[debug] use scenario:id=", self.scenario_id)
             # print("Weather:", self.weather)
         # print("before sim", time.time())
         state.end = False
         sp = get_seed_sp_transform(self.seed_data)
         wp = get_seed_wp_transform(self.seed_data)
 
-        ret = simulate(
+        ret, self.actor_list = simulate(
             conf=self.conf,
             state=state,
             sp=sp,

@@ -39,7 +39,8 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 client, world, G = None, None, None
-state = states.State()
+state = states.ScenarioState()
+
 
 def create_test_scenario(conf, seed_dict):
     return Scenario(conf, seed_dict)
@@ -432,7 +433,7 @@ def autoware_launch(carla_error, world, conf, town_map):
         "QT_X11_NO_MITSHM": 1
     }
     list_spawn_points = town_map.get_spawn_points()
-    sp = list_spawn_points[6]
+    sp = list_spawn_points[11]
     loc = sp.location
     rot = sp.rotation
     sp_str = "{},{},{},{},{},{}".format(loc.x, loc.y, loc.z, rot.roll,
@@ -477,22 +478,20 @@ def autoware_launch(carla_error, world, conf, town_map):
     # wait for autoware bridge to spawn player vehicle
     autoware_agent_found = False
     i = 0
-    # while True:
-    #     print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
-    #     vehicles = world.get_actors().filter("*vehicle.*")
-    #     for vehicle in vehicles:
-    #         if vehicle.attributes["role_name"] == "ego_vehicle":
-    #             autoware_agent_found = True
-    #             player = vehicle
-    #             print("\n    [*] found [{}] at {}".format(player.id,
-    #                                                       player.get_location()))
-    #             break
-    #     if autoware_agent_found:
-    #         break
-    #     if i > 60:
-    #         print("\n something is wrong")
-    #         exit(-1)
-    #     i += 1
+    while True:
+        print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
+        vehicles = world.get_actors().filter("*vehicle.*")
+        for vehicle in vehicles:
+            if vehicle.attributes["role_name"] == "ego_vehicle":
+                autoware_agent_found = True
+                break
+        if autoware_agent_found:
+            break
+        if i > 60:
+            print("\n something is wrong")
+            exit(-1)
+        i += 1
+        time.sleep(0.5)
 
     i = 0
     time.sleep(3)
@@ -538,90 +537,6 @@ def autoware_launch(carla_error, world, conf, town_map):
     #         raise KeyboardInterrupt
     #     time.sleep(1)
     return carla_error, state.proc_state
-
-
-def main():
-    # STEP 0: init env
-    global client, world, G
-
-    carla_error = False
-    conf, town, town_map, client, world, G = init_env()
-    state.client = client
-    state.world = world
-    state.G = G
-    if conf.agent_type == c.AUTOWARE:
-        carla_error, state.proc_state = autoware_launch(carla_error, world, conf, town)
-    population = []
-    # GA Hyperparameters
-    POP_SIZE = 10  # amount of population
-    OFF_SIZE = 10  # number of offspring to produce
-    CXPB = 0.8  # crossover probability
-    MUTPB = 0.2  # mutation probability
-
-    toolbox = base.Toolbox()
-    toolbox.register("evaluate", evaluation)
-    toolbox.register("mate", cx_scenario)
-    toolbox.register("mutate", mut_scenario)
-    toolbox.register("select", tools.selNSGA2)
-    hof = tools.ParetoFront()
-    # Evaluate Initial Population
-    print(f' ====== Analyzing Initial Population ====== ')
-    invalid_ind = [ind for ind in population if not ind.fitness.valid]
-    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
-    for ind, fit in zip(invalid_ind, fitnesses):
-        ind.fitness.values = fit
-
-    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean, axis=0)
-    stats.register("max", np.max, axis=0)
-    stats.register("min", np.min, axis=0)
-    logbook = tools.Logbook()
-    logbook.header = 'gen', 'avg', 'max', 'min'
-    # begin a generational process
-    curr_gen = 0
-    # init some seed if seed pool is empty
-    for i in range(POP_SIZE):
-        seed_dict = seed_initialize(town, town_map)
-        # Creates and initializes a Scenario instance based on the metadata
-        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
-            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-            test_scenario = future.result(timeout=15)
-        population.append(test_scenario)
-    utils.switch_map(conf, town_map, client)
-    while True:
-        # Main loop
-        # STEP 1: choice a seed in seed pool
-        curr_gen += 1
-        print(f' ====== GA Generation {curr_gen} ====== ')
-        # Vary the population
-        offspring = algorithms.varOr(
-            population, toolbox, OFF_SIZE, CXPB, MUTPB)
-        # update chromosome gid and cid
-        for index, d in enumerate(offspring):
-            d.gid = curr_gen
-            d.cid = index
-        # Evaluate the individuals with an invalid fitness
-        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
-        for ind, fit in zip(invalid_ind, fitnesses):
-            ind.fitness.values = fit
-        hof.update(offspring)
-        # Select the next generation population
-        population[:] = toolbox.select(population + offspring, POP_SIZE)
-        record = stats.compile(population)
-        logbook.record(gen=curr_gen, **record)
-        print(logbook.stream)
-
-        # vt.save_to_file()
-        # with open('./data/log.bin', 'wb') as fp:
-        #     pickle.dump(logbook, fp)
-        # with open('./data/hof.bin', 'wb') as fp:
-        #     pickle.dump(hof, fp)
-
-        # curr_time = datetime.now()
-        # tdelta = (curr_time - start_time).total_seconds()
-        # if tdelta / 3600 > RUN_FOR_HOUR:
-        #     break
 
 
 def seed_initialize(town, town_map):
@@ -718,7 +633,93 @@ def init_env():
         if lane_change_right:
             if (lane[0], lane[1] - 1) in lane_list:
                 G.add_edge(lane, (lane[0], lane[1] - 1))
+    utils.switch_map(conf, town_map, client)
     return conf, town, town_map, client, world, G
+
+
+def main():
+    # STEP 0: init env
+    global client, world, G
+
+    carla_error = False
+    conf, town, town_map, client, world, G = init_env()
+    state.client = client
+    state.world = world
+    state.G = G
+    if conf.agent_type == c.AUTOWARE:
+        carla_error, state.proc_state = autoware_launch(carla_error, world, conf, town)
+    population = []
+    # GA Hyperparameters
+    POP_SIZE = 10  # amount of population
+    OFF_SIZE = 10  # number of offspring to produce
+    CXPB = 0.8  # crossover probability
+    MUTPB = 0.2  # mutation probability
+
+    toolbox = base.Toolbox()
+    toolbox.register("evaluate", evaluation)
+    toolbox.register("mate", cx_scenario)
+    toolbox.register("mutate", mut_scenario)
+    toolbox.register("select", tools.selNSGA2)
+    hof = tools.ParetoFront()
+    # Evaluate Initial Population
+    print(f' ====== Analyzing Initial Population ====== ')
+    invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+    stats.register("avg", np.mean, axis=0)
+    stats.register("max", np.max, axis=0)
+    stats.register("min", np.min, axis=0)
+    logbook = tools.Logbook()
+    logbook.header = 'gen', 'avg', 'max', 'min'
+    # begin a generational process
+    curr_gen = 0
+    # init some seed if seed pool is empty
+    for i in range(POP_SIZE):
+        seed_dict = seed_initialize(town, town_map)
+        # Creates and initializes a Scenario instance based on the metadata
+        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
+            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
+            test_scenario = future.result(timeout=15)
+        population.append(test_scenario)
+        test_scenario.scenario_id = len(population)
+
+    while True:
+        # Main loop
+        # STEP 1: choice a seed in seed pool
+        curr_gen += 1
+        print(f' ====== GA Generation {curr_gen} ====== ')
+        # Vary the population
+        offspring = algorithms.varOr(
+            population, toolbox, OFF_SIZE, CXPB, MUTPB)
+        # update chromosome gid and cid
+        for index, d in enumerate(offspring):
+            d.gid = curr_gen
+            d.cid = index
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+        hof.update(offspring)
+        # Select the next generation population
+        population[:] = toolbox.select(population + offspring, POP_SIZE)
+        record = stats.compile(population)
+        logbook.record(gen=curr_gen, **record)
+        print(logbook.stream)
+
+        # vt.save_to_file()
+        # with open('./data/log.bin', 'wb') as fp:
+        #     pickle.dump(logbook, fp)
+        # with open('./data/hof.bin', 'wb') as fp:
+        #     pickle.dump(hof, fp)
+
+        # curr_time = datetime.now()
+        # tdelta = (curr_time - start_time).total_seconds()
+        # if tdelta / 3600 > RUN_FOR_HOUR:
+        #     break
 
 
 if __name__ == "__main__":

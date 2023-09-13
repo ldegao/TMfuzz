@@ -5,7 +5,7 @@ import os
 import pdb
 import random
 import sys
-
+from subprocess import Popen, PIPE
 import signal
 import time
 import math
@@ -157,7 +157,6 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
                                                                            vel,
                                                                            world, wp, )
                 control_actor(agents_now, speed_limit)
-
                 if break_flag:
                     break
                 if wait_until_end == 0:
@@ -193,14 +192,14 @@ def simulate(conf, state, sp, wp, weather_dict, actor_list):
         world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world)
         # Don't reload and exit if user requests so
         if retval == 128:
-            return retval
+            return retval,actor_list
         else:
             if conf.debug:
                 print("[debug] reload")
             client.reload_world()
             if conf.debug:
                 print('[debug] done.')
-            return retval
+            return retval,actor_list
 
 
 def control_actor(agents_now, speed_limit):
@@ -439,11 +438,11 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map):
         frame_speed_lim_changed = cur_frame_id
     state.speed.append(speed)
     state.speed_lim.append(speed_limit)
-    # print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
-    #     sp.location.x, sp.location.y, player_loc.x,
-    #     player_loc.y, goal_loc.x, goal_loc.y,
-    #     player_loc.distance(goal_loc),
-    #     speed, speed_limit), end="")
+    print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
+        sp.location.x, sp.location.y, player_loc.x,
+        player_loc.y, goal_loc.x, goal_loc.y,
+        player_loc.distance(goal_loc),
+        speed, speed_limit), end="")
     if player.is_at_traffic_light():
         traffic_light = player.get_traffic_light()
         if traffic_light.get_state() == carla.TrafficLightState.Red:
@@ -705,42 +704,35 @@ def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, 
         camera_top.listen(lambda image: _on_top_camera_capture(image))
         sensors.append(camera_top)
     else:
-        # wait for autoware bridge to spawn player vehicle
-        autoware_agent_found = False
-        i = 0
-        while True:
-            print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
-            vehicles = world.get_actors().filter("*vehicle.*")
-            for vehicle in vehicles:
-                if vehicle.attributes["role_name"] == "ego_vehicle":
-                    autoware_agent_found = True
-                    player = vehicle
-                    print("\n    [*] found [{}] at {}".format(player.id,
-                                                              player.get_location()))
-                    break
-            if autoware_agent_found:
+        vehicles = world.get_actors().filter("*vehicle.*")
+        for vehicle in vehicles:
+            if vehicle.attributes["role_name"] == "ego_vehicle":
+                player = vehicle
                 break
-            if i > 60:
-                print("\n something is wrong")
-                exit(-1)
-            i += 1
-            time.sleep(0.5)
-        # player = world.try_spawn_actor(player_bp, sp)
         ego = Actor(actor_type=c.VEHICLE, spawn_point=sp, actor_id=-1)
         ego.set_instance(player)
         ego.attach_collision(world, sensors, state)
         ego.attach_lane_invasion(world, sensors, state)
+        player.set_transform(sp)
+        world.tick()
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
+        i = 0
         while True:
+            # state.proc_state = Popen(["rostopic echo /decision_maker/state"],
+            #                          shell=True, stdout=PIPE, stderr=PIPE)
             output_state = state.proc_state.stdout.readline()
+            print(output_state)
             if b"---" in output_state:
                 output_state = state.proc_state.stdout.readline()
             if b"VehicleReady" in output_state:
                 break
-            time.sleep(0.5)
+            if i == 30:
+                print("    [-] something went wrong while launching Autoware.")
+                raise KeyboardInterrupt
+            i +=1
+            time.sleep(1)
         world.tick()  # sync with simulator
-        player.set_transform(sp)
         while True:
             world.tick()  # spin until the player is moved to the sp
             if player.get_location().distance(sp.location) < 1:
