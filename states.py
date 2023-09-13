@@ -2,7 +2,22 @@
 import signal
 
 
-class State:
+class ExecState:
+    def __init__(self):
+        # exec states
+        self.client = None
+        self.world = None
+        self.G = None
+        self.first_frame_id = 0
+        self.first_sim_elapsed_time = 0
+        self.sim_start_time = 0
+        self.num_frames = 0
+        self.elapsed_time = 0
+        self.end = False
+        self.proc_state = None
+
+
+class ScenarioState:
     """
     A state object stores raw data and events captured from the simulator,
     including vehicular states.
@@ -11,18 +26,19 @@ class State:
 
     def __init__(self):
         # exec states
-        self.other = None
         self.client = None
         self.world = None
         self.G = None
-        self.loop = 0
-        self.mutation = 0
+
         self.first_frame_id = 0
         self.first_sim_elapsed_time = 0
         self.sim_start_time = 0
         self.num_frames = 0
         self.elapsed_time = 0
         self.end = False
+
+        self.other = None
+        self.mutation = 0
 
         # failure states
         self.spawn_failed = False
