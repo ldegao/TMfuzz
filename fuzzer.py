@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import cProfile
 import os
 import pdb
 import sys
@@ -39,7 +40,7 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 client, world, G = None, None, None
-
+autoware_container = None
 exec_state = states.ExecState()
 
 
@@ -172,6 +173,7 @@ def set_args():
 
 
 def evaluation(ind: Scenario):
+    global autoware_container
     g_name = f'Generation_{ind.generation_id:05}'
     s_name = f'Scenario_{ind.scenario_id:05}'
     # todo: run test here
@@ -180,8 +182,12 @@ def evaluation(ind: Scenario):
     mutate_weather_fixed(ind)
     signal.alarm(12 * 60)  # timeout after 12 min
     try:
-        # print("self.actor_list:", ind.actor_list)
+        # profiler = cProfile.Profile()
+        # profiler.enable()  #
         ret = ind.run_test(exec_state)
+        # profiler.disable()  #
+        # profiler.print_stats(sort="cumulative")
+        # pdb.set_trace()
     except Exception as e:
         if e.args[0] == "HANG":
             print("[-] simulation hanging. abort.")
@@ -404,7 +410,7 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
 
 def autoware_launch(carla_error, world, conf, town_map):
     username = os.getenv("USER")
-    autoware_container = None
+    global autoware_container
     # print("before launching autoware", time.time())
     num_walker_topics = 0
     # clock = pygame.time.Clock()
@@ -446,7 +452,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
-                "carla-autoware:improved",
+                "carla-autoware:improved2",
                 command=autoware_cla,
                 detach=True,
                 auto_remove=True,
@@ -458,7 +464,10 @@ def autoware_launch(carla_error, world, conf, town_map):
                 device_requests=[
                     docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
                 environment=env_dict,
+                stdout=True,
+                stderr=True
             )
+
         except docker.errors.APIError as e:
             print("[-] Could not launch docker:", e)
             if "Conflict" in str(e):
@@ -522,7 +531,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     # decision-maker state, with which we can get an idea of when Autoware
     # thinks it has reached the goal
     exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
-                             shell=True, stdout=PIPE, stderr=PIPE)
+                                  shell=True, stdout=PIPE, stderr=PIPE)
     # set_camera(conf, player, spectator)
     # Wait for Autoware (esp, for Town04)
     # i = 0
@@ -647,10 +656,10 @@ def main():
     carla_error = False
     conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
     if conf.agent_type == c.AUTOWARE:
-        carla_error= autoware_launch(carla_error, exec_state.world, conf, town)
+        carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
-    POP_SIZE = 10  # amount of population
+    POP_SIZE = 3  # amount of population
     OFF_SIZE = 10  # number of offspring to produce
     CXPB = 0.8  # crossover probability
     MUTPB = 0.2  # mutation probability

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-
+import fcntl
 # Python packages
 import os
 import pdb
 import random
+import select
 import sys
 from subprocess import Popen, PIPE
+import asyncio
 import signal
 import time
 import math
@@ -39,6 +41,7 @@ except IndexError:
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
 
 username = os.getenv("USER")
+docker_client = docker.from_env()
 
 
 def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
@@ -80,13 +83,14 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                                                                weather_dict,
                                                                                                                world)
         autoware_container, ego, player, max_steer_angle = ego_initialize(
-            agents_now,
+            agents_now, exec_state.proc_state,
             blueprint_library, conf,
             player_bp, sensors,
             sp, state,
             world, wp)
         if conf.agent_type == c.AUTOWARE:
             autoware_goal_publish(conf, goal_loc, goal_rot, state, world)
+
         # SIMULATION LOOP FOR AUTOWARE and BasicAgent
         signal.signal(signal.SIGINT, signal.default_int_handler)
         signal.signal(signal.SIGSEGV, state.sig_handler)
@@ -111,9 +115,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                             first_sim_time))
             while True:
                 # world tick
-                world.tick()
-                # Use sampling frequency of FPS*2 for precision
-                clock.tick(c.FRAME_RATE * 2)
+                if conf.agent_type == c.BEHAVIOR:
+                    world.tick()
+                # Use sampling frequency of FPS for precision
+                clock.tick(c.FRAME_RATE)
                 # Get frame info
                 snapshot = world.get_snapshot()
                 cur_frame_id = snapshot.frame
@@ -155,7 +160,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                            max_wheels_for_non_motorized, player_lane_id,
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
-                                                                           world, wp,exec_state.G)
+                                                                           world, wp, exec_state.G)
                 control_actor(agents_now, speed_limit)
                 if break_flag:
                     break
@@ -164,7 +169,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                              speed_limit, state, wait_until_end)
                 else:
                     wait_until_end += 1
-                if wait_until_end > 24:
+                if wait_until_end > 6:
                     break
         except KeyboardInterrupt:
             print("quitting")
@@ -187,7 +192,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         # find biggest weight of actor-list
         state.end = True
         # save video in output_dir
-        save_video(autoware_container, carla_error, conf)
+        save_video(carla_error)
         # remove actors and sensors to reload the world
         world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world)
         # Don't reload and exit if user requests so
@@ -196,7 +201,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         else:
             if conf.debug:
                 print("[debug] reload")
-            client.reload_world()
+            # client.reload_world()
             if conf.debug:
                 print('[debug] done.')
             return retval, actor_list
@@ -218,7 +223,7 @@ def control_actor(agents_now, speed_limit):
 
 def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_now, autoware_last_frames, conf, ego,
                 found_frame, frame_gap, goal_loc, goal_rot, max_wheels_for_non_motorized, player_lane_id, player_loc,
-                player_road_id, sensors, state, town_map, vehicle_bp_library, world, wp,G):
+                player_road_id, sensors, state, town_map, vehicle_bp_library, world, wp, G):
     if conf.agent_type == c.AUTOWARE:
         frame_gap = frame_gap + state.num_frames - autoware_last_frames
         autoware_last_frames = state.num_frames
@@ -256,8 +261,8 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                                       spawn_point=None, speed=None,
                                       actor_id=len(actor_list),
                                       ego_loc=player_loc)
-                    if conf.debug:
-                        print("[debug] dont spawn car", new_actor.actor_id, "at", state.num_frames)
+                    # if conf.debug:
+                    #     print("[debug] dont spawn car", new_actor.actor_id, "at", state.num_frames)
                     new_actor.instance = None
                     actor_list.append(new_actor)
                     new_actor.fresh = False
@@ -350,8 +355,8 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                 spawn_actor(new_actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
                             max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
                 actor_list.append(new_actor)
-                if conf.debug:
-                    print("[debug] spawn new car", new_actor.actor_id, "at", state.num_frames)
+                # if conf.debug:
+                #     print("[debug] spawn new car", new_actor.actor_id, "at", state.num_frames)
         found_frame = False
     return found_frame, autoware_last_frames, frame_gap
 
@@ -386,8 +391,8 @@ def add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf, found_
                 road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
                 spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
                             max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
-                if conf.debug:
-                    print("[debug] spawn old car:", actor.actor_id, "at", state.num_frames)
+                # if conf.debug:
+                #     print("[debug] spawn old car:", actor.actor_id, "at", state.num_frames)
                 continue
     return found_frame
 
@@ -475,13 +480,14 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
         # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
         # VehicleReady\nWaitOrder\nStopping\nWaitDriveReady\n
         if not conf.function.startswith("eval"):
-            output_state = proc_state.stdout.readline()
-            if b"---" in output_state:
-                output_state = proc_state.stdout.readline()
-            if b"Go" in output_state:
+            output_state = non_blocking_read(proc_state.stdout)
+            # output_state = proc_state.stdout.readline()
+            # if b"---" in output_state:
+            #     output_state = non_blocking_read(proc_state.stdout)
+            if "Go" in output_state:
                 s_started = True
                 autoware_stuck = 0
-            elif b"nWaitDriveReady" in output_state and s_started:
+            elif "nWaitDriveReady" in output_state and s_started:
                 # os.system(pub_cmd)
                 # print("[carla] Goal republished")
                 autoware_stuck += 1
@@ -542,80 +548,82 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
         actor.instance = None
 
 
-def save_video(autoware_container, carla_error, conf):
-    if conf.agent_type == c.BEHAVIOR:
-        # remove jpg files
-        print("Saving front camera video", end=" ")
-        vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
-        if os.path.exists(vid_filename):
-            os.remove(vid_filename)
-        cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
-        cmd_ffmpeg = " ".join([
-            "ffmpeg",
-            "-f image2pipe",
-            f"-r {c.FRAME_RATE}",
-            "-vcodec mjpeg",
-            "-i -",
-            "-vcodec libx264",
-            "-crf 5",
-            vid_filename
-        ])
-        cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-        if not carla_error:
-            os.system(cmd)
-            print("(done)")
-        else:
-            print("error:dont save any video")
-
-        cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
+def save_video(carla_error):
+    # if conf.agent_type == c.BEHAVIOR:
+    # remove jpg files
+    print("Saving front camera video", end=" ")
+    vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
+    if os.path.exists(vid_filename):
+        os.remove(vid_filename)
+    cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
+    cmd_ffmpeg = " ".join([
+        "ffmpeg",
+        "-f image2pipe",
+        f"-r {c.FRAME_RATE}",
+        "-vcodec mjpeg",
+        "-i -",
+        "-vcodec libx264",
+        "-crf 5",
+        vid_filename
+    ])
+    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+    if not carla_error:
         os.system(cmd)
+        print("(done)")
+    else:
+        print("error:dont save any video")
 
-        print("Saving top camera video", end=" ")
-        vid_filename = f"/tmp/fuzzerdata/{username}/top.mp4"
-        if os.path.exists(vid_filename):
-            os.remove(vid_filename)
+    cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
+    os.system(cmd)
 
-        cmd_cat = f"cat /tmp/fuzzerdata/{username}/top-*.jpg"
-        cmd_ffmpeg = " ".join([
-            "ffmpeg",
-            "-f image2pipe",
-            f"-r {c.FRAME_RATE}",
-            "-vcodec mjpeg",
-            "-i -",
-            "-vcodec libx264",
-            "-crf 15",
-            vid_filename
-        ])
+    print("Saving top camera video", end=" ")
+    vid_filename = f"/tmp/fuzzerdata/{username}/top.mp4"
+    if os.path.exists(vid_filename):
+        os.remove(vid_filename)
 
-        cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-        if not carla_error:
-            os.system(cmd)
-            print("(done)")
-        else:
-            print("error:dont save any video")
+    cmd_cat = f"cat /tmp/fuzzerdata/{username}/top-*.jpg"
+    cmd_ffmpeg = " ".join([
+        "ffmpeg",
+        "-f image2pipe",
+        f"-r {c.FRAME_RATE}",
+        "-vcodec mjpeg",
+        "-i -",
+        "-vcodec libx264",
+        "-crf 15",
+        vid_filename
+    ])
 
-        cmd = f"rm -f /tmp/fuzzerdata/{username}/top-*.jpg"
+    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+    if not carla_error:
         os.system(cmd)
+        print("(done)")
+    else:
+        print("error:dont save any video")
 
-    elif conf.agent_type == c.AUTOWARE:
-        os.system("rosnode kill /recorder_video_front")
-        os.system("rosnode kill /recorder_video_rear")
-        os.system("rosnode kill /recorder_video_top")
-        os.system("rosnode kill /recorder_bag")
-        while os.path.exists(f"/tmp/fuzzerdata/{username}/bagfile.lz4.bag.active"):
-            print("waiting for rosbag to dump data")
-            time.sleep(3)
-        try:
-            autoware_container.kill()
-        except docker.errors.APIError as e:
-            print("[-] Couldn't kill Autoware container:", e)
-        except UnboundLocalError:
-            print("[-] Autoware container was not launched")
-        except:
-            print("[-] Autoware container was not killed for an unknown reason")
-            print("    Trying manually")
-            os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
-            # still doesn't fix docker hanging.
+    cmd = f"rm -f /tmp/fuzzerdata/{username}/top-*.jpg"
+    os.system(cmd)
+    # todo:change
+    # elif conf.agent_type == c.AUTOWARE:
+    #
+    #     pass
+    # os.system("rosnode kill /recorder_video_front")
+    # os.system("rosnode kill /recorder_video_rear")
+    # os.system("rosnode kill /recorder_video_top")
+    # os.system("rosnode kill /recorder_bag")
+    # while os.path.exists(f"/tmp/fuzzerdata/{username}/bagfile.lz4.bag.active"):
+    #     print("waiting for rosbag to dump data")
+    #     time.sleep(3)
+    # try:
+    #     autoware_container.kill()
+    # except docker.errors.APIError as e:
+    #     print("[-] Couldn't kill Autoware container:", e)
+    # except UnboundLocalError:
+    #     print("[-] Autoware container was not launched")
+    # except:
+    #     print("[-] Autoware container was not killed for an unknown reason")
+    #     print("    Trying manually")
+    #     os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
+    #     # still doesn't fix docker hanging.
 
 
 def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
@@ -641,10 +649,10 @@ def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
     return
 
 
-def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, state,
+def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, sensors, sp, state,
                    world, wp):
     # for autoware
-    autoware_container = None
+    autoware_container = get_docker("autoware-{}".format(os.getenv("USER")))
     player = None
     if conf.agent_type == c.BEHAVIOR:
         player = world.try_spawn_actor(player_bp, sp)
@@ -665,44 +673,6 @@ def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, 
         )
         agents_now.append((agent, player, ego))
         print("[+] spawned cautious BehaviorAgent")
-
-        # Attach RGB camera (front)
-        rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
-
-        rgb_camera_bp.set_attribute("image_size_x", "800")
-        rgb_camera_bp.set_attribute("image_size_y", "600")
-        rgb_camera_bp.set_attribute("fov", "105")
-
-        # position relative to the parent actor (player)
-        camera_tf = carla.Transform(carla.Location(z=1.8))
-
-        # time in seconds between sensor captures - should sync w/ fps?
-        # rgb_camera_bp.set_attribute("sensor_tick", "1.0")
-
-        camera_front = world.spawn_actor(
-            rgb_camera_bp,
-            camera_tf,
-            attach_to=player,
-            attachment_type=carla.AttachmentType.Rigid
-        )
-
-        camera_front.listen(lambda image: _on_front_camera_capture(image))
-
-        sensors.append(camera_front)
-
-        camera_tf2 = carla.Transform(
-            carla.Location(z=50.0),
-            carla.Rotation(pitch=-90.0)
-        )
-        camera_top = world.spawn_actor(
-            rgb_camera_bp,
-            camera_tf2,
-            attach_to=player,
-            attachment_type=carla.AttachmentType.Rigid
-        )
-
-        camera_top.listen(lambda image: _on_top_camera_capture(image))
-        sensors.append(camera_top)
     else:
         vehicles = world.get_actors().filter("*vehicle.*")
         for vehicle in vehicles:
@@ -713,31 +683,73 @@ def ego_initialize(agents_now, blueprint_library, conf, player_bp, sensors, sp, 
         ego.set_instance(player)
         ego.attach_collision(world, sensors, state)
         ego.attach_lane_invasion(world, sensors, state)
-        # player.set_transform(sp)
-        world.tick()
+        loc = sp.location
+        rot = sp.rotation
+        cmd = f'bash -c "source /opt/ros/melodic/setup.bash && \
+                python /tmp/pub_initialpose.py {loc.x} {loc.y} {loc.z} {rot.roll} {rot.pitch} {-1 * rot.yaw}"'
+        # pdb.set_trace()
+        result = autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
+        time.sleep(5)
+        # pdb.set_trace()
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
+
         i = 0
-        # while True:
-        #     # state.proc_state = Popen(["rostopic echo /decision_maker/state"],
-        #     #                          shell=True, stdout=PIPE, stderr=PIPE)
-        #     output_state = exec_state.proc_state.stdout.readline()
-        #     print(output_state)
-        #     if b"---" in output_state:
-        #         output_state = exec_state.proc_state.stdout.readline()
-        #     if b"VehicleReady" in output_state:
-        #         break
-        #     if i == 30:
-        #         print("    [-] something went wrong while launching Autoware.")
-        #         raise KeyboardInterrupt
-        #     i += 1
-        #     time.sleep(1)
-        # world.tick()  # sync with simulator
+        while True:
+            output_state = proc_state.stdout.readline()
+            # print(output_state)
+            if b"---" in output_state:
+                output_state = proc_state.stdout.readline()
+            if b"VehicleReady" in output_state:
+                break
+            if i == 30:
+                print("    [-] something went wrong while launching Autoware.")
+                raise KeyboardInterrupt
+            i += 1
+            time.sleep(1)
+        world.tick()  # sync with simulator
         time.sleep(3)
         # while True:
         #     world.tick()  # spin until the player is moved to the sp
         #     if player.get_location().distance(sp.location) < 1:
         #         break
+    # Attach RGB camera (front)
+    rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
+
+    rgb_camera_bp.set_attribute("image_size_x", "800")
+    rgb_camera_bp.set_attribute("image_size_y", "600")
+    rgb_camera_bp.set_attribute("fov", "105")
+
+    # position relative to the parent actor (player)
+    camera_tf = carla.Transform(carla.Location(z=1.8))
+
+    # time in seconds between sensor captures - should sync w/ fps?
+    # rgb_camera_bp.set_attribute("sensor_tick", "1.0")
+
+    camera_front = world.spawn_actor(
+        rgb_camera_bp,
+        camera_tf,
+        attach_to=player,
+        attachment_type=carla.AttachmentType.Rigid
+    )
+
+    camera_front.listen(lambda image: _on_front_camera_capture(image))
+
+    sensors.append(camera_front)
+
+    camera_tf2 = carla.Transform(
+        carla.Location(z=50.0),
+        carla.Rotation(pitch=-90.0)
+    )
+    camera_top = world.spawn_actor(
+        rgb_camera_bp,
+        camera_tf2,
+        attach_to=player,
+        attachment_type=carla.AttachmentType.Rigid
+    )
+
+    camera_top.listen(lambda image: _on_top_camera_capture(image))
+    sensors.append(camera_top)
     # get vehicle's maximum steering angle
     physics_control = player.get_physics_control()
     max_steer_angle = 0
@@ -903,6 +915,19 @@ def _cam_over_player(player, spectator):
     )
 
 
+def non_blocking_read(stdout):
+    fd = stdout.fileno()
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+    output_state = b""
+    rlist, _, _ = select.select([stdout], [], [], 0.01)
+    if stdout in rlist:
+        data = os.read(fd, 4096)  # ????????
+        output_state = data
+    output_state = output_state.decode("utf-8")  # ??????????
+    return output_state
+
+
 def check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed, speed_limit, state, wait_until_end):
     # Check speeding
     if conf.check_dict["speed"]:
@@ -961,3 +986,19 @@ def check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed, 
             retval = 1
             wait_until_end = 1
     return retval, wait_until_end
+
+
+def get_docker(container_name):
+    all_containers = docker_client.containers.list()
+    target_container = None
+    for container in all_containers:
+        if container.name == container_name:
+            target_container = container
+            break
+    # if target_container:
+    #     print(f"Found container '{container_name}':")
+    #     print(f"Container ID: {target_container.id}")
+    #     print(f"Container Status: {target_container.status}")
+    # else:
+    #     print(f"Container '{container_name}' not found.")
+    return target_container

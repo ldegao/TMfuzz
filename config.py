@@ -81,7 +81,7 @@ class Config:
         # Enable/disable Various Checks
         self.check_dict = {
             "speed": True,
-            "lane": False,
+            "lane": True,
             "crash": True,
             "stuck": True,
             "red": True,
