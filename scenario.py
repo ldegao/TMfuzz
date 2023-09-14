@@ -126,7 +126,7 @@ class Scenario:
                       "num_frames": state.num_frames, "elapsed_time": state.elapsed_time, "events": event_dict,
                       "config": config_dict}
 
-        filename = "{}_{}.json".format(state.mutation, time.time())
+        filename = "gid:{}_sid:{}.json".format(self.generation_id,self.scenario_id)
         if log_type == "queue":
             out_dir = self.conf.queue_dir
         with open(os.path.join(out_dir, filename), "w") as fp:
@@ -180,52 +180,26 @@ class Scenario:
         #     json.dump(state.deductions, fp)
 
     def save_video(self, error, log_filename):
-        if self.conf.agent_type == c.AUTOWARE:
-            if error:
-                # print("copying bag & video files")
-                shutil.copyfile(
-                    os.path.join(self.conf.queue_dir, log_filename),
-                    os.path.join(self.conf.error_dir, log_filename)
-                )
-                shutil.copyfile(
-                    f"/tmp/fuzzerdata/{self.username}/bagfile.lz4.bag",
-                    os.path.join(self.conf.rosbag_dir, log_filename.replace(".json", ".bag"))
-                )
+        if error:
+            shutil.copyfile(
+                os.path.join(self.conf.queue_dir, log_filename),
+                os.path.join(self.conf.error_dir, log_filename)
+            )
+        shutil.copyfile(
+            f"/tmp/fuzzerdata/{self.username}/front.mp4",
+            os.path.join(
+                self.conf.cam_dir,
+                log_filename.replace(".json", "-front.mp4")
+            )
+        )
 
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/front.mp4",
-                os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-front.mp4"))
+        shutil.copyfile(
+            f"/tmp/fuzzerdata/{self.username}/top.mp4",
+            os.path.join(
+                self.conf.cam_dir,
+                log_filename.replace(".json", "-top.mp4")
             )
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/rear.mp4",
-                os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-rear.mp4"))
-            )
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/top.mp4",
-                os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-top.mp4"))
-            )
-
-        elif self.conf.agent_type == c.BEHAVIOR:
-            if error:
-                shutil.copyfile(
-                    os.path.join(self.conf.queue_dir, log_filename),
-                    os.path.join(self.conf.error_dir, log_filename)
-                )
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/front.mp4",
-                os.path.join(
-                    self.conf.cam_dir,
-                    log_filename.replace(".json", "-front.mp4")
-                )
-            )
-
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/top.mp4",
-                os.path.join(
-                    self.conf.cam_dir,
-                    log_filename.replace(".json", "-top.mp4")
-                )
-            )
+        )
 
     def check_error(self, state):
         if self.conf.debug:

@@ -288,10 +288,11 @@ def _on_collision(event, state):
         return
     print("COLLISION:", event.other_actor.type_id)
     if event.other_actor.type_id != "static.road":
-        # do not count collision while spawning ego vehicle (hard drop)
-        print("crashed")
-        state.crashed = True
-        state.collision_event = event
+        if not state.crashed:
+            # do not count collision while spawning ego vehicle (hard drop)
+            print("crashed")
+            state.crashed = True
+            state.collision_event = event
 
 
 def _on_invasion(event, state):
