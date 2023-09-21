@@ -13,10 +13,9 @@ while true; do
         break
     fi
 
-    cmd="./fuzzer.py  --sim-port 4000 -t autoware  --debug --density 0.75 --town 3 --no-traffic-lights"
 
     if [ -n "$1" ]; then
-        cmd="./fuzzer.py  --sim-port 4000 -t $1 --debug --density 0.75 --town 3 --no-traffic-lights"
+        cmd="./fuzzer.py  --sim-port 4000 -t $1 --debug --density 1 --town 3 --no-lane-check --no-traffic-lights"
     else
         cmd="./fuzzer.py  --sim-port 4000 -t autoware --debug --density 0.75 --town 3 --no-traffic-lights"
     fi
