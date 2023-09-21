@@ -5,6 +5,7 @@ import pdb
 import sys
 
 import numpy as np
+from pygame.draw_py import Point
 
 import constants
 import constants as c
@@ -265,9 +266,12 @@ def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=Non
         if agent_tuple[1] == actor.instance:
             agents_now.remove(agent_tuple)
             break
-    actor_vehicles.remove(actor.instance)
+    try:
+        actor_vehicles.remove(actor.instance)
+        actors_now.remove(actor)
+    except ValueError:
+        print("remove ego")
     actor.instance.destroy()
-    actors_now.remove(actor)
     actor.instance = None
     if actor.sensor_collision:
         sensors.remove(actor.sensor_collision)
@@ -312,3 +316,43 @@ def _on_invasion(event, state):
     # print(crossed_lane.color, crossed_lane.lane_change, crossed_lane.type)
     # print(type(crossed_lane.color), type(crossed_lane.lane_change),
     # type(crossed_lane.type))
+
+
+def carla_location_to_ros_point(carla_location):
+    """
+      Convert a carla location to a ROS point
+
+      Considers the conversion from left-handed system (unreal) to a right-handed
+      system (ROS)
+
+      :param carla_location: The carla location
+      :type carla_location: carla.Location
+      :return: a ROS point
+      :rtype: geometry_msgs.msg.Point
+    """
+    ros_point = Point()
+    ros_point.x = carla_location.x
+    ros_point.y = -carla_location.y
+    ros_point.z = carla_location.z
+
+    return ros_point
+
+
+def carla_rotation_to_RPY(carla_rotation):
+    """
+      Convert a carla rotation to a roll, pitch, yaw tuple
+
+      Considers the conversion from left-handed system (unreal) to a right-handed
+      system (ROS).
+      Consider the conversion from degrees (carla) to radians (ROS).
+
+      :param carla_rotation: The carla rotation
+      :type carla_rotation: carla.Rotation
+      :return: a tuple with three elements (roll, pitch, yaw)
+      :rtype: tuple
+      """
+    roll = math.radians(carla_rotation.roll)
+    pitch = -math.radians(carla_rotation.pitch)
+    yaw = -math.radians(carla_rotation.yaw)
+
+    return roll, pitch, yaw
