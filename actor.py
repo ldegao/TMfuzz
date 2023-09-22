@@ -130,6 +130,10 @@ class Actor:
         sensors.append(sensor_lane_invasion)
         self.sensor_lane_invasion = sensor_lane_invasion
 
+    @classmethod
+    def get_actor_by_one(cls,):
+        pass
+
 
 class Pedestrian(Actor):
     def __init__(self, actor_id, spawn_point, speed, ego_loc, spawn_stuck_frame):

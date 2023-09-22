@@ -8,6 +8,7 @@ import random
 import argparse
 import copyreg
 import json
+import dataclasses
 # from collections import deque
 import concurrent.futures
 import math
@@ -288,7 +289,7 @@ def evaluation(ind: Scenario):
         print("[-]error detected. start a new cycle with a new seed")
     # todo: get violation here
 
-    return 1, 1, 1, 1
+    return random.random(), random.random(), random.random(), random.random()
 
 
 # MUTATION OPERATOR
@@ -297,39 +298,36 @@ def evaluation(ind: Scenario):
 def mut_actor_list(ind: List[Actor]):
     mut_pb = random.random()
 
-    # todo:remove a random 1
-
-    # if mut_pb < 0.1 and len(ind.adcs) > 2:
-    #     random.shuffle(ind.adcs)
-    #     ind.adcs.pop()
-    #     ind.adjust_time()
-    #     return ind
+    # remove a random 1
+    if mut_pb < 0.1 and len(ind) > 2:
+        random_index = random.randint(0, len(ind) - 1)
+        ind.pop(random_index)
+        return ind
 
     # todo:add a random 1
-
-    # if mut_pb < 0.4
-    #     while True:
-    #         new_ad = ADAgent.get_one()
-    #         if ind.has_conflict(new_ad) and ind.add_agent(new_ad):
-    #             break
-    #     ind.adjust_time()
-    #     return ind
+    if mut_pb < 0.4:
+        while True:
+            new_ad = Actor.get_actor_by_one()
+            if ind.has_conflict(new_ad) and ind.add_agent(new_ad):
+                break
+        ind.adjust_time()
+        return ind
 
     # todo:mutate a random agent
 
-    # index = random.randint(0, len(ind.adcs) - 1)
-    # routing = ind.adcs[index].routing
-    # original_adc = ind.adcs.pop(index)
-    # mut_counter = 0
-    # while True:
-    #     if ind.add_agent(ADAgent.get_one_for_routing(routing)):
-    #         break
-    #     mut_counter += 1
-    #     if mut_counter == 5:
-    #         # mutation kept failing, dont mutate
-    #         ind.add_agent(original_adc)
-    #         pass
-    # ind.adjust_time()
+    index = random.randint(0, len(ind.adcs) - 1)
+    routing = ind.adcs[index].routing
+    original_adc = ind.adcs.pop(index)
+    mut_counter = 0
+    while True:
+        if ind.add_agent(ADAgent.get_one_for_routing(routing)):
+            break
+        mut_counter += 1
+        if mut_counter == 5:
+            # mutation kept failing, dont mutate
+            ind.add_agent(original_adc)
+            pass
+    ind.adjust_time()
 
     return ind
 
@@ -373,8 +371,8 @@ def mut_actor_list(ind: List[Actor]):
 
 def mut_scenario(ind: Scenario):
     mut_pb = random.random()
-    # if mut_pb < 1 / 3:
-    #     ind.actor_list = mut_actor_list(ind.actor_list)
+    if mut_pb < 1:
+        ind.actor_list = mut_actor_list(ind.actor_list)
     # elif mut_pb < 2 / 3:
     #     ind.pd_section = mut_pd_section(ind.pd_section)
     # else:
@@ -386,54 +384,54 @@ def mut_scenario(ind: Scenario):
 
 def cx_actor(ind1: List[Actor], ind2: List[Actor]):
     # todo: swap entire ad section
-    # cx_pb = random.random()
-    # if cx_pb < 0.05:
-    #     return ind2, ind1
-    #
-    # cxed = False
-    #
-    # for adc1 in ind1.adcs:
-    #     for adc2 in ind2.adcs:
-    #         if adc1.routing_str == adc2.routing_str:
-    #             # same routing in both parents
-    #             # swaps start_s and start_t
-    #             if random.random() < 0.5:
-    #                 adc1.start_s = adc2.start_s
-    #             else:
-    #                 adc1.start_t = adc2.start_t
-    #             mutated = True
-    # if cxed:
-    #     ind1.adjust_time()
-    #     return ind1, ind2
-    #
-    # if len(ind1.adcs) < MAX_ADC_COUNT:
-    #     for adc in ind2.adcs:
-    #         if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
-    #             # add an agent from parent 2 to parent 1 if there exists a conflict
-    #             ind1.adjust_time()
-    #             return ind1, ind2
-    #
-    # # if none of the above happened, no common adc, no conflict in either
-    # # combine to make a new populations
-    # available_adcs = ind1.adcs + ind2.adcs
-    # random.shuffle(available_adcs)
-    # split_index = random.randint(2, min(len(available_adcs), MAX_ADC_COUNT))
-    #
-    # result1 = ADSection([])
-    # for x in available_adcs[:split_index]:
-    #     result1.add_agent(deepcopy(x))
-    #
-    # # make sure offspring adc count is valid
-    #
-    # while len(result1.adcs) > MAX_ADC_COUNT:
-    #     result1.adcs.pop()
-    #
-    # while len(result1.adcs) < 2:
-    #     new_ad = ADAgent.get_one()
-    #     if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
-    #         break
-    # result1.adjust_time()
-    # return result1, ind2
+    cx_pb = random.random()
+    if cx_pb < 0.05:
+        return ind2, ind1
+
+    cxed = False
+
+    for adc1 in ind1.adcs:
+        for adc2 in ind2.adcs:
+            if adc1.routing_str == adc2.routing_str:
+                # same routing in both parents
+                # swaps start_s and start_t
+                if random.random() < 0.5:
+                    adc1.start_s = adc2.start_s
+                else:
+                    adc1.start_t = adc2.start_t
+                mutated = True
+    if cxed:
+        ind1.adjust_time()
+        return ind1, ind2
+
+    if len(ind1.adcs) < MAX_ADC_COUNT:
+        for adc in ind2.adcs:
+            if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
+                # add an agent from parent 2 to parent 1 if there exists a conflict
+                ind1.adjust_time()
+                return ind1, ind2
+
+    # if none of the above happened, no common adc, no conflict in either
+    # combine to make a new populations
+    available_adcs = ind1.adcs + ind2.adcs
+    random.shuffle(available_adcs)
+    split_index = random.randint(2, min(len(available_adcs), MAX_ADC_COUNT))
+
+    result1 = ADSection([])
+    for x in available_adcs[:split_index]:
+        result1.add_agent(copy.deepcopy(x))
+
+    # make sure offspring adc count is valid
+
+    while len(result1.adcs) > MAX_ADC_COUNT:
+        result1.adcs.pop()
+
+    while len(result1.adcs) < 2:
+        new_ad = ADAgent.get_one()
+        if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
+            break
+    result1.adjust_time()
+    return result1, ind2
     return Actor, Actor
 
 
@@ -466,10 +464,10 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
 
 def cx_scenario(ind1: Scenario, ind2: Scenario):
     cx_pb = random.random()
-    # if cx_pb < 0.6:
-    #     ind1.actor_list, ind2.actor_list = cx_actor(
-    #         ind1.actor_list, ind2.actor_list
-    #     )
+    if cx_pb < 1:
+        ind1.actor_list, ind2.actor_list = cx_actor(
+            ind1.actor_list, ind2.actor_list
+        )
     # elif cx_pb < 0.6 + 0.2:
     #     ind1.pd_section, ind2.pd_section = cx_pd_section(
     #         ind1.pd_section, ind2.pd_section
