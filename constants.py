@@ -20,6 +20,7 @@ MSG_BAD_DEST_ARG = "--dest expects three args: x, y, z"
 # Agent Types
 BEHAVIOR = 1
 AUTOWARE = 2
+AUTOWARE_UNIVERSE = 3
 OTHER = 9
 
 TARGET_SPEED = 60

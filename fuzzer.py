@@ -41,6 +41,7 @@ except ModuleNotFoundError as e:
 
 client, world, G = None, None, None
 autoware_container = None
+autoware_universe_container = None
 exec_state = states.ExecState()
 
 
@@ -101,8 +102,11 @@ def ini_hyperparameters(conf, args):
         conf.agent_type = c.BEHAVIOR
     elif args.target.lower() == "autoware":
         conf.agent_type = c.AUTOWARE
+    elif args.target.lower() == "autoware-universe":
+        conf.agent_type = c.AUTOWARE_UNIVERSE
     else:
         print("[-] Unknown target: {}".format(args.target))
+        print("[-] Available target: behavior, autoware, autoware-universe")
         sys.exit(-1)
 
     conf.town = args.town
@@ -550,6 +554,93 @@ def autoware_launch(carla_error, world, conf, town_map):
     time.sleep(3)
     return carla_error
 
+def autoware_universe_launch(carla_error, world, conf, town_map):
+    username = os.getenv("USER")
+    global autoware_universe_container
+    num_walker_topics = 0
+    docker_client = docker.from_env()
+    proj_root = config.get_proj_root()
+    xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
+    vol_dict = {
+        "/home/chenpansong/shared/op_carla": {
+            "bind": "/root/op_carla",
+            "mode": "rw"
+        },
+        "/home/chenpansong/shared/carla-0.9.13": {
+            "bind": "/root/carla-0.9.13",
+            "mode": "rw"
+        },
+        "/home/chenpansong/shared/autoware_map": {
+            "bind": "/root/autoware_map",
+            "mode": "ro"
+        },
+        f"/home/{username}/.Xauthority": {
+            "bind": xauth,
+            "mode": "rw"
+        },
+        "/tmp/.X11-unix": {
+            "bind": "/tmp/.X11-unix",
+            "mode": "rw"
+        },
+    }
+    env_dict = {
+        "DISPLAY": os.getenv("DISPLAY"),
+        "XAUTHORITY": xauth,
+        "QT_X11_NO_MITSHM": 1
+    }
+    list_spawn_points = town_map.get_spawn_points()
+    sp = list_spawn_points[11]
+    loc = sp.location
+    rot = sp.rotation
+    sp_str = "'{},{},{},{},{},{}'".format(loc.x, loc.y, loc.z, rot.roll,
+                                        rot.pitch, rot.yaw )
+    map_name = town_map.name.split("/")[-1]
+    docker_network_host = "172.17.0.1"
+    load_cmd = "/root/op_carla/op_bridge/op_scripts/run_ros2.sh "
+    load_cmd = load_cmd + f"-m {map_name} -p {sp_str} -H {docker_network_host} "
+    load_cmd = load_cmd + f"-P {conf.sim_port} -a ego_vehicle "
+    docker_cmd = f"bash -c \"{load_cmd}\" "
+    print(docker_cmd)
+    exec_state.autoware_universe_cmd = docker_cmd
+    while autoware_universe_container is None:
+        try:
+            autoware_universe_container = docker_client.containers.run(
+                "carla-autoware-universe:improve_v_1_0",
+                command=docker_cmd,
+                detach=True,
+                auto_remove=True,
+                name="carla-autoware-universe-{}".format(os.getenv("USER")),
+                volumes=vol_dict,
+                privileged=False,
+                network_mode="bridge",
+                # runtime="nvidia",
+                device_requests=[
+                    docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
+                environment=env_dict,
+                stdout=True,
+                stderr=True
+            )
+
+        except docker.errors.APIError as e:
+            print("[-] Could not launch docker:", e)
+            if "Conflict" in str(e):
+                os.system("docker rm -f carla-autoware-universe-{}".format(
+                    os.getenv("USER")))
+                killed = True
+            time.sleep(1)
+        except:
+            # https://github.com/docker/for-mac/issues/4957
+            print("[-] Fatal error. Check dmesg")
+            exit(-1)
+    while True:
+        running_container_list = docker_client.containers.list()
+        if autoware_universe_container in running_container_list:
+            break
+        print("[*] Waiting for Autoware container to be launched")
+        time.sleep(1)
+    au_containner_network_settings = autoware_universe_container.attrs['NetworkSettings']
+    au_containner_host = au_containner_network_settings['IPAddress']
+    pdb.set_trace()
 
 def seed_initialize(town, town_map):
     spawn_points = town.get_spawn_points()
@@ -657,6 +748,8 @@ def main():
     conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
     if conf.agent_type == c.AUTOWARE:
         carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
+    elif conf.agent_type == c.AUTOWARE_UNIVERSE:
+        carla_error = autoware_universe_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
     POP_SIZE = 3  # amount of population
