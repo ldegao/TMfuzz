@@ -29,6 +29,7 @@ from scenario import Scenario
 import states
 import utils
 from simulate import autoware_goal_publish
+import controller_bridge.remote_controller_client as remote_controller
 
 config.set_carla_api_path()
 try:
@@ -627,7 +628,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     time.sleep(3)
     return carla_error
 
-def autoware_universe_launch(carla_error, world, conf, town_map):
+def autoware_universe_launch(carla_error, world, conf, town_map)->remote_controller.RemoteControllerClient:
     username = os.getenv("USER")
     global autoware_universe_container
     num_walker_topics = 0
@@ -669,7 +670,7 @@ def autoware_universe_launch(carla_error, world, conf, town_map):
                                         rot.pitch, rot.yaw )
     map_name = town_map.name.split("/")[-1]
     docker_network_host = "172.17.0.1"
-    load_cmd = "/root/op_carla/op_bridge/op_scripts/run_ros2.sh "
+    load_cmd = "/root/op_carla/controller_bridge/run_ros2.sh "
     load_cmd = load_cmd + f"-m {map_name} -p {sp_str} -H {docker_network_host} "
     load_cmd = load_cmd + f"-P {conf.sim_port} -a ego_vehicle "
     docker_cmd = f"bash -c \"{load_cmd}\" "
@@ -711,9 +712,19 @@ def autoware_universe_launch(carla_error, world, conf, town_map):
             break
         print("[*] Waiting for Autoware container to be launched")
         time.sleep(1)
-    au_containner_network_settings = autoware_universe_container.attrs['NetworkSettings']
-    au_containner_host = au_containner_network_settings['IPAddress']
+    au_rm_controller_ip = autoware_universe_container.exec_run(
+        "hostname -i", stdout=True, stderr=True, 
+    ).output.decode("utf-8").strip()
+    print(f"Container IP address: {au_rm_controller_ip}")
+    au_rm_controller_port = 60052
+    au_rm_controller = remote_controller.RemoteControllerClient(au_rm_controller_ip, 
+                                                   au_rm_controller_port)
+    if False == au_rm_controller.wait_autoware_launch_ready(60):
+        return None
+    if False == au_rm_controller.wait_autoware_initial_ready(60):
+        return None    
     pdb.set_trace()
+    return au_rm_controller
 
 def seed_initialize(town, town_map):
     spawn_points = town.get_spawn_points()
@@ -838,7 +849,7 @@ def main():
     if conf.agent_type == c.AUTOWARE:
         carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
     elif conf.agent_type == c.AUTOWARE_UNIVERSE:
-        carla_error = autoware_universe_launch(carla_error, exec_state.world, conf, town)
+        au_cotroller = autoware_universe_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
     POP_SIZE = 10  # amount of population
