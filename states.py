@@ -76,6 +76,7 @@ class ScenarioState:
         self.min_dist = 99999
 
         self.autoware_cmd = ""
+        self.autoware_universe_cmd = ""
         self.autoware_goal = ""
         self.drawn_points = set()
 
