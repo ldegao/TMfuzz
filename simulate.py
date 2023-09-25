@@ -193,10 +193,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         state.end = True
         # save video in output_dir
         save_video(carla_error)
+        # remove behavior ego
+        if conf.agent_type == c.BEHAVIOR:
+            delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
         # remove actors and sensors to reload the world
-        world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world)
+        if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+            retval = 128
+            print("[debug] world reload fail")
+            return retval, actor_list
         # Don't reload and exit if user requests so
         if retval == 128:
+            print("[debug] exit by user requests")
             return retval, actor_list
         else:
             if conf.debug:
@@ -535,17 +542,24 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
         actor.fresh = True
     for s in sensors:
         s.stop()
-        s.destroy()
+        if not s.destroy():
+            print("Failed to destroy {}".format(s))
+            return False
     for w in actor_walkers:
-        w.destroy()
+        if not w.destroy():
+            print("Failed to destroy {}".format(w))
+            return False
     for v in actor_vehicles:
-        try:
-            ret = v.destroy()
-            print("destroyed {}: {}".format(v, ret))
-        except Exception as e:
-            print("Failed to destroy {}: {}".format(v, e))
+        if not v.destroy():
+            print("Failed to destroy {}".format(v))
+            return False
     for actor in actors_now:
         actor.instance = None
+    # check if everyone is deleted
+    vehicles = world.get_actors().filter("*vehicle.*")
+    if len(vehicles) > 1:
+        pdb.set_trace()
+    return True
 
 
 def save_video(carla_error):
@@ -660,7 +674,8 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
                     actor_id=-1)
         ego.set_instance(player)
         ego.attach_collision(world, sensors, state)
-        ego.attach_lane_invasion(world, sensors, state)
+        if conf.check_dict["lane"]:
+            ego.attach_lane_invasion(world, sensors, state)
         world.tick()  # sync once with simulator
         player.set_simulate_physics(True)
         agent = BehaviorAgent(
@@ -682,18 +697,18 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
         ego = Actor(actor_type=c.VEHICLE, spawn_point=sp, actor_id=-1)
         ego.set_instance(player)
         ego.attach_collision(world, sensors, state)
-        ego.attach_lane_invasion(world, sensors, state)
+        if conf.check_dict["lane"]:
+            ego.attach_lane_invasion(world, sensors, state)
         loc = sp.location
         rot = sp.rotation
-        cmd = f'bash -c "source /opt/ros/melodic/setup.bash && \
-                python /tmp/pub_initialpose.py {loc.x} {loc.y} {loc.z} {rot.roll} {rot.pitch} {-1 * rot.yaw}"'
-        # pdb.set_trace()
+        #
+        cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
         result = autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
+
+        print(result.output)
         time.sleep(5)
-        # pdb.set_trace()
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
-
         i = 0
         while True:
             output_state = proc_state.stdout.readline()
@@ -709,10 +724,20 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
             time.sleep(1)
         world.tick()  # sync with simulator
         time.sleep(3)
-        # while True:
-        #     world.tick()  # spin until the player is moved to the sp
-        #     if player.get_location().distance(sp.location) < 1:
-        #         break
+        # pdb.set_trace()
+        while True:
+            world.tick()  # spin until the player is moved to the sp
+            location_1 = player.get_location()
+            location_1.z = 0
+            location_2 = sp.location
+            location_2.z = 0
+            if location_1.distance(location_2) < 1:
+                break
+            else:
+                print(player.get_location())
+                print(sp.location)
+                print(location_1.distance(location_2))
+                time.sleep(1)
     # Attach RGB camera (front)
     rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
 
@@ -865,7 +890,8 @@ def spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, co
         if actor.actor_bp.get_attribute(
                 "number_of_wheels").as_int() > max_wheels_for_non_motorized:
             actor.attach_collision(world, sensors, state)
-            actor.attach_lane_invasion(world, sensors, state)
+            if conf.check_dict["lane"]:
+                actor.attach_lane_invasion(world, sensors, state)
     actors_now.append(actor)
     actor.fresh = False
 
@@ -975,7 +1001,7 @@ def check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed, 
                 retval = 1
                 wait_until_end = 1
     if conf.check_dict["other"]:
-        if state.num_frames > 6000:  # over 5 minutes
+        if state.num_frames > 12000:  # over 10 minutes
             print("\n[*] Simulation taking too long")
             state.other_error = "timeout"
             state.other_error_val = state.num_frames

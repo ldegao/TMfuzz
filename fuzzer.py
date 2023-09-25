@@ -6,14 +6,14 @@ import sys
 import time
 import random
 import argparse
+import copyreg
 import json
 # from collections import deque
 import concurrent.futures
 import math
 from typing import List
 from subprocess import Popen, PIPE
-import datetime
-from copy import deepcopy
+import copy
 
 import docker
 import numpy as np
@@ -39,10 +39,82 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
-client, world, G = None, None, None
+client, world, G, blueprint_library = None, None, None, None
 autoware_container = None
 autoware_universe_container = None
 exec_state = states.ExecState()
+
+
+# vehicle_bp_library = blueprint_library.filter("vehicle.*")
+# vehicle_bp.set_attribute("color", "255,0,0")
+# walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
+# walker_controller_bp = blueprint_library.find('controller.ai.walker')
+# player_bp = blueprint_library.filter('nissan')[0]
+
+def carla_ActorBlueprint_pickle(actor_blueprint):
+    return actor_blueprint.id
+
+
+def carla_ActorBlueprint_unpickle(blueprint_id):
+    return blueprint_library.find(blueprint_id)
+
+
+def carla_location_pickle(location):
+    data = {
+        'location_x': location.x,
+        'location_y': location.y,
+        'location_z': location.z,
+    }
+    json_string = json.dumps(data)
+    return json_string
+
+
+def carla_location_unpickle(json_string):
+    data = json.loads(json_string)
+    x, y, z = data
+    return carla.Location(x, y, z)
+
+
+def carla_rotation_pickle(rotation):
+    data = {
+        'rotation_pitch': rotation.pitch,
+        'rotation_yaw': rotation.yaw,
+        'rotation_roll': rotation.roll
+    }
+    json_string = json.dumps(data)
+    return json_string
+
+
+def carla_rotation_unpickle(json_string):
+    data = json.loads(json_string)
+    pitch, yaw, roll = data
+    return carla.Rotation(pitch, yaw, roll)
+
+
+def carla_transform_pickle(transform):
+    location = transform.location
+    rotation = transform.rotation
+    data = {
+        'location_x': location.x,
+        'location_y': location.y,
+        'location_z': location.z,
+        'rotation_pitch': rotation.pitch,
+        'rotation_yaw': rotation.yaw,
+        'rotation_roll': rotation.roll
+    }
+    json_string = json.dumps(data)
+    return json_string
+
+
+def carla_transform_unpickle(json_string):
+    data = json.loads(json_string)
+    x = data['location_x']
+    y = data['location_y']
+    z = data['location_z']
+    pitch = data['rotation_pitch']
+    yaw = data['rotation_yaw']
+    roll = data['rotation_roll']
+    return carla.Transform(carla.Location(x, y, z), carla.Rotation(pitch, yaw, roll))
 
 
 def create_test_scenario(conf, seed_dict):
@@ -91,7 +163,8 @@ def ini_hyperparameters(conf, args):
     except Exception as e:
         print(e)
         sys.exit(-1)
-
+    if args.no_lane_check:
+        conf.check_dict["lane"] = False
     conf.sim_host = args.sim_host
     conf.sim_port = args.sim_port
     conf.max_mutations = args.max_mutations
@@ -164,7 +237,7 @@ def set_args():
                                  help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argument_parser.add_argument("--town", default=3, type=int,
                                  help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argument_parser.add_argument("--timeout", default="60", type=int,
+    argument_parser.add_argument("--timeout", default="300", type=int,
                                  help="Seconds to timeout if vehicle is not moving")
     argument_parser.add_argument("--no-speed-check", action="store_true")
     argument_parser.add_argument("--no-lane-check", action="store_true")
@@ -445,11 +518,11 @@ def autoware_launch(carla_error, world, conf, town_map):
         "QT_X11_NO_MITSHM": 1
     }
     list_spawn_points = town_map.get_spawn_points()
-    sp = list_spawn_points[11]
+    sp = list_spawn_points[1]
     loc = sp.location
     rot = sp.rotation
-    sp_str = "{},{},{},{},{},{}".format(loc.x, loc.y, loc.z, rot.roll,
-                                        rot.pitch, rot.yaw * -1)
+    sp_str = "{},{},{},{},{},{}".format(loc.x, -1 * loc.y, loc.z, 0,
+                                        0, -1 * rot.yaw)
     autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
     print(autoware_cla)
     exec_state.autoware_cmd = autoware_cla
@@ -740,19 +813,35 @@ def init_env():
     return conf, town, town_map, client, world, G
 
 
+def print_all_attr(obj):
+    attributes = dir(obj)
+    for attr_name in attributes:
+        if not callable(getattr(obj, attr_name)):
+            attr_value = getattr(obj, attr_name)
+            attr_type = type(attr_value)
+            print(f"Attribute: {attr_name}, Value: {attr_value}, Type: {attr_type}")
+
+
 def main():
     # STEP 0: init env
-    global client, world, G
+    global client, world, G, blueprint_library
+
+    copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
+    copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
+    copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
+    copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
 
     carla_error = False
     conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
+    world = exec_state.world
+    blueprint_library = world.get_blueprint_library()
     if conf.agent_type == c.AUTOWARE:
         carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
     elif conf.agent_type == c.AUTOWARE_UNIVERSE:
         carla_error = autoware_universe_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
-    POP_SIZE = 3  # amount of population
+    POP_SIZE = 10  # amount of population
     OFF_SIZE = 10  # number of offspring to produce
     CXPB = 0.8  # crossover probability
     MUTPB = 0.2  # mutation probability
@@ -802,10 +891,13 @@ def main():
             d.cid = index
         # Evaluate the individuals with an invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        a = invalid_ind[0]
+        b = copy.deepcopy(a)
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
         hof.update(offspring)
+
         # Select the next generation population
         population[:] = toolbox.select(population + offspring, POP_SIZE)
         record = stats.compile(population)

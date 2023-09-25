@@ -1,6 +1,7 @@
 import cProfile
 import json
 import os
+import pdb
 import random
 import shutil
 import time
@@ -160,7 +161,8 @@ class Scenario:
         self.log_filename = log_filename
 
         error = self.check_error(self.state)
-
+        # reload scenario state
+        self.state = ScenarioState()
         self.save_video(error, log_filename)
 
         if not self.conf.function.startswith("eval"):

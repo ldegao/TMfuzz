@@ -24,6 +24,8 @@ fi
 # Remove files in fuzzerdata_dir
 find "$fuzzerdata_dir" -type f -delete
 echo "Deleted files in $fuzzerdata_dir"
+# Save videos
+./savefile.sh
 
 # Remove directories
 rm -rf out-artifact
