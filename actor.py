@@ -1,3 +1,4 @@
+import copy
 import pdb
 import random
 
@@ -18,7 +19,7 @@ class Actor:
     actor_type: int
     actor_bp = carla.ActorBlueprint
     spawn_point = carla.Waypoint
-    speed: float
+    speed: int
     spawn_stuck_frame: int
     instance: carla.Actor
     ego_loc: carla.Location
@@ -29,17 +30,29 @@ class Actor:
 
     def __init__(self, actor_type, spawn_point, actor_id=0, speed=0, ego_loc=None,
                  actor_bp=None, spawn_stuck_frame=0):
-        self.actor_id = actor_id
         self.actor_type = actor_type
-        self.actor_bp = actor_bp
         self.spawn_point = spawn_point
+        self.actor_id = actor_id
         self.speed = speed
-        self.spawn_stuck_frame = spawn_stuck_frame
         self.ego_loc = ego_loc
+        self.actor_bp = actor_bp
+        self.spawn_stuck_frame = spawn_stuck_frame
         self.fresh = True
         self.instance = None
         self.sensor_collision = None
         self.sensor_lane_invasion = None
+
+    def __deepcopy__(self, memo):
+        actor_copy = Actor(
+            copy.deepcopy(self.actor_type, memo),
+            copy.deepcopy(self.spawn_point, memo),
+            copy.deepcopy(self.actor_id, memo),
+            copy.deepcopy(self.speed, memo),
+            copy.deepcopy(self.ego_loc, memo),
+            copy.deepcopy(self.actor_bp, memo),
+            copy.deepcopy(self.spawn_stuck_frame, memo),
+        )
+        return actor_copy
 
     def safe_check(self, another_actor, width=1.5, adjust=2):
         """
