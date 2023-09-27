@@ -8,7 +8,6 @@ import random
 import argparse
 import copyreg
 import json
-import dataclasses
 # from collections import deque
 import concurrent.futures
 import math
@@ -40,7 +39,7 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
-client, world, G, blueprint_library = None, None, None, None
+client, world, G, blueprint_library, town_map = None, None, None, None, None
 autoware_container = None
 exec_state = states.ExecState()
 
@@ -234,7 +233,7 @@ def set_args():
                                  help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argument_parser.add_argument("--town", default=3, type=int,
                                  help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argument_parser.add_argument("--timeout", default="300", type=int,
+    argument_parser.add_argument("--timeout", default="120", type=int,
                                  help="Seconds to timeout if vehicle is not moving")
     argument_parser.add_argument("--no-speed-check", action="store_true")
     argument_parser.add_argument("--no-lane-check", action="store_true")
@@ -259,6 +258,9 @@ def evaluation(ind: Scenario):
         # profiler = cProfile.Profile()
         # profiler.enable()  #
         ret = ind.run_test(exec_state)
+        min_dist = ind.state.min_dist
+        # reload scenario state
+        ind.state = states.ScenarioState()
         # profiler.disable()  #
         # profiler.print_stats(sort="cumulative")
         # pdb.set_trace()
@@ -288,47 +290,37 @@ def evaluation(ind: Scenario):
     if ind.found_error:
         print("[-]error detected. start a new cycle with a new seed")
     # todo: get violation here
-
-    return random.random(), random.random(), random.random(), random.random()
+    if ret == 1:
+        return 100, 1, 1, 1
+    else:
+        return min_dist, 1, 1, 1
 
 
 # MUTATION OPERATOR
 
 
 def mut_actor_list(ind: List[Actor]):
+    if len(ind) <= 1:
+        return ind
     mut_pb = random.random()
-
     # remove a random 1
-    if mut_pb < 0.1 and len(ind) > 2:
+    if mut_pb < 0.1:
         random_index = random.randint(0, len(ind) - 1)
         ind.pop(random_index)
         return ind
-
-    # todo:add a random 1
+    # add a random 1
     if mut_pb < 0.4:
-        while True:
-            new_ad = Actor.get_actor_by_one()
-            if ind.has_conflict(new_ad) and ind.add_agent(new_ad):
-                break
-        ind.adjust_time()
+        random_index = random.randint(0, len(ind) - 1)
+        template_actor = ind[random_index]
+        new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+        ind.append(new_ad)
         return ind
-
-    # todo:mutate a random agent
-
-    index = random.randint(0, len(ind.adcs) - 1)
-    routing = ind.adcs[index].routing
-    original_adc = ind.adcs.pop(index)
-    mut_counter = 0
-    while True:
-        if ind.add_agent(ADAgent.get_one_for_routing(routing)):
-            break
-        mut_counter += 1
-        if mut_counter == 5:
-            # mutation kept failing, dont mutate
-            ind.add_agent(original_adc)
-            pass
-    ind.adjust_time()
-
+    # mutate a random agent(temp)
+    random_index = random.randint(0, len(ind) - 1)
+    template_actor = ind[random_index]
+    new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+    ind.append(new_ad)
+    ind.pop(random_index)
     return ind
 
 
@@ -388,51 +380,38 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
     if cx_pb < 0.05:
         return ind2, ind1
 
-    cxed = False
+    for adc1 in ind1:
+        for adc2 in ind2:
+            Actor.actor_cross(adc1, adc2)
 
-    for adc1 in ind1.adcs:
-        for adc2 in ind2.adcs:
-            if adc1.routing_str == adc2.routing_str:
-                # same routing in both parents
-                # swaps start_s and start_t
-                if random.random() < 0.5:
-                    adc1.start_s = adc2.start_s
-                else:
-                    adc1.start_t = adc2.start_t
-                mutated = True
-    if cxed:
-        ind1.adjust_time()
-        return ind1, ind2
-
-    if len(ind1.adcs) < MAX_ADC_COUNT:
-        for adc in ind2.adcs:
-            if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
-                # add an agent from parent 2 to parent 1 if there exists a conflict
-                ind1.adjust_time()
-                return ind1, ind2
-
-    # if none of the above happened, no common adc, no conflict in either
-    # combine to make a new populations
-    available_adcs = ind1.adcs + ind2.adcs
-    random.shuffle(available_adcs)
-    split_index = random.randint(2, min(len(available_adcs), MAX_ADC_COUNT))
-
-    result1 = ADSection([])
-    for x in available_adcs[:split_index]:
-        result1.add_agent(copy.deepcopy(x))
-
-    # make sure offspring adc count is valid
-
-    while len(result1.adcs) > MAX_ADC_COUNT:
-        result1.adcs.pop()
-
-    while len(result1.adcs) < 2:
-        new_ad = ADAgent.get_one()
-        if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
-            break
-    result1.adjust_time()
-    return result1, ind2
-    return Actor, Actor
+    # # if len(ind1.adcs) < MAX_ADC_COUNT:
+    # #     for adc in ind2.adcs:
+    # #         if ind1.has_conflict(adc) and ind1.add_agent(deepcopy(adc)):
+    # #             # add an agent from parent 2 to parent 1 if there exists a conflict
+    # #             ind1.adjust_time()
+    # #             return ind1, ind2
+    #
+    # # if none of the above happened, no common adc, no conflict in either
+    # # combine to make a new populations
+    # available_adcs = ind1.adcs + ind2.adcs
+    # random.shuffle(available_adcs)
+    # split_index = random.randint(2, min(len(available_adcs), MAX_ADC_COUNT))
+    #
+    # result1 = ADSection([])
+    # for x in available_adcs[:split_index]:
+    #     result1.add_agent(copy.deepcopy(x))
+    #
+    # # make sure offspring adc count is valid
+    #
+    # while len(result1.adcs) > MAX_ADC_COUNT:
+    #     result1.adcs.pop()
+    #
+    # while len(result1.adcs) < 2:
+    #     new_ad = ADAgent.get_one()
+    #     if result1.has_conflict(new_ad) and result1.add_agent(new_ad):
+    #         break
+    # result1.adjust_time()
+    return ind1, ind2
 
 
 # def cx_pd_section(ind1: PDSection, ind2: PDSection):
@@ -731,7 +710,7 @@ def print_all_attr(obj):
 
 def main():
     # STEP 0: init env
-    global client, world, G, blueprint_library
+    global client, world, G, blueprint_library, town_map
 
     copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
     copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
@@ -746,8 +725,8 @@ def main():
         carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
-    POP_SIZE = 10  # amount of population
-    OFF_SIZE = 10  # number of offspring to produce
+    POP_SIZE = 2  # amount of population
+    OFF_SIZE = 2  # number of offspring to produce
     CXPB = 0.8  # crossover probability
     MUTPB = 0.2  # mutation probability
 
@@ -790,25 +769,21 @@ def main():
         # Vary the population
         offspring = algorithms.varOr(
             population, toolbox, OFF_SIZE, CXPB, MUTPB)
-        # update chromosome gid and cid
+        # update chromosome generation_id and scenario_id
         for index, d in enumerate(offspring):
-            d.gid = curr_gen
-            d.cid = index
+            d.generation_id = curr_gen
+            d.scenario_id = index
         # Evaluate the individuals with an invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        a = invalid_ind[0]
-        b = copy.deepcopy(a)
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
         hof.update(offspring)
-
         # Select the next generation population
         population[:] = toolbox.select(population + offspring, POP_SIZE)
         record = stats.compile(population)
         logbook.record(gen=curr_gen, **record)
         print(logbook.stream)
-
         # vt.save_to_file()
         # with open('./data/log.bin', 'wb') as fp:
         #     pickle.dump(logbook, fp)

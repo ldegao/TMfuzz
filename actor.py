@@ -131,7 +131,31 @@ class Actor:
         self.sensor_lane_invasion = sensor_lane_invasion
 
     @classmethod
-    def get_actor_by_one(cls,):
+    def get_actor_by_one(cls, actor, town_map, actor_id):
+        # split a car into two similar cars
+        # return the new car
+        while True:
+            actor_loc = actor.spawn_point.location
+            x = 0
+            y = 0
+            while -2 <= x <= 2:
+                x = random.uniform(-5, 5)
+            while -2 <= y <= 2:
+                y = random.uniform(-5, 5)
+            new_speed = actor.speed + random.uniform(-5, 5)
+            location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
+            waypoint = town_map.get_waypoint(location, project_to_road=True,
+                                             lane_type=carla.libcarla.LaneType.Driving)
+            new_car = Actor(actor.actor_type, actor.nav_type, waypoint.transform, actor.dest_point, actor_id,
+                            new_speed,
+                            actor.ego_loc, actor.ego_vel, actor.spawn_frame, actor_bp=actor.actor_bp,
+                            spawn_stuck_frame=actor.spawn_stuck_frame)
+            new_car.fresh = True
+            if new_car.safe_check(actor):
+                print("split:", actor.actor_id, "to", actor.actor_id, actor_id)
+                return new_car
+
+    def actor_cross(self, adc2):
         pass
 
 

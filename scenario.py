@@ -20,7 +20,7 @@ from states import ScenarioState
 
 def get_seed_sp_transform(seed):
     sp = carla.Transform(
-        carla.Location(seed["sp_x"], seed["sp_y"], seed["sp_z"] + 2),
+        carla.Location(seed["sp_x"], seed["sp_y"], seed["sp_z"]),
         carla.Rotation(seed["roll"], seed["yaw"], seed["pitch"])
     )
 
@@ -89,7 +89,7 @@ class Scenario:
         self.found_error = False
 
         self.sp = {
-            "Location": (self.seed_data["sp_x"], self.seed_data["sp_y"], self.seed_data["sp_z"] + 2),
+            "Location": (self.seed_data["sp_x"], self.seed_data["sp_y"], self.seed_data["sp_z"]),
             "Rotation": (self.seed_data["roll"], self.seed_data["yaw"], self.seed_data["pitch"])
         }
         self.town = self.seed_data["map"]
@@ -127,7 +127,7 @@ class Scenario:
                       "num_frames": state.num_frames, "elapsed_time": state.elapsed_time, "events": event_dict,
                       "config": config_dict}
 
-        filename = "gid:{}_sid:{}.json".format(self.generation_id,self.scenario_id)
+        filename = "gid:{}_sid:{}.json".format(self.generation_id, self.scenario_id)
         if log_type == "queue":
             out_dir = self.conf.queue_dir
         with open(os.path.join(out_dir, filename), "w") as fp:
@@ -139,13 +139,11 @@ class Scenario:
     def run_test(self, exec_state):
         if self.conf.debug:
             print("[debug] use scenario:id=", self.scenario_id)
-            # print("Weather:", self.weather)
-        # print("before sim", time.time())
         self.state.end = False
         sp = get_seed_sp_transform(self.seed_data)
         wp = get_seed_wp_transform(self.seed_data)
-
-        ret, self.actor_list = simulate(
+        # print(sp,wp)
+        ret, self.actor_list, self.state = simulate(
             conf=self.conf,
             state=self.state,
             exec_state=exec_state,
@@ -155,16 +153,13 @@ class Scenario:
             # frictions_list=self.puddles,
             actor_list=self.actor_list
         )
-
-        print("actor_list", len(self.actor_list))
         log_filename = self.dump_states(self.state, log_type="queue")
         self.log_filename = log_filename
 
         error = self.check_error(self.state)
-        # reload scenario state
-        self.state = ScenarioState()
+        # # reload scenario state
+        # self.state = ScenarioState()
         self.save_video(error, log_filename)
-
         if not self.conf.function.startswith("eval"):
             if ret == 128:
                 return 128
