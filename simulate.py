@@ -44,6 +44,17 @@ username = os.getenv("USER")
 docker_client = docker.from_env()
 
 
+def record_min_distance(actor_vehicles, player_loc, state):
+    min_dist = state.min_dist
+    for actor_vehicle in actor_vehicles:
+        distance = actor_vehicle.get_location().distance(player_loc)
+        if distance < min_dist:
+            min_dist = distance
+    if min_dist < state.min_dist:
+        print(state.min_dist)
+        state.min_dist = min_dist
+
+
 def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     # simulate() is always called by Scenario instance,
     # so we won't need to switch a map unless a new instance is created.
@@ -57,6 +68,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     max_wheels_for_non_motorized = 2
     carla_error = False
     autoware_container = None
+    state.min_dist = 99999
 
     actors_now = []
     agents_now = []
@@ -68,8 +80,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     frame_gap = 0
     autoware_last_frames = 0
     autoware_stuck = 0
-    pub_cmd = None
-
     client = exec_state.client
     world = exec_state.world
     goal_loc = wp.location
@@ -139,9 +149,13 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                   vel, yaw)
 
                 # Check destination
-                break_flag, retval = check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, conf,
-                                                       goal_loc, player_loc, exec_state.proc_state, retval,
-                                                       s_started, sensors, speed, state)
+                break_flag, retval, autoware_stuck, s_started = check_destination(actor_vehicles, actors_now,
+                                                                                  agents_now, autoware_stuck, conf,
+                                                                                  goal_loc, player_loc,
+                                                                                  exec_state.proc_state, retval,
+                                                                                  s_started, sensors, speed, state)
+                # record the min distance between every two actors
+                record_min_distance(actor_vehicles, player_loc, state)
                 # Delete useless vehicles for any frame
                 delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_lane_id, player_loc,
                                      player_road_id, sensors, exec_state.G, town_map)
@@ -200,18 +214,18 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
             retval = 128
             print("[debug] world reload fail")
-            return retval, actor_list
+            return retval, actor_list,state
         # Don't reload and exit if user requests so
         if retval == 128:
             print("[debug] exit by user requests")
-            return retval, actor_list
+            return retval, actor_list,state
         else:
             if conf.debug:
                 print("[debug] reload")
             # client.reload_world()
             if conf.debug:
                 print('[debug] done.')
-            return retval, actor_list
+            return retval, actor_list,state
 
 
 def control_actor(agents_now, speed_limit):
@@ -530,7 +544,7 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
                     delete_indices.append(i)
         for index in delete_indices:
             delete_actor(agents_now[index][2], actor_vehicles, sensors, agents_now, actors_now)
-    return break_flag, retval
+    return break_flag, retval, autoware_stuck, s_started
 
 
 def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
@@ -556,9 +570,13 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
     for actor in actors_now:
         actor.instance = None
     # check if everyone is deleted
+
     vehicles = world.get_actors().filter("*vehicle.*")
     if len(vehicles) > 1:
-        pdb.set_trace()
+        time.sleep(1)
+        vehicles = world.get_actors().filter("*vehicle.*")
+        # print("Failed to destroy something")
+        # return False
     return True
 
 
@@ -616,28 +634,6 @@ def save_video(carla_error):
 
     cmd = f"rm -f /tmp/fuzzerdata/{username}/top-*.jpg"
     os.system(cmd)
-    # todo:change
-    # elif conf.agent_type == c.AUTOWARE:
-    #
-    #     pass
-    # os.system("rosnode kill /recorder_video_front")
-    # os.system("rosnode kill /recorder_video_rear")
-    # os.system("rosnode kill /recorder_video_top")
-    # os.system("rosnode kill /recorder_bag")
-    # while os.path.exists(f"/tmp/fuzzerdata/{username}/bagfile.lz4.bag.active"):
-    #     print("waiting for rosbag to dump data")
-    #     time.sleep(3)
-    # try:
-    #     autoware_container.kill()
-    # except docker.errors.APIError as e:
-    #     print("[-] Couldn't kill Autoware container:", e)
-    # except UnboundLocalError:
-    #     print("[-] Autoware container was not launched")
-    # except:
-    #     print("[-] Autoware container was not killed for an unknown reason")
-    #     print("    Trying manually")
-    #     os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
-    #     # still doesn't fix docker hanging.
 
 
 def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
@@ -731,7 +727,7 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
             location_1.z = 0
             location_2 = sp.location
             location_2.z = 0
-            if location_1.distance(location_2) < 1:
+            if location_1.distance(location_2) < 5:
                 break
             else:
                 print(player.get_location())

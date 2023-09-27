@@ -73,7 +73,7 @@ class ScenarioState:
         self.lat_speed_list = []
         self.lon_speed_list = []
 
-        self.min_dist = 99999
+        self.min_dist = 99998
 
         self.autoware_cmd = ""
         self.autoware_goal = ""
