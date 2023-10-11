@@ -118,7 +118,7 @@ class Scenario:
             "max_dist_from_player": c.MAX_DIST_FROM_PLAYER,
             "min_dist_from_player": c.MIN_DIST_FROM_PLAYER,
             "abort_seconds": self.conf.timeout,
-            "wait_autoware_num_topics": c.WAIT_AUTOWARE_NUM_TOPICS
+            "wait_autoware_num_topics": c.WAIT_AUTOWARE_NUM_NODES
         }
         state_dict = {"fuzzing_start_time": self.conf.cur_time, "determ_seed": self.conf.determ_seed,
                       "seed": self.seed_data, "weather": self.weather, "autoware_cmd": state.autoware_cmd,
