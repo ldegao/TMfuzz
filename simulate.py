@@ -8,6 +8,7 @@ import select
 import sys
 from subprocess import Popen, PIPE
 import asyncio
+import threading
 import signal
 import time
 import math
@@ -20,7 +21,7 @@ from typing import List, Tuple
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, delete_actor
+    set_autopilot, delete_actor, check_autoware_status
 
 config.set_carla_api_path()
 try:
@@ -211,21 +212,21 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         if conf.agent_type == c.BEHAVIOR:
             delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
         # remove actors and sensors to reload the world
-        if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+        if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container,conf):
             retval = 128
             print("[debug] world reload fail")
-            return retval, actor_list,state
+            return retval, actor_list, state
         # Don't reload and exit if user requests so
         if retval == 128:
             print("[debug] exit by user requests")
-            return retval, actor_list,state
+            return retval, actor_list, state
         else:
             if conf.debug:
                 print("[debug] reload")
             # client.reload_world()
             if conf.debug:
                 print('[debug] done.')
-            return retval, actor_list,state
+            return retval, actor_list, state
 
 
 def control_actor(agents_now, speed_limit):
@@ -547,11 +548,17 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
     return break_flag, retval, autoware_stuck, s_started
 
 
-def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container, conf=None):
     settings = world.get_settings()
     settings.synchronous_mode = False
     settings.fixed_delta_seconds = None
     world.apply_settings(settings)
+    if conf.agent_type == c.AUTOWARE:
+        cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
+        # autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
+        t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
+        t.start()
+        check_autoware_status(world)
     for actor in actor_list:
         actor.fresh = True
     for s in sensors:
@@ -697,7 +704,6 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
             ego.attach_lane_invasion(world, sensors, state)
         loc = sp.location
         rot = sp.rotation
-        #
         cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
         result = autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
 
@@ -886,8 +892,8 @@ def spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, co
         if actor.actor_bp.get_attribute(
                 "number_of_wheels").as_int() > max_wheels_for_non_motorized:
             actor.attach_collision(world, sensors, state)
-            if conf.check_dict["lane"]:
-                actor.attach_lane_invasion(world, sensors, state)
+            # if conf.check_dict["lane"]:
+            #     actor.attach_lane_invasion(world, sensors, state)
     actors_now.append(actor)
     actor.fresh = False
 
@@ -1024,3 +1030,7 @@ def get_docker(container_name):
     # else:
     #     print(f"Container '{container_name}' not found.")
     return target_container
+
+
+def run_cmd_in_container(container, cmd):
+    container.exec_run(cmd, stdout=True, stderr=True, user='root')

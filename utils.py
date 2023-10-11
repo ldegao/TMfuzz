@@ -3,6 +3,8 @@ import json
 import math
 import pdb
 import sys
+import time
+from subprocess import Popen, PIPE
 
 import numpy as np
 from pygame.draw_py import Point
@@ -356,3 +358,29 @@ def carla_rotation_to_RPY(carla_rotation):
     yaw = -math.radians(carla_rotation.yaw)
 
     return roll, pitch, yaw
+
+
+def check_autoware_status(world):
+    i = 0
+    time.sleep(3)
+    while True:
+        proc1 = Popen(["rosnode", "list"], stdout=PIPE)
+        proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
+        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
+        output = proc2.communicate()[0]
+        print(int(output))
+        if int(output) >= c.WAIT_AUTOWARE_NUM_NODES:
+            # FIXME: hardcoding the num of topics :/
+            # on top of that, each vehicle adds one topic, and any walker
+            # contribute to two pedestrian topics.
+            print("")
+            break
+        i += 1
+        if i == 60:
+            carla_error = True
+            print("    [-] something went wrong while launching Autoware.")
+            raise KeyboardInterrupt
+        time.sleep(1)
+        world.tick()
+    proc1.stdout.close()
+    proc2.stdout.close()

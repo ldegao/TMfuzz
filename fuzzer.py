@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import cProfile
 import os
 import pdb
 import sys
@@ -13,7 +12,6 @@ import concurrent.futures
 import math
 from typing import List
 from subprocess import Popen, PIPE
-import copy
 
 import docker
 import numpy as np
@@ -28,7 +26,7 @@ from actor import Actor
 from scenario import Scenario
 import states
 import utils
-from simulate import autoware_goal_publish
+from utils import check_autoware_status
 
 config.set_carla_api_path()
 try:
@@ -247,6 +245,7 @@ def set_args():
 
 def evaluation(ind: Scenario):
     global autoware_container
+    min_dist = 99999
     g_name = f'Generation_{ind.generation_id:05}'
     s_name = f'Scenario_{ind.scenario_id:05}'
     # todo: run test here
@@ -502,7 +501,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
-                "carla-autoware:improved2",
+                "carla-autoware:improved",
                 command=autoware_cla,
                 detach=True,
                 auto_remove=True,
@@ -517,7 +516,6 @@ def autoware_launch(carla_error, world, conf, town_map):
                 stdout=True,
                 stderr=True
             )
-
         except docker.errors.APIError as e:
             print("[-] Could not launch docker:", e)
             if "Conflict" in str(e):
@@ -535,7 +533,7 @@ def autoware_launch(carla_error, world, conf, town_map):
             break
         print("[*] Waiting for Autoware container to be launched")
         time.sleep(1)
-
+    # pdb.set_trace()
     # wait for autoware bridge to spawn player vehicle
     autoware_agent_found = False
     i = 0
@@ -554,29 +552,7 @@ def autoware_launch(carla_error, world, conf, town_map):
         i += 1
         time.sleep(0.5)
 
-    i = 0
-    time.sleep(3)
-    while True:
-        proc1 = Popen(["rostopic", "list"], stdout=PIPE)
-        proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
-        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
-        output = proc2.communicate()[0]
-        print(int(output))
-        if int(output) >= c.WAIT_AUTOWARE_NUM_TOPICS:
-            # FIXME: hardcoding the num of topics :/
-            # on top of that, each vehicle adds one topic, and any walker
-            # contribute to two pedestrian topics.
-            print("")
-            break
-        i += 1
-        if i == 60:
-            carla_error = True
-            print("    [-] something went wrong while launching Autoware.")
-            raise KeyboardInterrupt
-        time.sleep(1)
-        world.tick()
-    proc1.stdout.close()
-    proc2.stdout.close()
+    check_autoware_status(world)
     # exec a detached process that monitors the output of Autoware's
     # decision-maker state, with which we can get an idea of when Autoware
     # thinks it has reached the goal
@@ -725,8 +701,9 @@ def main():
         carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
     population = []
     # GA Hyperparameters
-    POP_SIZE = 2  # amount of population
-    OFF_SIZE = 2  # number of offspring to produce
+    POP_SIZE = 10  # amount of population
+    OFF_SIZE = 10  # number of offspring to produce
+    MAX_GEN = 5  #
     CXPB = 0.8  # crossover probability
     MUTPB = 0.2  # mutation probability
 
@@ -765,6 +742,8 @@ def main():
         # Main loop
         # STEP 1: choice a seed in seed pool
         curr_gen += 1
+        if curr_gen > MAX_GEN:
+            break
         print(f' ====== GA Generation {curr_gen} ====== ')
         # Vary the population
         offspring = algorithms.varOr(
