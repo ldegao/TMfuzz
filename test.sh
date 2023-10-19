@@ -1,5 +1,5 @@
 #!/bin/bash
-for town in {3..3}; do
+for town in {1..3}; do
 	t=14400  
 	start_time=$(date +%s)  
 	while true; do
@@ -14,7 +14,7 @@ for town in {3..3}; do
 	    if [ -n "$1" ]; then
 		cmd="./fuzzer.py  --sim-port 4000 -t $1 --density 0.5 --town $town"
 	    else
-		cmd="./fuzzer.py  --sim-port 4000 -t autoware --debug --density 0.5 --town $town --no-lane-check"
+		cmd="./fuzzer.py  --sim-port 4000 -t autoware --debug --density 0.5 --town $town  --no-traffic-light"
 	    fi
 	    $cmd
 	    status=$(docker inspect -f '{{.State.Status}}' carla-$USER)
@@ -23,4 +23,4 @@ for town in {3..3}; do
 	    fi
 	done
 done
-
+#--no-lane-check

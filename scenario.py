@@ -41,10 +41,7 @@ class ScenarioFitness(deap.base.Fitness):
     Class to represent weight of each fitness function
     """
     # minimize closest distance between pair of ADC
-    # maximize number of unique decisions being made
-    # maximize pairs of conflict trajectory
-    # maximize unique violation
-    weights = (-1.0, 1.0, 1.0, 1.0)
+    weights = (-1.0,)
     """
     :note: minimize closest distance, maximize number of decisions,
       maximize pairs having conflicting trajectory,
@@ -94,8 +91,7 @@ class Scenario:
         }
         self.town = self.seed_data["map"]
         # utils.switch_map(conf, self.town, client)
-
-        print("[+] test case initialized")
+        # print("[+] test case initialized")
 
     def get_distance_from_player(self, location):
         sp = get_seed_sp_transform(self.seed_data)
@@ -120,13 +116,13 @@ class Scenario:
             "abort_seconds": self.conf.timeout,
             "wait_autoware_num_topics": c.WAIT_AUTOWARE_NUM_NODES
         }
-        state_dict = {"fuzzing_start_time": self.conf.cur_time, "determ_seed": self.conf.determ_seed,
-                      "seed": self.seed_data, "weather": self.weather, "autoware_cmd": state.autoware_cmd,
-                      "autoware_goal": state.autoware_goal, "first_frame_id": state.first_frame_id,
-                      "first_sim_elapsed_time": state.first_sim_elapsed_time, "sim_start_time": state.sim_start_time,
-                      "num_frames": state.num_frames, "elapsed_time": state.elapsed_time, "events": event_dict,
-                      "config": config_dict}
-
+        # state_dict = {"fuzzing_start_time": self.conf.cur_time, "determ_seed": self.conf.determ_seed,
+        #               "seed": self.seed_data, "weather": self.weather, "autoware_cmd": state.autoware_cmd,
+        #               "autoware_goal": state.autoware_goal, "first_frame_id": state.first_frame_id,
+        #               "first_sim_elapsed_time": state.first_sim_elapsed_time, "sim_start_time": state.sim_start_time,
+        #               "num_frames": state.num_frames, "elapsed_time": state.elapsed_time, "events": event_dict,
+        #               "config": config_dict}
+        state_dict = {"events": event_dict, "config": config_dict}
         filename = "gid:{}_sid:{}.json".format(self.generation_id, self.scenario_id)
         if log_type == "queue":
             out_dir = self.conf.queue_dir
@@ -139,7 +135,7 @@ class Scenario:
     def run_test(self, exec_state):
         if self.conf.debug:
             print("[debug] use scenario:id=", self.scenario_id)
-        self.state.end = False
+        self.reload_state()
         sp = get_seed_sp_transform(self.seed_data)
         wp = get_seed_wp_transform(self.seed_data)
         # print(sp,wp)
@@ -176,6 +172,22 @@ class Scenario:
         # with open(os.path.join(self.conf.score_dir, log_filename), "w") as fp:
         #     json.dump(state.deductions, fp)
 
+    def reload_state(self):
+        self.state.crashed = False
+        self.state.collision_to = None
+        self.state.stuck = False
+        self.state.stuck_duration = 0
+        self.state.laneinvaded = False
+        self.state.laneinvasion_event = []
+        self.state.speeding = False
+        self.state.speed = []
+        self.state.speed_lim = []
+        self.state.on_red = False
+        self.state.on_red_speed = []
+        self.state.red_violation = False
+        self.state.other_error = False
+        self.state.other_error_val = 0
+
     def save_video(self, error, log_filename):
         if error:
             shutil.copyfile(
@@ -204,9 +216,9 @@ class Scenario:
         error = False
         if self.conf.check_dict["crash"] and state.crashed:
             if self.conf.debug:
-                print("[debug] Crashed:", state.collision_event)
-                oa = state.collision_event.other_actor
-                print(f"  - against {oa.type_id}")
+                print("[debug] Crashed with:", state.collision_to)
+                oa = state.collision_to
+                print(f"  - against {oa}")
             error = True
         if self.conf.check_dict["stuck"] and state.stuck:
             if self.conf.debug:

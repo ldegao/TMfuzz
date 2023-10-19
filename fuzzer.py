@@ -27,6 +27,7 @@ from scenario import Scenario
 import states
 import utils
 from utils import check_autoware_status
+from deap import creator
 
 config.set_carla_api_path()
 try:
@@ -50,6 +51,10 @@ exec_state = states.ExecState()
 
 def carla_ActorBlueprint_pickle(actor_blueprint):
     return actor_blueprint.id
+
+
+def carla_ActorBlueprint_unpickle(blueprint_id):
+    return blueprint_library.find(blueprint_id)
 
 
 def carla_ActorBlueprint_unpickle(blueprint_id):
@@ -153,10 +158,8 @@ def ini_hyperparameters(conf, args):
     try:
         os.mkdir(conf.queue_dir)
         os.mkdir(conf.error_dir)
-        os.mkdir(conf.cov_dir)
         os.mkdir(conf.rosbag_dir)
         os.mkdir(conf.cam_dir)
-        os.mkdir(conf.score_dir)
     except Exception as e:
         print(e)
         sys.exit(-1)
@@ -254,6 +257,7 @@ def evaluation(ind: Scenario):
     mutate_weather_fixed(ind)
     signal.alarm(12 * 60)  # timeout after 12 min
     try:
+
         # profiler = cProfile.Profile()
         # profiler.enable()  #
         ret = ind.run_test(exec_state)
@@ -266,7 +270,7 @@ def evaluation(ind: Scenario):
     except Exception as e:
         if e.args[0] == "HANG":
             print("[-] simulation hanging. abort.")
-            ret = -1
+            ret = 1
         else:
             print("[-] run_test error:")
             traceback.print_exc()
@@ -280,7 +284,7 @@ def evaluation(ind: Scenario):
         print("fuzzer - found an error")
     elif ret == 128:
         print("Exit by user request")
-        exit(0)
+        sys.exit(0)
     else:
         if ret == -1:
             print("[-] Fatal error occurred during test")
@@ -290,9 +294,9 @@ def evaluation(ind: Scenario):
         print("[-]error detected. start a new cycle with a new seed")
     # todo: get violation here
     if ret == 1:
-        return 100, 1, 1, 1
+        return 100,
     else:
-        return min_dist, 1, 1, 1
+        return min_dist,
 
 
 # MUTATION OPERATOR
@@ -301,19 +305,19 @@ def evaluation(ind: Scenario):
 def mut_actor_list(ind: List[Actor]):
     if len(ind) <= 1:
         return ind
-    mut_pb = random.random()
-    # remove a random 1
-    if mut_pb < 0.1:
-        random_index = random.randint(0, len(ind) - 1)
-        ind.pop(random_index)
-        return ind
-    # add a random 1
-    if mut_pb < 0.4:
-        random_index = random.randint(0, len(ind) - 1)
-        template_actor = ind[random_index]
-        new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
-        ind.append(new_ad)
-        return ind
+    # mut_pb = random.random()
+    # # remove a random 1
+    # if mut_pb < 0.1:
+    #     random_index = random.randint(0, len(ind) - 1)
+    #     ind.pop(random_index)
+    #     return ind
+    # # add a random 1
+    # if mut_pb < 0.4:
+    #     random_index = random.randint(0, len(ind) - 1)
+    #     template_actor = ind[random_index]
+    #     new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+    #     ind.append(new_ad)
+    #     return ind
     # mutate a random agent(temp)
     random_index = random.randint(0, len(ind) - 1)
     template_actor = ind[random_index]
@@ -595,9 +599,9 @@ def seed_initialize(town, town_map):
         wp_y = wp.location.y
         wp_z = wp.location.z
         wp_yaw = wp.rotation.yaw
-        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > 100:
+        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > c.MIN_DIST:
             destination_flag = False
-        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > 200:
+        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > c.MAX_DIST:
             destination_flag = True
     seed_dict = {
         "map": town_map,
@@ -624,6 +628,8 @@ def init_env():
         town_map = "Town0{}".format(conf.town)
     else:
         town_map = "Town0{}".format(random.randint(1, 5))
+    if conf.no_traffic_lights:
+        conf.check_dict["red"] = False
     signal.signal(signal.SIGALRM, handler)
     client = utils.connect(conf)
     client.set_timeout(20)

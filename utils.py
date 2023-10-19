@@ -275,6 +275,7 @@ def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=Non
         print("remove ego")
     actor.instance.destroy()
     actor.instance = None
+    actor.stuck_duration = 0
     if actor.sensor_collision:
         sensors.remove(actor.sensor_collision)
         actor.sensor_collision.stop()
@@ -298,16 +299,10 @@ def _on_collision(event, state):
             # do not count collision while spawning ego vehicle (hard drop)
             print("crashed")
             state.crashed = True
-            state.collision_event = event
+            state.collision_to = event.other_actor.id
 
 
 def _on_invasion(event, state):
-    # lane_types = set(x.type for x in event.crossed_lane_markings)
-    # text = ['%r' % str(x).split()[-1] for x in lane_types]
-    # self.hud.notification('Crossed line %s' % ' and '.join(text))
-    # if event.frame > state.first_frame_id + state.num_frames:
-    #     print("get!")
-    #     return
     crossed_lanes = event.crossed_lane_markings
     for crossed_lane in crossed_lanes:
         if crossed_lane.lane_change == carla.LaneChange.NONE:
@@ -368,7 +363,6 @@ def check_autoware_status(world):
         proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
         print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
         output = proc2.communicate()[0]
-        print(int(output))
         if int(output) >= c.WAIT_AUTOWARE_NUM_NODES:
             # FIXME: hardcoding the num of topics :/
             # on top of that, each vehicle adds one topic, and any walker

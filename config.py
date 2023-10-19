@@ -47,7 +47,6 @@ class Config:
         self.rosbag_dir = None
         self.cam_dir = None
         self.meta_file = None
-        self.cov_dir = None
         self.error_dir = None
         self.queue_dir = None
         self.debug = True
@@ -97,11 +96,9 @@ class Config:
     def set_paths(self):
         self.queue_dir = os.path.join(self.out_dir, "queue")
         self.error_dir = os.path.join(self.out_dir, "errors")
-        self.cov_dir = os.path.join(self.out_dir, "cov")
         self.meta_file = os.path.join(self.out_dir, "meta")
         self.cam_dir = os.path.join(self.out_dir, "camera")
         self.rosbag_dir = os.path.join(self.out_dir, "rosbags")
-        self.score_dir = os.path.join(self.out_dir, "scores")
 
     # def enqueue_seed_scenarios(self):
     #     try:

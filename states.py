@@ -46,7 +46,7 @@ class ScenarioState:
 
         # error states
         self.crashed = False
-        self.collision_event = None
+        self.collision_to = None
         self.stuck = False
         self.stuck_duration = 0
         self.laneinvaded = False
