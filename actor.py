@@ -41,6 +41,7 @@ class Actor:
         self.instance = None
         self.sensor_collision = None
         self.sensor_lane_invasion = None
+        self.stuck_duration = 0
 
     def __deepcopy__(self, memo):
         actor_copy = Actor(
@@ -146,13 +147,14 @@ class Actor:
             location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                              lane_type=carla.libcarla.LaneType.Driving)
-            new_car = Actor(actor.actor_type, actor.nav_type, waypoint.transform, actor.dest_point, actor_id,
+            new_car = Actor(actor.actor_type,  waypoint.transform, actor_id,
                             new_speed,
-                            actor.ego_loc, actor.ego_vel, actor.spawn_frame, actor_bp=actor.actor_bp,
+                            actor.ego_loc,actor_bp=actor.actor_bp,
                             spawn_stuck_frame=actor.spawn_stuck_frame)
             new_car.fresh = True
             if new_car.safe_check(actor):
                 print("split:", actor.actor_id, "to", actor.actor_id, actor_id)
+                pdb.set_trace()
                 return new_car
 
     def actor_cross(self, adc2):

@@ -16,6 +16,10 @@ MSG_BAD_ACTOR_ATTR = "Vehicle or walker requires 12 args: " \
                      "speed."
 MSG_BAD_SPAWN_ARG = "--spawn expects six args: x, y, z, pitch, yaw, roll"
 MSG_BAD_DEST_ARG = "--dest expects three args: x, y, z"
+# scope
+
+MIN_DIST = 50
+MAX_DIST = 150
 
 # Agent Types
 BEHAVIOR = 1
@@ -53,6 +57,7 @@ NAVTYPE_NAMES = [ "behavior_agent", "immobile", "stop"]
 # Actor Attributes
 VEHICLE_MAX_SPEED = 30  # multiplied with forward vector
 WALKER_MAX_SPEED = 10  # m/s
+VIDEO_TIME = 15
 
 # # Puddle Attributes
 # PROB_PUDDLE = 25 # probability of adding a new puddle
