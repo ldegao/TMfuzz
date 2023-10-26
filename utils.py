@@ -260,7 +260,6 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
         color=color
     )
     world.debug.draw_line(arrow_start, arrow_end, life_time=0.5, color=color)
-    # world.debug.draw_polygon(arrow_points, life_time=10.0, color=color)
 
 
 def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=None):

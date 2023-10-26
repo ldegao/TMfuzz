@@ -46,8 +46,6 @@ def clear_folder(folder):
                     shutil.rmtree(file_path)
             except Exception as e:
                 print(f"Failed to delete {file_path}: {e}")
-    else:
-        print(f"Folder {folder} does not exist.")
 
 
 # List of event types
@@ -94,44 +92,6 @@ for folder in scene_folders:
 total_runtime = end_time - start_time
 print(f"Total runtime: {total_runtime} seconds")
 
-# 3. Process each scene folder
-for folder in scene_folders:
-    scene_folder = os.path.join('./save', folder)
-    camera_folder = os.path.join(scene_folder, 'camera')
-    errors_folder = os.path.join(scene_folder, 'errors')
-
-    # Check if camera_folder exists before processing
-    if os.path.exists(camera_folder):
-        if os.path.exists(errors_folder):
-            error_files = [f for f in os.listdir(errors_folder) if f.endswith('.json')]
-            for error_file in error_files:
-                error_file_path = os.path.join(errors_folder, error_file)
-                with open(error_file_path, 'r') as json_file:
-                    data = json.load(json_file)
-
-                # Extract relevant information from JSON
-                gid = data.get("seed", {}).get("gid", "")
-                sid = data.get("seed", {}).get("sid", "")
-                events = data.get("events", {})
-
-                for event_type, event_value in events.items():
-                    if event_value:
-                        # Determine the video filename based on the event type
-                        video_files = [f"gid:{gid}_sid:{sid}-top.mp4"]
-                        event_folder = os.path.join('./save', event_type)
-                        os.makedirs(event_folder, exist_ok=True)
-                        for video_file in video_files:
-                            source_video_path = os.path.join(camera_folder, video_file)
-                            if os.path.exists(source_video_path):
-                                # Calculate video duration
-                                video_dur = video_duration(source_video_path)
-                                if video_dur >= 1:
-                                    # Copy the video file
-                                    # Comment out the following line to disable video copying
-                                    # shutil.copy2(source_video_path, destination)
-                                    video_durations[event_type].append(video_dur)
-                                else:
-                                    error_video_durations.append(video_dur)
 
 # 4. Copy videos to event folders based on event type
 for scene_folder in scene_folders:
@@ -163,7 +123,7 @@ for scene_folder in scene_folders:
                             if video_dur >= 1:
                                 # Copy the video file to the event folder
                                 # Comment out the following line to disable video copying
-                                # shutil.copy2(source_video_path, destination)
+                                shutil.copy2(source_video_path, destination)
                                 video_durations[event_type].append(video_dur)
                             else:
                                 error_video_durations.append(video_dur)
@@ -176,7 +136,7 @@ for scene_folder in scene_folders:
                 if video_dur >= 1:
                     # Copy the video file to the "correct" folder
                     # Comment out the following line to disable video copying
-                    # shutil.copy2(source_video_path, destination)
+                    shutil.copy2(source_video_path, destination)
                     correct_video_durations.append(video_dur)
                 else:
                     error_video_durations.append(video_dur)

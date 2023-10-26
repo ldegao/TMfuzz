@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import os
 import pdb
 import sys
@@ -327,49 +328,10 @@ def mut_actor_list(ind: List[Actor]):
     return ind
 
 
-# def mut_pd_section(ind: PDSection):
-#     if len(ind.pds) == 0:
-#         ind.add_agent(PDAgent.get_one())
-#         return ind
-#
-#     mut_pb = random()
-#     # remove a random
-#     if mut_pb < 0.2 and len(ind.pds) > 0:
-#         random.shuffle(ind.pds)
-#         ind.pds.pop()
-#         return ind
-#
-#     # add a random
-#     if mut_pb < 0.4 and len(ind.pds) <= MAX_PD_COUNT:
-#         ind.pds.append(PDAgent.get_one())
-#         return ind
-#
-#     # mutate a random
-#     index = random.randint(0, len(ind.pds) - 1)
-#     ind.pds[index] = PDAgent.get_one_for_cw(ind.pds[index].cw_id)
-#     return ind
-#
-#
-# def mut_tc_section(ind: TCSection):
-#     mut_pb = random()
-#
-#     if mut_pb < 0.3:
-#         ind.initial = TCSection.generate_config()
-#         return ind
-#     elif mut_pb < 0.6:
-#         ind.final = TCSection.generate_config()
-#     elif mut_pb < 0.9:
-#         ind.duration_g = TCSection.get_random_duration_g()
-#
-#     return TCSection.get_one()
-
-
 def mut_scenario(ind: Scenario):
     mut_pb = random.random()
     if mut_pb < 1:
         ind.actor_list = mut_actor_list(ind.actor_list)
-    # elif mut_pb < 2 / 3:
-    #     ind.pd_section = mut_pd_section(ind.pd_section)
     # else:
     #     ind.tc_section = mut_tc_section(ind.tc_section)
     return ind,
@@ -417,33 +379,6 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
     return ind1, ind2
 
 
-# def cx_pd_section(ind1: PDSection, ind2: PDSection):
-#     cx_pb = random()
-#     if cx_pb < 0.1:
-#         return ind2, ind1
-#
-#     available_pds = ind1.pds + ind2.pds
-#
-#     result1 = PDSection(
-#         sample(available_pds, k=random.randint(0, min(MAX_PD_COUNT, len(available_pds)))))
-#     result2 = PDSection(
-#         sample(available_pds, k=random.randint(0, min(MAX_PD_COUNT, len(available_pds)))))
-#     return result1, result2
-#
-#
-# def cx_tc_section(ind1: TCSection, ind2: TCSection):
-#     cx_pb = random.random()
-#     if cx_pb < 0.1:
-#         return ind2, ind1
-#     elif cx_pb < 0.4:
-#         ind1.initial, ind2.initial = ind2.initial, ind1.initial
-#     elif cx_pb < 0.7:
-#         ind1.final, ind2.final = ind2.final, ind1.final
-#     else:
-#         ind1.duration_g, ind2.duration_g = ind2.duration_g, ind1.duration_g
-#     return ind1, ind2
-
-
 def cx_scenario(ind1: Scenario, ind2: Scenario):
     cx_pb = random.random()
     if cx_pb < 1:
@@ -461,7 +396,7 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
     return ind1, ind2
 
 
-def autoware_launch(carla_error, world, conf, town_map):
+def autoware_launch(world, conf, town_map):
     username = os.getenv("USER")
     global autoware_container
     # print("before launching autoware", time.time())
@@ -505,7 +440,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
-                "carla-autoware:improved",
+                "carla-autoware:improved-df",
                 command=autoware_cla,
                 detach=True,
                 auto_remove=True,
@@ -578,7 +513,7 @@ def autoware_launch(carla_error, world, conf, town_map):
     #         raise KeyboardInterrupt
     #     time.sleep(1)
     time.sleep(3)
-    return carla_error
+    return
 
 
 def seed_initialize(town, town_map):
@@ -693,93 +628,84 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
+    logging.basicConfig(filename='app.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    with open("log.txt", "w") as log_file:
+        copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
+        copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
+        copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
+        copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
 
-    copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
-    copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
-    copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
-    copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
+        conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
+        world = exec_state.world
+        blueprint_library = world.get_blueprint_library()
+        if conf.agent_type == c.AUTOWARE:
+            autoware_launch(exec_state.world, conf, town)
+        population = []
+        # GA Hyperparameters
+        POP_SIZE = 10  # amount of population
+        OFF_SIZE = 10  # number of offspring to produce
+        MAX_GEN = 5  #
+        CXPB = 0.8  # crossover probability
+        MUTPB = 0.2  # mutation probability
 
-    carla_error = False
-    conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
-    world = exec_state.world
-    blueprint_library = world.get_blueprint_library()
-    if conf.agent_type == c.AUTOWARE:
-        carla_error = autoware_launch(carla_error, exec_state.world, conf, town)
-    population = []
-    # GA Hyperparameters
-    POP_SIZE = 10  # amount of population
-    OFF_SIZE = 10  # number of offspring to produce
-    MAX_GEN = 5  #
-    CXPB = 0.8  # crossover probability
-    MUTPB = 0.2  # mutation probability
-
-    toolbox = base.Toolbox()
-    toolbox.register("evaluate", evaluation)
-    toolbox.register("mate", cx_scenario)
-    toolbox.register("mutate", mut_scenario)
-    toolbox.register("select", tools.selNSGA2)
-    hof = tools.ParetoFront()
-    # Evaluate Initial Population
-    print(f' ====== Analyzing Initial Population ====== ')
-    invalid_ind = [ind for ind in population if not ind.fitness.valid]
-    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
-    for ind, fit in zip(invalid_ind, fitnesses):
-        ind.fitness.values = fit
-
-    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean, axis=0)
-    stats.register("max", np.max, axis=0)
-    stats.register("min", np.min, axis=0)
-    logbook = tools.Logbook()
-    logbook.header = 'gen', 'avg', 'max', 'min'
-    # begin a generational process
-    curr_gen = 0
-    # init some seed if seed pool is empty
-    for i in range(POP_SIZE):
-        seed_dict = seed_initialize(town, town_map)
-        # Creates and initializes a Scenario instance based on the metadata
-        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
-            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-            test_scenario = future.result(timeout=15)
-        population.append(test_scenario)
-        test_scenario.scenario_id = len(population)
-
-    while True:
-        # Main loop
-        # STEP 1: choice a seed in seed pool
-        curr_gen += 1
-        if curr_gen > MAX_GEN:
-            break
-        print(f' ====== GA Generation {curr_gen} ====== ')
-        # Vary the population
-        offspring = algorithms.varOr(
-            population, toolbox, OFF_SIZE, CXPB, MUTPB)
-        # update chromosome generation_id and scenario_id
-        for index, d in enumerate(offspring):
-            d.generation_id = curr_gen
-            d.scenario_id = index
-        # Evaluate the individuals with an invalid fitness
-        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        toolbox = base.Toolbox()
+        toolbox.register("evaluate", evaluation)
+        toolbox.register("mate", cx_scenario)
+        toolbox.register("mutate", mut_scenario)
+        toolbox.register("select", tools.selNSGA2)
+        hof = tools.ParetoFront()
+        # Evaluate Initial Population
+        print(f' ====== Analyzing Initial Population ====== ')
+        log_file.write(f' ====== Analyzing Initial Population ====== ')
+        invalid_ind = [ind for ind in population if not ind.fitness.valid]
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
-        hof.update(offspring)
-        # Select the next generation population
-        population[:] = toolbox.select(population + offspring, POP_SIZE)
-        record = stats.compile(population)
-        logbook.record(gen=curr_gen, **record)
-        print(logbook.stream)
-        # vt.save_to_file()
-        # with open('./data/log.bin', 'wb') as fp:
-        #     pickle.dump(logbook, fp)
-        # with open('./data/hof.bin', 'wb') as fp:
-        #     pickle.dump(hof, fp)
 
-        # curr_time = datetime.now()
-        # tdelta = (curr_time - start_time).total_seconds()
-        # if tdelta / 3600 > RUN_FOR_HOUR:
-        #     break
+        stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+        stats.register("avg", np.mean, axis=0)
+        stats.register("max", np.max, axis=0)
+        stats.register("min", np.min, axis=0)
+        logbook = tools.Logbook()
+        logbook.header = 'gen', 'avg', 'max', 'min'
+        # begin a generational process
+        curr_gen = 0
+        # init some seed if seed pool is empty
+        for i in range(POP_SIZE):
+            seed_dict = seed_initialize(town, town_map)
+            # Creates and initializes a Scenario instance based on the metadata
+            with concurrent.futures.ThreadPoolExecutor() as my_simulate:
+                future = my_simulate.submit(create_test_scenario, conf, seed_dict)
+                test_scenario = future.result(timeout=15)
+            population.append(test_scenario)
+            test_scenario.scenario_id = len(population)
 
+        while True:
+            # Main loop
+            curr_gen += 1
+            if curr_gen > MAX_GEN:
+                break
+            print(f' ====== GA Generation {curr_gen} ====== ')
+            log_file.write(f' ====== GA Generation {curr_gen} ====== ')
+            # Vary the population
+            offspring = algorithms.varOr(
+                population, toolbox, OFF_SIZE, CXPB, MUTPB)
+            # update chromosome generation_id and scenario_id
+            for index, d in enumerate(offspring):
+                d.generation_id = curr_gen
+                d.scenario_id = index
+            # Evaluate the individuals with an invalid fitness
+            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+            fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+            for ind, fit in zip(invalid_ind, fitnesses):
+                ind.fitness.values = fit
+            hof.update(offspring)
+            # Select the next generation population
+            population[:] = toolbox.select(population + offspring, POP_SIZE)
+            record = stats.compile(population)
+            logbook.record(gen=curr_gen, **record)
+            print(logbook.stream)
+            log_file.write(logbook.stream)
 
 if __name__ == "__main__":
     main()
