@@ -32,7 +32,7 @@ rm -rf out-artifact
 rm -rf seed-artifact
 
 # Remove Docker containers
-containers=$(docker ps -a --filter ancestor=carla-autoware:improved2 --format="{{.ID}}")
+containers=$(docker ps -a --filter ancestor=carla-autoware:improved-df --format="{{.ID}}")
 if [ -n "$containers" ]; then
   docker rm -f $containers
 fi

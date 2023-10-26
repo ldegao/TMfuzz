@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import fcntl
 import glob
+import logging
 # Python packages
 import os
 import pdb
@@ -86,6 +87,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     goal_loc = wp.location
     goal_rot = wp.rotation
 
+    nearby_list = {}
+    valid_frames = 0
     try:
 
         # initialize the simulation and the ego vehicle
@@ -127,6 +130,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                             first_sim_time))
             # simulate start here
             state.end = False
+
             while True:
                 # world tick
                 if conf.agent_type == c.BEHAVIOR:
@@ -145,7 +149,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 state.elapsed_time = cur_sim_time - first_sim_time
 
                 frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel = get_player_info(
-                    cur_frame_id, goal_loc, player, sp, state, town_map,conf)
+                    cur_frame_id, goal_loc, player, sp, state, town_map, conf)
 
                 # drive-fuzz's thing, not sure if we need it
                 yaw = sp.rotation.yaw
@@ -180,6 +184,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
                 control_actor(agents_now, speed_limit)
+                valid_frames = nearby_check(actor_vehicles, nearby_list, player_loc, town_map, valid_frames, exec_state.G)
                 if break_flag:
                     break
                 if wait_until_end == 0:
@@ -208,9 +213,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         # Finalize simulation
         # rospy.signal_shutdown("fin")
         # find biggest weight of actor-list
+        logging.info("nearby_list: %s", nearby_list)
+        logging.info("valid_frames/num_frames: %s/%s", valid_frames,state.num_frames)
         state.end = True
         # save video in output_dir
-        save_video(carla_error,state)
+        save_video(carla_error, state)
         if not is_carla_running():
             retval = 128
         # remove behavior ego
@@ -220,7 +227,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container,
                             conf):
             retval = 128
-            print("[debug] world reload fail")
+            if conf.debug:
+                print("[debug] world reload fail")
             return retval, actor_list, state
         # Don't reload and exit if user requests so
         if retval == 128:
@@ -233,6 +241,27 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             if conf.debug:
                 print('[debug] done.')
             return retval, actor_list, state
+
+
+def nearby_check(actor_vehicles, nearby_list, player_loc, town_map, valid_frames,G):
+    player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
+                                            lane_type=carla.libcarla.LaneType.Driving)
+    has_nearby = False
+    for actor_vehicle in actor_vehicles:
+        if actor_vehicle.id not in nearby_list:
+            nearby_list[actor_vehicle.id] = 0
+        waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
+                                         lane_type=carla.libcarla.LaneType.Driving)
+        is_nearby = check_topo(player_waypoint, waypoint, G)
+        actor_vehicle_speed = math.sqrt(
+            actor_vehicle.get_velocity().x ** 2 + actor_vehicle.get_velocity().y ** 2)
+        not_stuck = (actor_vehicle_speed > 0.5) or (actor_vehicle_speed > 0.5)
+        if is_nearby and not_stuck:
+            nearby_list[actor_vehicle.id] += 1
+            has_nearby = True
+    if has_nearby:
+        valid_frames += 1
+    return valid_frames
 
 
 def is_carla_running():
@@ -267,7 +296,7 @@ def control_actor(agents_now, speed_limit):
         vel = agent_vehicle.get_velocity()
         speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
         # Check inactivity
-        if  speed < 1:  # km/h
+        if speed < 1:  # km/h
             agent_actor.stuck_duration += 1
         else:
             agent_actor.stuck_duration = 0
@@ -313,8 +342,6 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                                       spawn_point=None, speed=None,
                                       actor_id=len(actor_list),
                                       ego_loc=player_loc)
-                    # if conf.debug:
-                    #     print("[debug] dont spawn car", new_actor.actor_id, "at", state.num_frames)
                     new_actor.instance = None
                     actor_list.append(new_actor)
                     new_actor.fresh = False
@@ -407,8 +434,6 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                 spawn_actor(new_actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
                             max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
                 actor_list.append(new_actor)
-                # if conf.debug:
-                #     print("[debug] spawn new car", new_actor.actor_id, "at", state.num_frames)
         found_frame = False
     return found_frame, autoware_last_frames, frame_gap
 
@@ -443,8 +468,6 @@ def add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf, found_
                 road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
                 spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
                             max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
-                # if conf.debug:
-                #     print("[debug] spawn old car:", actor.actor_id, "at", state.num_frames)
                 continue
     return found_frame
 
@@ -499,7 +522,7 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
     state.speed.append(speed)
     state.speed_lim.append(speed_limit)
     if conf.debug:
-        print("(%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
+        print("[debug] (%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
             sp.location.x, sp.location.y, player_loc.x,
             player_loc.y, goal_loc.x, goal_loc.y,
             player_loc.distance(goal_loc),
@@ -536,7 +559,7 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
         # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
         # VehicleReady\nWaitOrder\nStopping\nWaitDriveReady\n
         if speed < 1:
-            if dist_to_goal < 0.5:
+            if dist_to_goal < 1:
                 print("\n[*] (Autoware) Reached the destination dist_to_goal=",
                       dist_to_goal)
                 retval = 0
@@ -561,6 +584,7 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
                         state.other_error_val = dist_to_goal
                         retval = 1
                     retval = 0
+                    break_flag = True
     elif conf.agent_type == c.BEHAVIOR:
         delete_indices = []
         for i in range(len(agents_now)):
@@ -638,7 +662,7 @@ def check_and_remove_excess_images(pattern, max_frames):
         os.remove(images.pop(0))
 
 
-def save_video(carla_error,state):
+def save_video(carla_error, state):
     # if conf.agent_type == c.BEHAVIOR:
     # remove jpg files
     max_frames = c.FRAME_RATE * c.VIDEO_TIME
@@ -716,8 +740,6 @@ def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
     goal_msg = "'{" + goal_hdr + ", " + goal_pose + "}'"
     pub_cmd = "rostopic pub --once {} {} {} > /dev/null".format(pub_topic, msg_type, goal_msg)
     os.system(pub_cmd)
-    if conf.debug:
-        print(goal_msg)
     print("[carla] Goal published")
     time.sleep(3)  # give some time (Autoware initialization is slow)
     state.autoware_goal = pub_cmd
@@ -1063,7 +1085,7 @@ def check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed, 
             retval = 1
             wait_until_end = 1
     if conf.check_dict["other"]:
-        if state.num_frames > 60*c.FRAME_RATE*15:  # over 15 minutes
+        if state.num_frames > 60 * c.FRAME_RATE * 15:  # over 15 minutes
             print("\n[*] Simulation taking too long")
             state.other_error = "timeout"
             state.other_error_val = state.num_frames
@@ -1094,3 +1116,19 @@ def get_docker(container_name):
 
 def run_cmd_in_container(container, cmd):
     container.exec_run(cmd, stdout=True, stderr=True, user='root')
+
+
+def check_topo(player_waypoint=None, waypoint=None, G=None):
+    player_lane_id = player_waypoint.lane_id
+    player_road_id = player_waypoint.road_id
+    neighbors_A = nx.single_source_shortest_path_length(G,
+                                                        source=(player_road_id, player_lane_id),
+                                                        cutoff=2)
+    neighbors_A[(player_road_id, player_lane_id)] = 0
+    neighbors_B = nx.single_source_shortest_path_length(G, source=(
+        waypoint.road_id, waypoint.lane_id), cutoff=2)
+    neighbors_B[(waypoint.road_id, waypoint.lane_id)] = 0
+    if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
+        return False
+    else:
+        return True
