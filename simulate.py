@@ -49,12 +49,15 @@ docker_client = docker.from_env()
 
 def record_min_distance(actor_vehicles, player_loc, state):
     min_dist = state.min_dist
+    closest_car = None
     for actor_vehicle in actor_vehicles:
         distance = actor_vehicle.get_location().distance(player_loc)
         if distance < min_dist:
             min_dist = distance
+            closest_car = actor_vehicle
     if min_dist < state.min_dist:
         state.min_dist = min_dist
+        state.closest_car = closest_car
 
 
 def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
@@ -71,12 +74,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     carla_error = False
     autoware_container = None
     state.min_dist = 99999
+    player = None
+    player_loc = None
+    town_map = None
 
     actors_now = []
     agents_now = []
     sensors = []
     actor_vehicles = []
     actor_walkers = []
+    trace_graph = []
+    trace_graph_important = []
 
     # for autoware
     frame_gap = 0
@@ -87,7 +95,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     goal_loc = wp.location
     goal_rot = wp.rotation
 
-    nearby_list = {}
+    trace_dict = {}
     valid_frames = 0
     try:
 
@@ -103,6 +111,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             player_bp, sensors,
             sp, state,
             world, wp)
+        trace_dict[player.id] = []
         if conf.agent_type == c.AUTOWARE:
             autoware_goal_publish(conf, goal_loc, goal_rot, state, world)
 
@@ -184,7 +193,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
                 control_actor(agents_now, speed_limit)
-                valid_frames = nearby_check(actor_vehicles, nearby_list, player_loc, town_map, valid_frames, exec_state.G)
+                # record track of every actor_vehicle
+                valid_frames = nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames,
+                                             exec_state.G)
+
                 if break_flag:
                     break
                 if wait_until_end == 0:
@@ -213,8 +225,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         # Finalize simulation
         # rospy.signal_shutdown("fin")
         # find biggest weight of actor-list
-        logging.info("nearby_list: %s", nearby_list)
-        logging.info("valid_frames/num_frames: %s/%s", valid_frames,state.num_frames)
+        nearby_dict = record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict,
+                                   trace_graph, trace_graph_important)
+        logging.info("trace_graph_important: %s", trace_graph_important)
+        logging.info("nearby_dict: %s", nearby_dict)
+        logging.info("valid_frames/num_frames: %s/%s", valid_frames, state.num_frames)
         state.end = True
         # save video in output_dir
         save_video(carla_error, state)
@@ -243,13 +258,47 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             return retval, actor_list, state
 
 
-def nearby_check(actor_vehicles, nearby_list, player_loc, town_map, valid_frames,G):
+def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict, trace_graph,
+                 trace_graph_important):
+    nearby_dict = {}
+    for vehicle_id in trace_dict:
+        if player.id == vehicle_id:
+            continue
+        nearby_dict[vehicle_id] = len(trace_dict[vehicle_id])
+    # record nearby cars when test is end
     player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
                                             lane_type=carla.libcarla.LaneType.Driving)
+    for actor_vehicle in actor_vehicles:
+        if state.crashed:
+            if state.collision_to.id == actor_vehicle.id:
+                continue
+        waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
+                                         lane_type=carla.libcarla.LaneType.Driving)
+        if check_topo(player_waypoint, waypoint, exec_state.G):
+            # trim and thin the trace,return trace at last 5 seconds
+            trace = trace_dict[actor_vehicle.id]
+            trace = trace_thin(trace, 5, 25)
+            trace_graph.append(trace)
+    trace_graph_important.append(trace_thin(trace_dict[player.id], 5, 25))
+    if state.crashed:
+        trace_graph_important.append(trace_thin(trace_dict[state.collision_to.id], 5, 25))
+    return nearby_dict
+
+
+def trace_thin(trace, m, n):
+    trace = trace[::m]
+    trace = trace[-n:]
+    return trace
+
+
+def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
+    player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
+                                            lane_type=carla.libcarla.LaneType.Driving)
+    trace_dict[player.id].append((player_loc.x, player_loc.y))
     has_nearby = False
     for actor_vehicle in actor_vehicles:
-        if actor_vehicle.id not in nearby_list:
-            nearby_list[actor_vehicle.id] = 0
+        if actor_vehicle.id not in trace_dict:
+            trace_dict[actor_vehicle.id] = []
         waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
         is_nearby = check_topo(player_waypoint, waypoint, G)
@@ -257,7 +306,7 @@ def nearby_check(actor_vehicles, nearby_list, player_loc, town_map, valid_frames
             actor_vehicle.get_velocity().x ** 2 + actor_vehicle.get_velocity().y ** 2)
         not_stuck = (actor_vehicle_speed > 0.5) or (actor_vehicle_speed > 0.5)
         if is_nearby and not_stuck:
-            nearby_list[actor_vehicle.id] += 1
+            trace_dict[actor_vehicle.id].append((actor_vehicle.get_location().x, actor_vehicle.get_location().y))
             has_nearby = True
     if has_nearby:
         valid_frames += 1
@@ -870,6 +919,7 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
 
 
 def calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
+    # record ego information
     control = player.get_control()
     state.cont_throttle.append(control.throttle)
     state.cont_brake.append(control.brake)

@@ -440,7 +440,7 @@ def autoware_launch(world, conf, town_map):
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
-                "carla-autoware:improved-df",
+                "carla-autoware:improved",
                 command=autoware_cla,
                 detach=True,
                 auto_remove=True,
@@ -628,7 +628,7 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
-    logging.basicConfig(filename='app.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    logging.basicConfig(filename='record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
     with open("log.txt", "w") as log_file:
         copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
         copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
