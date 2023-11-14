@@ -38,6 +38,7 @@ class ScenarioState:
         self.end = False
 
         self.other = None
+        self.closest_car = None
         self.mutation = 0
 
         # failure states
