@@ -41,7 +41,7 @@ class ScenarioFitness(deap.base.Fitness):
     Class to represent weight of each fitness function
     """
     # minimize closest distance between pair of ADC
-    weights = (-1.0,)
+    weights = (-1.0, 1.0, -1.0)
     """
     :note: minimize closest distance, maximize number of decisions,
       maximize pairs having conflicting trajectory,
@@ -146,12 +146,10 @@ class Scenario:
             sp=sp,
             wp=wp,
             weather_dict=self.weather,
-            # frictions_list=self.puddles,
             actor_list=self.actor_list
         )
         log_filename = self.dump_states(self.state, log_type="queue")
         self.log_filename = log_filename
-
         error = self.check_error(self.state)
         # # reload scenario state
         # self.state = ScenarioState()

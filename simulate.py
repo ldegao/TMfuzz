@@ -8,8 +8,6 @@ import pdb
 import random
 import select
 import sys
-from subprocess import Popen, PIPE
-import asyncio
 import threading
 import signal
 import time
@@ -17,9 +15,9 @@ import math
 import traceback
 import docker
 import networkx as nx
+import numpy as np
 import pygame
 from actor import Actor
-from typing import List, Tuple
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
@@ -161,9 +159,9 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                     cur_frame_id, goal_loc, player, sp, state, town_map, conf)
 
                 # drive-fuzz's thing, not sure if we need it
-                yaw = sp.rotation.yaw
-                calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state,
-                                  vel, yaw)
+                # yaw = sp.rotation.yaw
+                # calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state,
+                #                   vel, yaw)
 
                 # Check destination
                 break_flag, retval, autoware_stuck, s_started = check_destination(actor_vehicles, actors_now,
@@ -223,12 +221,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         retval = 1
     finally:
         # Finalize simulation
-        # rospy.signal_shutdown("fin")
         # find biggest weight of actor-list
         nearby_dict = record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict,
                                    trace_graph, trace_graph_important)
-        logging.info("trace_graph_important: %s", trace_graph_important)
-        logging.info("nearby_dict: %s", nearby_dict)
+        state.trace_graph_important = trace_graph_important
+        state.nearby_dict = nearby_dict
         logging.info("valid_frames/num_frames: %s/%s", valid_frames, state.num_frames)
         state.end = True
         # save video in output_dir
@@ -270,7 +267,7 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
                                             lane_type=carla.libcarla.LaneType.Driving)
     for actor_vehicle in actor_vehicles:
         if state.crashed:
-            if state.collision_to.id == actor_vehicle.id:
+            if state.collision_to == actor_vehicle.id:
                 continue
         waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
@@ -279,9 +276,19 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
             trace = trace_dict[actor_vehicle.id]
             trace = trace_thin(trace, 5, 25)
             trace_graph.append(trace)
-    trace_graph_important.append(trace_thin(trace_dict[player.id], 5, 25))
+    trace_graph_important.append(trace_dict[player.id])
+
     if state.crashed:
-        trace_graph_important.append(trace_thin(trace_dict[state.collision_to.id], 5, 25))
+        # if collied to a car
+        if trace_dict.keys().__contains__(state.collision_to):
+            trace_graph_important.append(trace_dict[state.collision_to])
+    else:
+        trace_graph_important.append(trace_dict[state.closest_car.id])
+    # change trace_graph_important from list to ndarray
+    trace_graph_important[0] = normalize_points(trace_graph_important[0], trace_graph_important[0][0])
+    trace_graph_important[1] = normalize_points(trace_graph_important[1], trace_graph_important[0][0])
+    trace_graph_important = np.array(trace_graph_important)
+    print("trace_graph_important shape:", trace_graph_important.shape)
     return nearby_dict
 
 
@@ -289,6 +296,13 @@ def trace_thin(trace, m, n):
     trace = trace[::m]
     trace = trace[-n:]
     return trace
+
+
+def normalize_points(points, origin_point):
+    points_array = np.array(points)
+    origin_array = np.array(origin_point)
+    normalized_points = points_array - origin_array
+    return normalized_points
 
 
 def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
@@ -693,12 +707,13 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
         for actor in actors_now:
             actor.instance = None
         # check if everyone is deleted
-
+        time.sleep(1)
         vehicles = world.get_actors().filter("*vehicle.*")
-        if len(vehicles) > 1:
+        while len(vehicles) > 1:
             time.sleep(1)
             vehicles = world.get_actors().filter("*vehicle.*")
-            # print("Failed to destroy something")
+            print("Failed to destroy something:")
+            print(vehicles)
             # return False
         return True
     except RuntimeError:
@@ -943,14 +958,6 @@ def calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, pl
     yaw = current_yaw
     # uncomment below to follow along the player
     # set_camera(conf, player, spectator)
-    for v in actor_vehicles:
-        dist = player_loc.distance(v.get_location())
-        if dist < state.min_dist:
-            state.min_dist = dist
-    for w in actor_walkers:
-        dist = player_loc.distance(w.get_location())
-        if dist < state.min_dist:
-            state.min_dist = dist
     # Get the lateral speed
     player_right_vec = player_rot.get_right_vector()
     lat_speed = abs(vel.x * player_right_vec.x + vel.y * player_right_vec.y)

@@ -1,4 +1,5 @@
 import os
+import pdb
 
 import cv2
 import numpy as np
@@ -10,7 +11,6 @@ from sklearn import metrics
 from sklearn.cluster import KMeans
 from sklearn.cluster import DBSCAN
 from scipy.interpolate import splprep, splev
-import matplotlib.pyplot as plt
 
 # Global Variables
 colors = [
@@ -49,7 +49,7 @@ def test_create_trace(num_points=25, noise_level=5):
     for i in range(num_points):
         noise = random.uniform(-noise_level, noise_level)
         point = start + direction * i + noise
-        trace.append([i, point])
+        trace.append((i, point))
 
     return np.array(trace)
 
@@ -65,31 +65,72 @@ def draw_curve(points, img_size=(64, 64), color=(255, 255, 255), base_image=None
         img = np.zeros((img_size[0], img_size[1], 3), dtype=np.uint8)
     else:
         img = base_image
-
     points = np.atleast_2d(points)
-
-    if len(points) > 1:
-        if len(points) > 2:
-            tck, u = splprep([points[:, 0], points[:, 1]], s=0)
-            u_new = np.linspace(u.min(), u.max(), 1000)
-            new_points = splev(u_new, tck, der=0)
-            for i in range(len(new_points[0]) - 1):
-                cv2.line(img,
-                         (int(new_points[0][i]), int(new_points[1][i])),
-                         (int(new_points[0][i + 1]), int(new_points[1][i + 1])),
-                         color=color,
-                         thickness=2)
-        else:
+    if len(points) > 2:
+        x = [p[0] for p in points]
+        y = [p[1] for p in points]
+        x, y = remove_duplicate_adjacent_points(x, y)
+        x, y = uniform_sampling(x, y,)
+        pdb.set_trace()
+        tck, u = splprep([x, y], s=0)
+        u_new = np.linspace(u.min(), u.max(), 1000)
+        new_points = splev(u_new, tck, der=0)
+        for i in range(len(new_points[0]) - 1):
             cv2.line(img,
-                     (int(points[0, 0]), int(points[0, 1])),
-                     (int(points[1, 0]), int(points[1, 1])),
+                     (int(new_points[0][i]), int(new_points[1][i])),
+                     (int(new_points[0][i + 1]), int(new_points[1][i + 1])),
                      color=color,
                      thickness=2)
+    else:
+        cv2.line(img,
+                 (int(points[0, 0]), int(points[0, 1])),
+                 (int(points[1, 0]), int(points[1, 1])),
+                 color=color,
+                 thickness=2)
     return img
 
 
+def remove_duplicate_adjacent_points(x, y):
+    if len(x) != len(y):
+        raise ValueError("x,y not equal length")
+
+    x = np.array(x)
+    y = np.array(y)
+
+    keep = np.ones(len(x), dtype=bool)
+
+    for i in range(1, len(x)):
+        if x[i] == x[i - 1] and y[i] == y[i - 1]:
+            keep[i] = False
+    return x[keep], y[keep]
+
+
+def uniform_sampling(x, y, num_points=25):
+    """
+    Uniformly sample a specified number of points from the points represented by x and y coordinates.
+
+    :param x: List or array of x coordinates.
+    :param y: List or array of y coordinates, must be the same length as x.
+    :param num_points: Number of points to sample.
+    :return: Sampled x and y coordinate lists.
+    """
+    if len(x) != len(y):
+        raise ValueError("The lengths of x and y must be the same.")
+
+    total_points = len(x)
+    if total_points < num_points:
+        raise ValueError(
+            "The number of original points is less than the sampling number, sampling cannot be performed.")
+
+    # Calculate sampling interval
+    indices = np.linspace(0, total_points - 1, num_points, dtype=int)
+
+    # Sample using slicing
+    return x[indices], y[indices]
+
+
 # Feature Transformation
-def transform_traces_to_features(model,pca, accumulated_trace_graphs):
+def transform_traces_to_features(model, pca, accumulated_trace_graphs):
     trace_images = []
     for tg in accumulated_trace_graphs:
         img = np.zeros((64, 64, 3), dtype=np.uint8)
@@ -145,7 +186,9 @@ def draw_and_save_traces(accumulated_trace_graphs, save_dir):
             color = colors[j % len(colors)]
             img = draw_curve(trace, img_size=(64, 64), color=color, base_image=img)
         filename = f"{save_dir}/combined_trace_graph_{i}.png"
-        cv2.imwrite(filename, img)
+        # if filename not exists, then save
+        if not os.path.exists(filename):
+            cv2.imwrite(filename, img)
 
 
 # Main Function
@@ -156,6 +199,7 @@ def main():
     for _ in range(10):
         traces = test_create_trace_graph(random.randint(2, 5))
         accumulated_trace_graphs.append(traces)
+
     distance_list = calculate_distance(model, pca, accumulated_trace_graphs)
     print(len(distance_list))
     # Save directory for trace graphs

@@ -1,0 +1,1 @@
+ ====== Analyzing Initial Population ======  ====== GA Generation 1 ====== 
