@@ -28,7 +28,7 @@ from scenario import Scenario
 import states
 import utils
 from utils import check_autoware_status
-from deap import creator
+import cluster
 
 config.set_carla_api_path()
 try:
@@ -40,6 +40,9 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 client, world, G, blueprint_library, town_map = None, None, None, None, None
+model = cluster.create_cnn_model()
+pca = cluster.create_pca()
+accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
 
@@ -250,19 +253,28 @@ def set_args():
 def evaluation(ind: Scenario):
     global autoware_container
     min_dist = 99999
+    distance = 0
+    nova = 0
     g_name = f'Generation_{ind.generation_id:05}'
     s_name = f'Scenario_{ind.scenario_id:05}'
     # todo: run test here
     ret = None
     # for test
     mutate_weather_fixed(ind)
-    signal.alarm(12 * 60)  # timeout after 12 min
+    signal.alarm(30 * 60)  # timeout after 30 min
     try:
-
         # profiler = cProfile.Profile()
         # profiler.enable()  #
         ret = ind.run_test(exec_state)
         min_dist = ind.state.min_dist
+        trace_graph_important = ind.state.trace_graph_important
+        accumulated_trace_graphs.append(trace_graph_important)
+        distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
+        distance = distance_list[-1]
+        for i in range(1, len(ind.state.speed)):
+            acc = abs(ind.state.speed[i] - ind.state.speed[i - 1])
+            nova += acc
+        nova = nova / len(ind.state.speed)
         # reload scenario state
         ind.state = states.ScenarioState()
         # profiler.disable()  #
@@ -279,8 +291,7 @@ def evaluation(ind: Scenario):
     if ret is None:
         pass
     elif ret == -1:
-        print("Spawn / simulation failure - don't add round cnt")
-        # round_cnt -= 1
+        print("simulation failure")
     elif ret == 1:
         print("fuzzer - found an error")
     elif ret == 128:
@@ -293,11 +304,8 @@ def evaluation(ind: Scenario):
     # mutation loop ends
     if ind.found_error:
         print("[-]error detected. start a new cycle with a new seed")
-    # todo: get violation here
-    if ret == 1:
-        return 100,
-    else:
-        return min_dist,
+        # todo: get violation here
+    return min_dist, nova, distance
 
 
 # MUTATION OPERATOR
@@ -306,21 +314,19 @@ def evaluation(ind: Scenario):
 def mut_actor_list(ind: List[Actor]):
     if len(ind) <= 1:
         return ind
-    # mut_pb = random.random()
-    # # remove a random 1
-    # if mut_pb < 0.1:
-    #     random_index = random.randint(0, len(ind) - 1)
-    #     ind.pop(random_index)
-    #     return ind
-    # # add a random 1
-    # if mut_pb < 0.4:
-    #     random_index = random.randint(0, len(ind) - 1)
-    #     template_actor = ind[random_index]
-    #     new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
-    #     ind.append(new_ad)
-    #     return ind
-    # mutate a random agent(temp)
+    mut_pb = random.random()
     random_index = random.randint(0, len(ind) - 1)
+    # remove a random 1
+    if mut_pb < 0.1:
+        ind.pop(random_index)
+        return ind
+    # add a random 1
+    if mut_pb < 0.4:
+        template_actor = ind[random_index]
+        new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+        ind.append(new_ad)
+        return ind
+    # mutate a random agent
     template_actor = ind[random_index]
     new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
     ind.append(new_ad)
@@ -385,10 +391,6 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
         ind1.actor_list, ind2.actor_list = cx_actor(
             ind1.actor_list, ind2.actor_list
         )
-    # elif cx_pb < 0.6 + 0.2:
-    #     ind1.pd_section, ind2.pd_section = cx_pd_section(
-    #         ind1.pd_section, ind2.pd_section
-    #     )
     # else:
     #     ind1.tc_section, ind2.tc_section = cx_tc_section(
     #         ind1.tc_section, ind2.tc_section
@@ -399,9 +401,6 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
 def autoware_launch(world, conf, town_map):
     username = os.getenv("USER")
     global autoware_container
-    # print("before launching autoware", time.time())
-    num_walker_topics = 0
-    # clock = pygame.time.Clock()
     docker_client = docker.from_env()
     proj_root = config.get_proj_root()
     xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
@@ -706,6 +705,12 @@ def main():
             logbook.record(gen=curr_gen, **record)
             print(logbook.stream)
             log_file.write(logbook.stream)
+            # Save directory for trace graphs
+            save_dir = "trace"  # Replace with your actual save path
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            cluster.draw_and_save_traces(accumulated_trace_graphs, save_dir)
+
 
 if __name__ == "__main__":
     main()

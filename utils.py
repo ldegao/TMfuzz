@@ -292,11 +292,10 @@ def _on_collision(event, state):
         # ignore collision happened AFTER simulation ends
         # (can happen because of sluggish garbage collection of Carla)
         return
-    print("COLLISION:", event.other_actor.type_id)
     if event.other_actor.type_id != "static.road":
         if not state.crashed:
+            print("COLLISION:", event.other_actor.type_id)
             # do not count collision while spawning ego vehicle (hard drop)
-            print("crashed")
             state.crashed = True
             state.collision_to = event.other_actor.id
 
@@ -362,6 +361,7 @@ def check_autoware_status(world):
         proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
         print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
         output = proc2.communicate()[0]
+        print(int(output))
         if int(output) >= c.WAIT_AUTOWARE_NUM_NODES:
             # FIXME: hardcoding the num of topics :/
             # on top of that, each vehicle adds one topic, and any walker

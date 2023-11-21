@@ -154,7 +154,6 @@ class Actor:
             new_car.fresh = True
             if new_car.safe_check(actor):
                 print("split:", actor.actor_id, "to", actor.actor_id, actor_id)
-                pdb.set_trace()
                 return new_car
 
     def actor_cross(self, adc2):
