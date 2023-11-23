@@ -16,7 +16,7 @@ for town in {3..3}; do
 		break
 	    fi
 	    if [ -n "$1" ]; then
-		cmd="./fuzzer.py  --sim-port 4000 -t $1 --density 0.5 --town $town --debug"
+		cmd="./fuzzer.py  --sim-port 4000 -t $1 --density 0.5 --town $town --no-traffic-light --debug"
 	    else
 		cmd="./fuzzer.py  --sim-port 4000 -t autoware --density 0.5 --town $town  --no-traffic-light --debug"
 	    fi

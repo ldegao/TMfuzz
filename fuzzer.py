@@ -269,8 +269,11 @@ def evaluation(ind: Scenario):
         min_dist = ind.state.min_dist
         trace_graph_important = ind.state.trace_graph_important
         accumulated_trace_graphs.append(trace_graph_important)
-        distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
-        distance = distance_list[-1]
+        if not ind.state.stuck:
+            distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
+            distance = distance_list[-1]
+        else:
+            distance = 0
         for i in range(1, len(ind.state.speed)):
             acc = abs(ind.state.speed[i] - ind.state.speed[i - 1])
             nova += acc
@@ -641,12 +644,11 @@ def main():
             autoware_launch(exec_state.world, conf, town)
         population = []
         # GA Hyperparameters
-        POP_SIZE = 10  # amount of population
-        OFF_SIZE = 10  # number of offspring to produce
+        POP_SIZE = 5  # amount of population
+        OFF_SIZE = 5  # number of offspring to produce
         MAX_GEN = 5  #
         CXPB = 0.8  # crossover probability
         MUTPB = 0.2  # mutation probability
-
         toolbox = base.Toolbox()
         toolbox.register("evaluate", evaluation)
         toolbox.register("mate", cx_scenario)

@@ -222,11 +222,15 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     finally:
         # Finalize simulation
         # find biggest weight of actor-list
-        nearby_dict = record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict,
-                                   trace_graph, trace_graph_important)
+        nearby_dict, trace_graph_important = record_trace(actor_vehicles, exec_state, player, player_loc, state,
+                                                          town_map, trace_dict,
+                                                          trace_graph, trace_graph_important)
         state.trace_graph_important = trace_graph_important
         state.nearby_dict = nearby_dict
+        logging.info("crashed:%s", state.crashed)
+        logging.info("nearby_car:%s", len(nearby_dict))
         logging.info("valid_frames/num_frames: %s/%s", valid_frames, state.num_frames)
+        logging.info("distance:%s", state.distance)
         state.end = True
         # save video in output_dir
         save_video(carla_error, state)
@@ -274,23 +278,26 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
         if check_topo(player_waypoint, waypoint, exec_state.G):
             # trim and thin the trace,return trace at last 5 seconds
             trace = trace_dict[actor_vehicle.id]
-            trace = trace_thin(trace, 5, 25)
+            # trace = trace_thin(trace, 5, 25)
             trace_graph.append(trace)
     trace_graph_important.append(trace_dict[player.id])
-
     if state.crashed:
         # if collied to a car
         if trace_dict.keys().__contains__(state.collision_to):
             trace_graph_important.append(trace_dict[state.collision_to])
     else:
         trace_graph_important.append(trace_dict[state.closest_car.id])
-    # change trace_graph_important from list to ndarray
-    trace_graph_important[0] = normalize_points(trace_graph_important[0], trace_graph_important[0][0])
-    trace_graph_important[1] = normalize_points(trace_graph_important[1], trace_graph_important[0][0])
-    trace_graph_important = np.array(trace_graph_important)
-    print("trace_graph_important shape:", trace_graph_important.shape)
-    return nearby_dict
 
+    # Do not change the speed
+    ego_start_loc = (trace_graph_important[0][0][0], trace_graph_important[0][0][1], 0)
+    for i in range(len(trace_graph_important)):
+        # save at most 250 points
+        if len(trace_graph_important[i]) > 250:
+            trace_graph_important[i] = trace_graph_important[i][-250:]
+        normalize_points(trace_graph_important[i], ego_start_loc)
+    # change trace_graph_important from list to ndarray
+    trace_graph_important = np.array(trace_graph_important)
+    return nearby_dict, trace_graph_important
 
 def trace_thin(trace, m, n):
     trace = trace[::m]
@@ -298,17 +305,19 @@ def trace_thin(trace, m, n):
     return trace
 
 
-def normalize_points(points, origin_point):
-    points_array = np.array(points)
-    origin_array = np.array(origin_point)
-    normalized_points = points_array - origin_array
-    return normalized_points
+def normalize_points(points, start_point):
+    origin_point = np.array(start_point)
+    points = np.array(points)
+    for i in range(len(points)):
+        points[i] = points[i] - origin_point
 
 
 def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
+    vel = player.get_velocity()
+    speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
     player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
                                             lane_type=carla.libcarla.LaneType.Driving)
-    trace_dict[player.id].append((player_loc.x, player_loc.y))
+    trace_dict[player.id].append((player_loc.x, player_loc.y, speed))
     has_nearby = False
     for actor_vehicle in actor_vehicles:
         if actor_vehicle.id not in trace_dict:
@@ -316,11 +325,12 @@ def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, vali
         waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
         is_nearby = check_topo(player_waypoint, waypoint, G)
-        actor_vehicle_speed = math.sqrt(
+        actor_vehicle_speed = 3.6 * math.sqrt(
             actor_vehicle.get_velocity().x ** 2 + actor_vehicle.get_velocity().y ** 2)
         not_stuck = (actor_vehicle_speed > 0.5) or (actor_vehicle_speed > 0.5)
         if is_nearby and not_stuck:
-            trace_dict[actor_vehicle.id].append((actor_vehicle.get_location().x, actor_vehicle.get_location().y))
+            trace_dict[actor_vehicle.id].append(
+                (actor_vehicle.get_location().x, actor_vehicle.get_location().y, actor_vehicle_speed))
             has_nearby = True
     if has_nearby:
         valid_frames += 1
@@ -584,6 +594,7 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
         frame_speed_lim_changed = cur_frame_id
     state.speed.append(speed)
     state.speed_lim.append(speed_limit)
+    state.distance += speed / 3.6 / c.FRAME_RATE
     if conf.debug:
         print("[debug] (%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
             sp.location.x, sp.location.y, player_loc.x,
