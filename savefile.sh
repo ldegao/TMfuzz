@@ -3,14 +3,14 @@
 timestamp=$(date +"%Y%m%d%H%M%S")
 save_dir="./save/$timestamp/"
 
-camera_dir="./out-artifact/camera/"
+camera_dir="./output/camera/"
 new_camera_dir="${save_dir}camera/"
 
-errors_dir="./out-artifact/errors/"
+errors_dir="./output/errors/"
 new_errors_dir="${save_dir}errors/"
 
-seed_dir="./seed-artifact/"
-new_seed_dir="${save_dir}seed/"
+trace_dir="./output/trace/"
+new_trace_dir="${save_dir}trace/"
 mkdir -p "$save_dir"
 if [ -d "$camera_dir" ]; then
   if [ "$(ls -A $camera_dir)" ]; then
@@ -36,16 +36,16 @@ else
   echo "$errors_dir does not exist. Skipping..."
 fi
 
-if [ -d "$seed_dir" ]; then
-  if [ "$(ls -A $seed_dir)" ]; then
-    mkdir -p "$new_seed_dir"
-    cp "$seed_dir"* "$new_seed_dir"
-    echo "Copied files from $seed_dir to $new_seed_dir"
+if [ -d "$trace_dir" ]; then
+  if [ "$(ls -A $trace_dir)" ]; then
+    mkdir -p "$new_trace_dir"
+    cp "$trace_dir"* "$new_trace_dir"
+    echo "Copied files from $trace_dir to $new_trace_dir"
   else
-    echo "$seed_dir is empty. Skipping..."
+    echo "$trace_dir is empty. Skipping..."
   fi
 else
-  echo "$seed_dir does not exist. Skipping..."
+  echo "$trace_dir does not exist. Skipping..."
 fi
 
 if [ "$(ls -A $save_dir)" ]; then

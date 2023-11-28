@@ -46,6 +46,7 @@ class Config:
         self.score_dir = None
         self.rosbag_dir = None
         self.cam_dir = None
+        self.trace_dir = None
         self.meta_file = None
         self.error_dir = None
         self.queue_dir = None
@@ -57,7 +58,7 @@ class Config:
         self.sim_tm_port = 0
 
         # Fuzzer config
-        self.topo_k = 2
+        self.topo_k = 3
         self.immobile_percentage = 0  # the percentage of the actors is immobile forever
         self.max_cycles = 0
         self.max_mutation = 0
@@ -98,6 +99,7 @@ class Config:
         self.error_dir = os.path.join(self.out_dir, "errors")
         self.meta_file = os.path.join(self.out_dir, "meta")
         self.cam_dir = os.path.join(self.out_dir, "camera")
+        self.trace_dir = os.path.join(self.out_dir, "trace")
         self.rosbag_dir = os.path.join(self.out_dir, "rosbags")
 
     # def enqueue_seed_scenarios(self):

@@ -14,9 +14,7 @@ from scipy.interpolate import splprep, splev, interp1d
 
 # Global Variables
 colors = [
-    (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
-    (0, 255, 255), (255, 0, 255), (192, 192, 192), (128, 0, 0),
-    (128, 128, 0), (0, 128, 0)
+    (70, 70, 130), (130, 70, 70),
 ]
 
 
@@ -46,7 +44,7 @@ def create_dbscan():
 def test_create_trace(num_points=25, noise_level=0.5, max_weight=10):
     start_x = random.uniform(-64, 64)
     start_y = random.uniform(-64, 64)
-    print(start_x,start_y)
+    # print(start_x,start_y)
     direction_x = random.choice([random.uniform(-2, -1), random.uniform(1, 2)])
     direction_y = random.choice([random.uniform(-2, -1), random.uniform(1, 2)])
     trace = []
@@ -78,35 +76,52 @@ def shift_float(number, mod_value=256):
     return shifted_number
 
 
+def shift_scale_points_group(points_group, img_size):
+    # Initialize the min and max values to the values of the first point set
+    min_x, min_y = np.min(points_group[0], axis=0)
+    max_x, max_y = np.max(points_group[0], axis=0)
+
+    # Iterate over each point set to update the overall min and max values
+    for points in points_group:
+        min_x = min(min_x, np.min(points[:, 0]))
+        min_y = min(min_y, np.min(points[:, 1]))
+        max_x = max(max_x, np.max(points[:, 0]))
+        max_y = max(max_y, np.max(points[:, 1]))
+
+    # Calculate scaling factors
+    scale_x = img_size[0] / (max_x - min_x)
+    scale_y = img_size[1] / (max_y - min_y)
+    scale = min(scale_x, scale_y) * 0.8  # Scale down slightly to fit within the image
+
+    # Calculate translation distances
+    shift_x = (img_size[0] - (max_x - min_x) * scale) / 2
+    shift_y = (img_size[1] - (max_y - min_y) * scale) / 2
+
+    # Apply scaling and translation to each point set
+    scaled_and_shifted_groups = []
+    for points in points_group:
+        points_scaled = (points - np.array([min_x, min_y])) * scale
+        points_shifted = points_scaled + np.array([shift_x, shift_y])
+        scaled_and_shifted_groups.append(points_shifted.astype(np.int32))
+
+    return scaled_and_shifted_groups
+
+
 # Image Drawing
-def draw_picture(points, img_size=(256, 256), color=(255, 255, 255), base_image=None):
+def draw_picture(trace, img_size=(1024, 1024), color=(255, 255, 255), base_image=None):
     if base_image is None:
-        img = np.zeros((img_size[0], img_size[1], 3), dtype=np.uint8)
+        img = np.full((img_size[0], img_size[1], 3), 255, dtype=np.uint8)
     else:
         img = base_image
-    points = np.atleast_2d(points)
-    if len(points) > 2:
-        x = [shift_float(p[0], 256) for p in points]
-        y = [shift_float(p[1], 256) for p in points]
-        weight = []
-        x, y, weight = remove_duplicate_adjacent_points(x, y, weight)
-        x, y = uniform_sampling(x, y, )
-        # x = normalize_points(x, x[0])
-        # y = normalize_points(y, y[0])
-        for i in range(len(x) - 1):
-            cv2.line(img,
-                     (int(x[i]), int(y[i])),
-                     (int(x[i + 1]), int(y[i + 1])),
-                     color=color,
-                     thickness=10)
-            # print("line:", (int(new_points[0][i]), int(new_points[1][i])),
-            #       (int(new_points[0][i + 1]), int(new_points[1][i + 1])))
-    else:
-        cv2.line(img,
-                 (int(points[0, 0]), int(points[0, 1])),
-                 (int(points[1, 0]), int(points[1, 1])),
-                 color=color,
-                 thickness=4)
+    curve_points = [np.array(point)[:2] for point in trace]
+    # curve_points = shift_scale_points(np.array(curve_points), img_size)
+    for j in range(len(curve_points) - 1):
+        cv2.arrowedLine(img,
+                        tuple(curve_points[j]),
+                        tuple(curve_points[j + 1]),
+                        color=color,
+                        thickness=2,
+                        tipLength=0.1)
     return img
 
 
@@ -115,7 +130,7 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         img = np.zeros((img_size[0], img_size[1], 4), dtype=np.uint8)
     else:
         img = base_image
-    if len(trace) > 2:
+    if len(trace) > 4:
         x = [shift_float(p[0], 256) for p in trace]
         y = [shift_float(p[1], 256) for p in trace]
         weights = [p[2] for p in trace]
@@ -127,7 +142,10 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
             tck, u = splprep([x, y], s=0)
         except ValueError:
             print("ValueError")
-            pdb.set_trace()
+            return img
+        except TypeError:
+            print("TypeError")
+            return img
         u_new = np.linspace(u.min(), u.max(), 100)
         new_points = splev(u_new, tck, der=0)
         weight_interpolator = interp1d(u, weights, kind='linear')
@@ -141,6 +159,7 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         except IndexError:
             print("IndexError")
             pdb.set_trace()
+
     return img
 
 
@@ -251,10 +270,12 @@ def calculate_distance(model, pca, accumulated_trace_graphs):
 
 def draw_and_save_traces(accumulated_trace_graphs, save_dir):
     for i, trace_graph in enumerate(accumulated_trace_graphs):
-        img = np.zeros((256, 256, 3), dtype=np.uint8)
-        for j, trace in enumerate(trace_graph):
+        new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])
+        trace_graph_points = shift_scale_points_group(np.array(new_trace_graph), (1024, 1024))
+        img = np.full((1024, 1024, 3), 255, dtype=np.uint8)
+        for j, trace in enumerate(trace_graph_points):
             color = colors[j % len(colors)]
-            img = draw_picture(trace, img_size=(256, 256), color=color, base_image=img)
+            img = draw_picture(trace, color=color, base_image=img)
         filename = f"{save_dir}/combined_trace_graph_{i}.png"
         # if filename not exists, then save
         if not os.path.exists(filename):

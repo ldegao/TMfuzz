@@ -262,6 +262,10 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
     world.debug.draw_line(arrow_start, arrow_end, life_time=0.5, color=color)
 
 
+def mark_actor(actor, frame=0):
+    actor.death_time = frame
+
+
 def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=None):
     for agent_tuple in agents_now:
         if agent_tuple[1] == actor.instance:
@@ -361,7 +365,7 @@ def check_autoware_status(world):
         proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
         print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
         output = proc2.communicate()[0]
-        print(int(output))
+        # print(int(output))
         if int(output) >= c.WAIT_AUTOWARE_NUM_NODES:
             # FIXME: hardcoding the num of topics :/
             # on top of that, each vehicle adds one topic, and any walker
