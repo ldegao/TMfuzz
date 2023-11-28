@@ -164,6 +164,7 @@ def ini_hyperparameters(conf, args):
         os.mkdir(conf.error_dir)
         os.mkdir(conf.rosbag_dir)
         os.mkdir(conf.cam_dir)
+        os.mkdir(conf.trace_dir)
     except Exception as e:
         print(e)
         sys.exit(-1)
@@ -213,7 +214,7 @@ def mutate_weather_fixed(test_scenario):
 def set_args():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--debug", action="store_true", default=False)
-    argument_parser.add_argument("-o", "--out-dir", default="out-artifact", type=str,
+    argument_parser.add_argument("-o", "--out-dir", default="output", type=str,
                                  help="Directory to save fuzzing logs")
     argument_parser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
                                  help="Seed directory")
@@ -238,7 +239,7 @@ def set_args():
                                  help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argument_parser.add_argument("--town", default=3, type=int,
                                  help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argument_parser.add_argument("--timeout", default="120", type=int,
+    argument_parser.add_argument("--timeout", default="60", type=int,
                                  help="Seconds to timeout if vehicle is not moving")
     argument_parser.add_argument("--no-speed-check", action="store_true")
     argument_parser.add_argument("--no-lane-check", action="store_true")
@@ -261,7 +262,7 @@ def evaluation(ind: Scenario):
     ret = None
     # for test
     mutate_weather_fixed(ind)
-    signal.alarm(30 * 60)  # timeout after 30 min
+    signal.alarm(60 * 60)  # timeout after 60 min
     try:
         # profiler = cProfile.Profile()
         # profiler.enable()  #
@@ -708,10 +709,6 @@ def main():
             print(logbook.stream)
             log_file.write(logbook.stream)
             # Save directory for trace graphs
-            save_dir = "trace"  # Replace with your actual save path
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-            cluster.draw_and_save_traces(accumulated_trace_graphs, save_dir)
 
 
 if __name__ == "__main__":

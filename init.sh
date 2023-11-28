@@ -28,7 +28,7 @@ echo "Deleted files in $fuzzerdata_dir"
 ./savefile.sh
 
 # Remove directories
-rm -rf out-artifact
+rm -rf output
 rm -rf seed-artifact
 
 # Remove Docker containers

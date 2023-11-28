@@ -24,6 +24,7 @@ class Actor:
     instance: carla.Actor
     ego_loc: carla.Location
     fresh: bool
+    death_time: int
 
     sensor_collision: carla.Actor
     sensor_lane_invasion: carla.Actor
@@ -42,6 +43,7 @@ class Actor:
         self.sensor_collision = None
         self.sensor_lane_invasion = None
         self.stuck_duration = 0
+        self.death_time = -1
 
     def __deepcopy__(self, memo):
         actor_copy = Actor(
@@ -147,9 +149,9 @@ class Actor:
             location = carla.Location(x=actor_loc.x + x, y=actor_loc.y + y, z=actor_loc.z)
             waypoint = town_map.get_waypoint(location, project_to_road=True,
                                              lane_type=carla.libcarla.LaneType.Driving)
-            new_car = Actor(actor.actor_type,  waypoint.transform, actor_id,
+            new_car = Actor(actor.actor_type, waypoint.transform, actor_id,
                             new_speed,
-                            actor.ego_loc,actor_bp=actor.actor_bp,
+                            actor.ego_loc, actor_bp=actor.actor_bp,
                             spawn_stuck_frame=actor.spawn_stuck_frame)
             new_car.fresh = True
             if new_car.safe_check(actor):

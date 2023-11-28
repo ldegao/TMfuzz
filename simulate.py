@@ -21,7 +21,7 @@ from actor import Actor
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, delete_actor, check_autoware_status
+    set_autopilot, delete_actor, check_autoware_status, mark_actor
 
 config.set_carla_api_path()
 try:
@@ -37,6 +37,7 @@ except ModuleNotFoundError as e:
 try:
     proj_root = config.get_proj_root()
     sys.path.append(os.path.join(proj_root, "carla", "PythonAPI", "carla"))
+    # pdb.set_trace()
 except IndexError:
     pass
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
@@ -171,9 +172,9 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                                   s_started, sensors, speed, state)
                 # record the min distance between every two actors
                 record_min_distance(actor_vehicles, player_loc, state)
-                # Delete useless vehicles for any frame
-                delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_lane_id, player_loc,
-                                     player_road_id, sensors, exec_state.G, town_map)
+                # mark useless vehicles for any frame
+                mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road_id, exec_state.G, town_map)
+
                 # add old vehicles for any frame
                 found_frame = add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf,
                                           found_frame, max_wheels_for_non_motorized, player_loc,
@@ -191,13 +192,20 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
                 control_actor(agents_now, speed_limit)
-                # record track of every actor_vehicle
-                valid_frames = nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames,
-                                             exec_state.G)
+                # delete vehicles which life is end
+                for actor in actor_list:
+                    if actor.instance is not None:
+                        if actor.death_time == 0:
+                            delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
+                        elif actor.death_time > 0:
+                            actor.death_time -= 1
 
+                # record track of every actor_vehicle
                 if break_flag:
                     break
                 if wait_until_end == 0:
+                    valid_frames = nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames,
+                                                 exec_state.G)
                     retval, wait_until_end = check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed,
                                                              speed_limit, state, wait_until_end)
                 else:
@@ -240,7 +248,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         if conf.agent_type == c.BEHAVIOR:
             delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
         # remove actors and sensors to reload the world
-        if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container,
+        if not world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world,
+                            autoware_container,
                             conf):
             retval = 128
             if conf.debug:
@@ -254,8 +263,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             if conf.debug:
                 print("[debug] reload")
             # client.reload_world()
-            if conf.debug:
-                print('[debug] done.')
             return retval, actor_list, state
 
 
@@ -267,8 +274,11 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
             continue
         nearby_dict[vehicle_id] = len(trace_dict[vehicle_id])
     # record nearby cars when test is end
-    player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
-                                            lane_type=carla.libcarla.LaneType.Driving)
+    if town_map:
+        player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
+                                                lane_type=carla.libcarla.LaneType.Driving)
+    else:
+        return [], []
     for actor_vehicle in actor_vehicles:
         if state.crashed:
             if state.collision_to == actor_vehicle.id:
@@ -277,7 +287,10 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
                                          lane_type=carla.libcarla.LaneType.Driving)
         if check_topo(player_waypoint, waypoint, exec_state.G):
             # trim and thin the trace,return trace at last 5 seconds
-            trace = trace_dict[actor_vehicle.id]
+            try:
+                trace = trace_dict[actor_vehicle.id]
+            except KeyError:
+                continue
             # trace = trace_thin(trace, 5, 25)
             trace_graph.append(trace)
     trace_graph_important.append(trace_dict[player.id])
@@ -298,11 +311,6 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
     # change trace_graph_important from list to ndarray
     trace_graph_important = np.array(trace_graph_important)
     return nearby_dict, trace_graph_important
-
-def trace_thin(trace, m, n):
-    trace = trace[::m]
-    trace = trace[-n:]
-    return trace
 
 
 def normalize_points(points, start_point):
@@ -545,8 +553,7 @@ def add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf, found_
     return found_frame
 
 
-def delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_lane_id, player_loc, player_road_id,
-                         sensors, G, town_map):
+def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road_id, G, town_map):
     for actor in actors_now:
         vehicle = actor.instance
         vehicle_waypoint = town_map.get_waypoint(vehicle.get_location(), project_to_road=True,
@@ -555,7 +562,8 @@ def delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_la
         vehicle_road_id = vehicle_waypoint.road_id
         # 1. Delete vehicles that are physically too far away
         if vehicle.get_location().distance(player_loc) > 50 * math.sqrt(2):
-            delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
+            mark_actor(actor, 0)
+            # delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
             continue
         # 2. Delete vehicles that are topologically too far away
         neighbors_A = nx.single_source_shortest_path_length(G,
@@ -567,10 +575,10 @@ def delete_useless_actor(actor_vehicles, actors_now, agents_now, conf, player_la
                                                             cutoff=conf.topo_k)
         neighbors_B[(vehicle_road_id, vehicle_lane_id)] = 0
         if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
-            delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
+            mark_actor(actor, 5 * c.FRAME_RATE)
         # 3.Delete vehicles that stuck too long
-        if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
-            delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
+        if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 4):
+            mark_actor(actor, 5 * c.FRAME_RATE)
 
 
 def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=None):
@@ -687,7 +695,8 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
     return break_flag, retval, autoware_stuck, s_started
 
 
-def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container, conf):
+def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container,
+                 conf):
     try:
         settings = world.get_settings()
         settings.synchronous_mode = False
@@ -704,28 +713,24 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
             actor.fresh = True
         for s in sensors:
             s.stop()
-            if not s.destroy():
-                print("Failed to destroy {}".format(s))
-                return False
+            s.destroy()
         for w in actor_walkers:
-            if not w.destroy():
-                print("Failed to destroy {}".format(w))
-                return False
+            w.destroy()
         for v in actor_vehicles:
-            if not v.destroy():
-                print("Failed to destroy {}".format(v))
-                return False
-        for actor in actors_now:
-            actor.instance = None
+            v.destroy()
         # check if everyone is deleted
         time.sleep(1)
         vehicles = world.get_actors().filter("*vehicle.*")
         while len(vehicles) > 1:
             time.sleep(1)
             vehicles = world.get_actors().filter("*vehicle.*")
-            print("Failed to destroy something:")
-            print(vehicles)
-            # return False
+            for v in vehicles:
+                if conf.agent_type == c.AUTOWARE:
+                    if v.id != player.id:
+                        v.destroy()
+        for actor in actors_now:
+            actor.instance = None
+
         return True
     except RuntimeError:
         return False
@@ -738,37 +743,34 @@ def check_and_remove_excess_images(pattern, max_frames):
 
 
 def save_video(carla_error, state):
-    # if conf.agent_type == c.BEHAVIOR:
-    # remove jpg files
+    # # remove jpg files
     max_frames = c.FRAME_RATE * c.VIDEO_TIME
-    if state.crashed and not state.laneinvaded:
-        print(f"Saving front camera video for last {c.VIDEO_TIME} second", end=" ")
-        check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
-    else:
-        print(f"Saving the whole front camera video", end=" ")
-    vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
-    if os.path.exists(vid_filename):
-        os.remove(vid_filename)
-    cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
-    cmd_ffmpeg = " ".join([
-        "ffmpeg",
-        "-f image2pipe",
-        f"-r {c.FRAME_RATE}",
-        "-vcodec mjpeg",
-        "-i -",
-        "-vcodec libx264",
-        "-crf 5",
-        vid_filename
-    ])
-    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-    if not carla_error:
-        os.system(cmd)
-        print("(done)")
-    else:
-        print("error:dont save any video")
-
-    cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
-    os.system(cmd)
+    # if state.crashed and not state.laneinvaded:
+    #     print(f"Saving front camera video for last {c.VIDEO_TIME} second", end=" ")
+    #     check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
+    # else:
+    #     print(f"Saving the whole front camera video", end=" ")
+    # vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
+    # if os.path.exists(vid_filename):
+    #     os.remove(vid_filename)
+    # cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
+    # cmd_ffmpeg = " ".join([
+    #     "ffmpeg",
+    #     "-f image2pipe",
+    #     f"-r {c.FRAME_RATE}",
+    #     "-vcodec mjpeg",
+    #     "-i -",
+    #     "-vcodec libx264",
+    #     "-crf 5",
+    #     vid_filename
+    # ])
+    # cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+    # if not carla_error:
+    #     os.system(cmd)
+    # else:
+    #     print("error:dont save any video")
+    # cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
+    # os.system(cmd)
     if state.crashed and not state.laneinvaded:
         print(f"Saving top camera video for last {c.VIDEO_TIME}", end=" ")
         check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/top-*.jpg", max_frames)
@@ -777,7 +779,6 @@ def save_video(carla_error, state):
     vid_filename = f"/tmp/fuzzerdata/{username}/top.mp4"
     if os.path.exists(vid_filename):
         os.remove(vid_filename)
-
     cmd_cat = f"cat /tmp/fuzzerdata/{username}/top-*.jpg"
     cmd_ffmpeg = " ".join([
         "ffmpeg",
@@ -789,14 +790,11 @@ def save_video(carla_error, state):
         "-crf 15",
         vid_filename
     ])
-
     cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
     if not carla_error:
         os.system(cmd)
-        print("(done)")
     else:
         print("error:dont save any video")
-
     cmd = f"rm -f /tmp/fuzzerdata/{username}/top-*.jpg"
     os.system(cmd)
 
@@ -858,8 +856,7 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
         loc = sp.location
         rot = sp.rotation
         cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
-        result = autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
-
+        autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
         # print(result.output)
         time.sleep(5)
         print("\n    [*] found [{}] at {}".format(player.id,
@@ -901,21 +898,21 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
     rgb_camera_bp.set_attribute("fov", "105")
 
     # position relative to the parent actor (player)
-    camera_tf = carla.Transform(carla.Location(z=1.8))
+    # camera_tf = carla.Transform(carla.Location(z=1.8))
 
     # time in seconds between sensor captures - should sync w/ fps?
     # rgb_camera_bp.set_attribute("sensor_tick", "1.0")
 
-    camera_front = world.spawn_actor(
-        rgb_camera_bp,
-        camera_tf,
-        attach_to=player,
-        attachment_type=carla.AttachmentType.Rigid
-    )
+    # camera_front = world.spawn_actor(
+    #     rgb_camera_bp,
+    #     camera_tf,
+    #     attach_to=player,
+    #     attachment_type=carla.AttachmentType.Rigid
+    # )
+    #
+    # camera_front.listen(lambda image: _on_front_camera_capture(image, state))
 
-    camera_front.listen(lambda image: _on_front_camera_capture(image, state))
-
-    sensors.append(camera_front)
+    # sensors.append(camera_front)
 
     camera_tf2 = carla.Transform(
         carla.Location(z=50.0),
@@ -944,40 +941,40 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
     return autoware_container, ego, player, max_steer_angle
 
 
-def calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
-    # record ego information
-    control = player.get_control()
-    state.cont_throttle.append(control.throttle)
-    state.cont_brake.append(control.brake)
-    state.cont_steer.append(control.steer)
-    steer_angle = control.steer * max_steer_angle
-    state.steer_angle_list.append(steer_angle)
-    current_yaw = player_rot.yaw
-    state.yaw_list.append(current_yaw)
-    yaw_diff = current_yaw - yaw
-    # Yaw range is -180 ~ 180. When vehicle's yaw is oscillating
-    # b/w -179 and 179, yaw_diff can be messed up even if the
-    # diff is very small. Assuming that it's unrealistic that
-    # a vehicle turns more than 180 degrees in under 1/20 seconds,
-    # just round the diff around 360.
-    if yaw_diff > 180:
-        yaw_diff = 360 - yaw_diff
-    elif yaw_diff < -180:
-        yaw_diff = 360 + yaw_diff
-    yaw_rate = yaw_diff * c.FRAME_RATE
-    state.yaw_rate_list.append(yaw_rate)
-    yaw = current_yaw
-    # uncomment below to follow along the player
-    # set_camera(conf, player, spectator)
-    # Get the lateral speed
-    player_right_vec = player_rot.get_right_vector()
-    lat_speed = abs(vel.x * player_right_vec.x + vel.y * player_right_vec.y)
-    lat_speed *= 3.6  # m/s to km/h
-    state.lat_speed_list.append(lat_speed)
-    player_fwd_vec = player_rot.get_forward_vector()
-    lon_speed = abs(vel.x * player_fwd_vec.x + vel.y * player_fwd_vec.y)
-    lon_speed *= 3.6
-    state.lon_speed_list.append(lon_speed)
+# def calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
+#     # record ego information
+#     control = player.get_control()
+#     state.cont_throttle.append(control.throttle)
+#     state.cont_brake.append(control.brake)
+#     state.cont_steer.append(control.steer)
+#     steer_angle = control.steer * max_steer_angle
+#     state.steer_angle_list.append(steer_angle)
+#     current_yaw = player_rot.yaw
+#     state.yaw_list.append(current_yaw)
+#     yaw_diff = current_yaw - yaw
+#     # Yaw range is -180 ~ 180. When vehicle's yaw is oscillating
+#     # b/w -179 and 179, yaw_diff can be messed up even if the
+#     # diff is very small. Assuming that it's unrealistic that
+#     # a vehicle turns more than 180 degrees in under 1/20 seconds,
+#     # just round the diff around 360.
+#     if yaw_diff > 180:
+#         yaw_diff = 360 - yaw_diff
+#     elif yaw_diff < -180:
+#         yaw_diff = 360 + yaw_diff
+#     yaw_rate = yaw_diff * c.FRAME_RATE
+#     state.yaw_rate_list.append(yaw_rate)
+#     yaw = current_yaw
+#     # uncomment below to follow along the player
+#     # set_camera(conf, player, spectator)
+#     # Get the lateral speed
+#     player_right_vec = player_rot.get_right_vector()
+#     lat_speed = abs(vel.x * player_right_vec.x + vel.y * player_right_vec.y)
+#     lat_speed *= 3.6  # m/s to km/h
+#     state.lat_speed_list.append(lat_speed)
+#     player_fwd_vec = player_rot.get_forward_vector()
+#     lon_speed = abs(vel.x * player_fwd_vec.x + vel.y * player_fwd_vec.y)
+#     lon_speed *= 3.6
+#     state.lon_speed_list.append(lon_speed)
 
 
 def simulate_initialize(client, conf, weather_dict, world):
@@ -1037,19 +1034,19 @@ def spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, co
     actor_vehicle.set_target_velocity(
         actor.speed * road_direction)
     actor.set_instance(actor_vehicle)
-    # just add it for behavior
-    if conf.agent_type == c.BEHAVIOR:
-        # don't add sensors for non_motorized vehicles
-        if actor.actor_bp.get_attribute(
-                "number_of_wheels").as_int() > max_wheels_for_non_motorized:
-            actor.attach_collision(world, sensors, state)
+    # # just add it for behavior
+    # if conf.agent_type == c.BEHAVIOR:
+    #     # don't add sensors for non_motorized vehicles
+    #     if actor.actor_bp.get_attribute(
+    #             "number_of_wheels").as_int() > max_wheels_for_non_motorized:
+    #         actor.attach_collision(world, sensors, state)
     actors_now.append(actor)
     actor.fresh = False
 
 
-def _on_front_camera_capture(image, state):
-    if not state.end:
-        image.save_to_disk(f"/tmp/fuzzerdata/{username}/front-{image.frame:05d}.jpg")
+# def _on_front_camera_capture(image, state):
+#     if not state.end:
+#         image.save_to_disk(f"/tmp/fuzzerdata/{username}/front-{image.frame:05d}.jpg")
 
 
 def _on_top_camera_capture(image, state):
@@ -1191,10 +1188,10 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
     player_road_id = player_waypoint.road_id
     neighbors_A = nx.single_source_shortest_path_length(G,
                                                         source=(player_road_id, player_lane_id),
-                                                        cutoff=2)
+                                                        cutoff=3)
     neighbors_A[(player_road_id, player_lane_id)] = 0
     neighbors_B = nx.single_source_shortest_path_length(G, source=(
-        waypoint.road_id, waypoint.lane_id), cutoff=2)
+        waypoint.road_id, waypoint.lane_id), cutoff=3)
     neighbors_B[(waypoint.road_id, waypoint.lane_id)] = 0
     if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
         return False

@@ -73,7 +73,7 @@ scene_folders = [folder for folder in os.listdir('./save') if os.path.isdir(os.p
 
 # 1. Count the total number of scenes
 num_scenes = len(scene_folders)
-print(f"Total scenes: {num_scenes}")
+print(f"Total rounds: {num_scenes}")
 
 # 2. Calculate the total runtime
 start_time = float('inf')
@@ -89,8 +89,8 @@ for folder in scene_folders:
     if timestamp > end_time:
         end_time = timestamp
 
-total_runtime = end_time - start_time
-print(f"Total runtime: {total_runtime} seconds")
+# total_runtime = end_time - start_time
+# print(f"Total runtime: {total_runtime} seconds")
 
 
 # 4. Copy videos to event folders based on event type

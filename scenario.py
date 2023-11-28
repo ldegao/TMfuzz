@@ -2,20 +2,25 @@ import cProfile
 import json
 import os
 import pdb
-import random
 import shutil
-import time
 from typing import List
 
 import carla
+import cv2
 import numpy as np
 import deap.base
 
 from actor import Actor
+from cluster import draw_picture, shift_scale_points_group
 from simulate import simulate
 import constants as c
-import utils
 from states import ScenarioState
+
+colors = [
+    (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
+    (0, 255, 255), (255, 0, 255), (192, 192, 192), (128, 0, 0),
+    (128, 128, 0), (0, 128, 0)
+]
 
 
 def get_seed_sp_transform(seed):
@@ -40,7 +45,7 @@ class ScenarioFitness(deap.base.Fitness):
     """
     Class to represent weight of each fitness function
     """
-    # minimize closest distance between pair of ADC
+    # minimize the closest distance between a pair of ADC
     weights = (-1.0, 1.0, -1.0)
     """
     :note: minimize closest distance, maximize number of decisions,
@@ -154,6 +159,7 @@ class Scenario:
         # # reload scenario state
         # self.state = ScenarioState()
         self.save_video(error, log_filename)
+        self.save_trace(self.state.trace_graph_important, log_filename)
         if not self.conf.function.startswith("eval"):
             if ret == 128:
                 return 128
@@ -192,13 +198,13 @@ class Scenario:
                 os.path.join(self.conf.queue_dir, log_filename),
                 os.path.join(self.conf.error_dir, log_filename)
             )
-        shutil.copyfile(
-            f"/tmp/fuzzerdata/{self.username}/front.mp4",
-            os.path.join(
-                self.conf.cam_dir,
-                log_filename.replace(".json", "-front.mp4")
-            )
-        )
+        # shutil.copyfile(
+        #     f"/tmp/fuzzerdata/{self.username}/front.mp4",
+        #     os.path.join(
+        #         self.conf.cam_dir,
+        #         log_filename.replace(".json", "-front.mp4")
+        #     )
+        # )
 
         shutil.copyfile(
             f"/tmp/fuzzerdata/{self.username}/top.mp4",
@@ -207,6 +213,20 @@ class Scenario:
                 log_filename.replace(".json", "-top.mp4")
             )
         )
+        print("save video done")
+
+    def save_trace(self, trace_graph, log_filename):
+        new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])
+        trace_graph_points = shift_scale_points_group(np.array(new_trace_graph), (1024, 1024))
+        img = np.full((1024, 1024, 3), 255, dtype=np.uint8)
+        for j, trace in enumerate(trace_graph_points):
+            color = colors[j % len(colors)]
+            img = draw_picture(trace, color=color, base_image=img)
+            cv2.imwrite(os.path.join(
+                self.conf.trace_dir,
+                log_filename.replace(".json", ".png")
+            ), img)
+        print("save trace done")
 
     def check_error(self, state):
         if self.conf.debug:
