@@ -2,7 +2,11 @@ import os
 import json
 import math
 import pdb
+import select
+import signal
+import subprocess
 import sys
+import threading
 import time
 from subprocess import Popen, PIPE
 
@@ -27,6 +31,10 @@ try:
 except IndexError:
     pass
 from agents.navigation.behavior_agent import BehaviorAgent
+
+
+def timeout_handler():
+    raise TimeoutError
 
 
 def set_traffic_lights_state(world, state):
@@ -357,27 +365,28 @@ def carla_rotation_to_RPY(carla_rotation):
     return roll, pitch, yaw
 
 
-def check_autoware_status(world):
+def check_autoware_status(world, timeout):
+    try:
+        signal.alarm(timeout)
+        check_autoware_output(world)
+    except TimeoutError:
+        print("Autoware nodes did not Ready within timeout.")
+        raise KeyboardInterrupt
+    finally:
+        signal.alarm(0)
+
+
+def check_autoware_output(world):
     i = 0
-    time.sleep(3)
     while True:
-        proc1 = Popen(["rosnode", "list"], stdout=PIPE)
-        proc2 = Popen(["wc", "-l"], stdin=proc1.stdout, stdout=PIPE)
-        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
-        output = proc2.communicate()[0]
-        # print(int(output))
-        if int(output) >= c.WAIT_AUTOWARE_NUM_NODES:
-            # FIXME: hardcoding the num of topics :/
-            # on top of that, each vehicle adds one topic, and any walker
-            # contribute to two pedestrian topics.
-            print("")
-            break
-        i += 1
-        if i == 60:
-            carla_error = True
-            print("    [-] something went wrong while launching Autoware.")
-            raise KeyboardInterrupt
         time.sleep(1)
+        output = subprocess.check_output("rosnode list | wc -l", shell=True)
+        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
+        i += 1
         world.tick()
-    proc1.stdout.close()
-    proc2.stdout.close()
+        if output == b"":
+            continue
+        output = int(output.strip())
+        if output >= c.WAIT_AUTOWARE_NUM_NODES:
+            print("Autoware nodes are ready.")
+            break

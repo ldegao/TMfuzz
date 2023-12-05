@@ -21,7 +21,7 @@ from actor import Actor
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, delete_actor, check_autoware_status, mark_actor
+    set_autopilot, delete_actor, check_autoware_status, mark_actor, timeout_handler
 
 config.set_carla_api_path()
 try:
@@ -84,6 +84,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     actor_walkers = []
     trace_graph = []
     trace_graph_important = []
+    nearby_dict = []
 
     # for autoware
     frame_gap = 0
@@ -115,6 +116,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             autoware_goal_publish(conf, goal_loc, goal_rot, state, world)
 
         # SIMULATION LOOP FOR AUTOWARE and BasicAgent
+        signal.signal(signal.SIGALRM, timeout_handler)
         signal.signal(signal.SIGINT, signal.default_int_handler)
         signal.signal(signal.SIGSEGV, state.sig_handler)
         signal.signal(signal.SIGABRT, state.sig_handler)
@@ -133,9 +135,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             frame_speed_lim_changed = 0
             s_started = False
             # actual monitoring of the driving simulation begins here
-            if conf.debug:
-                print("[debug] START DRIVING: {} {}".format(first_frame_id,
-                                                            first_sim_time))
+            print("START DRIVING: {} {}".format(first_frame_id, first_sim_time))
             # simulate start here
             state.end = False
 
@@ -159,10 +159,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel = get_player_info(
                     cur_frame_id, goal_loc, player, sp, state, town_map, conf)
 
-                # drive-fuzz's thing, not sure if we need it
-                # yaw = sp.rotation.yaw
-                # calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state,
-                #                   vel, yaw)
+                # drive-fuzz's thing, not sure if we need it yaw = sp.rotation.yaw calculate_control(actor_vehicles,
+                # actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw)
 
                 # Check destination
                 break_flag, retval, autoware_stuck, s_started = check_destination(actor_vehicles, actors_now,
@@ -212,12 +210,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                     wait_until_end += 1
                 if wait_until_end > 6:
                     break
+            # find the biggest weight of actor-list
+            nearby_dict, trace_graph_important = record_trace(actor_vehicles, exec_state, player, player_loc, state,
+                                                              town_map, trace_dict,
+                                                              trace_graph, trace_graph_important)
+            state.trace_graph_important = trace_graph_important
+            state.nearby_dict = nearby_dict
         except KeyboardInterrupt:
             print("quitting")
             retval = 128
         # jump to finally
         return
-
     except Exception:
         # update states
         # state.num_frames = frame_id - frame_0
@@ -226,15 +229,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         traceback.print_exc()
         exc_type, exc_obj, exc_tb = sys.exc_info()
         print("   (line #{0}) {1}".format(exc_tb.tb_lineno, exc_type))
-        retval = 1
+        retval = -1
     finally:
         # Finalize simulation
-        # find biggest weight of actor-list
-        nearby_dict, trace_graph_important = record_trace(actor_vehicles, exec_state, player, player_loc, state,
-                                                          town_map, trace_dict,
-                                                          trace_graph, trace_graph_important)
-        state.trace_graph_important = trace_graph_important
-        state.nearby_dict = nearby_dict
+        if not is_carla_running():
+            retval = -1
+        if retval == -1:
+            print("[debug] exit because of Runtime error")
+            return retval, actor_list, state
+        if retval == 128:
+            print("[debug] exit by USER")
+            return retval, actor_list, state
         logging.info("crashed:%s", state.crashed)
         logging.info("nearby_car:%s", len(nearby_dict))
         logging.info("valid_frames/num_frames: %s/%s", valid_frames, state.num_frames)
@@ -242,8 +247,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         state.end = True
         # save video in output_dir
         save_video(carla_error, state)
-        if not is_carla_running():
-            retval = 128
+
         # remove behavior ego
         if conf.agent_type == c.BEHAVIOR:
             delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
@@ -449,8 +453,10 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                     continue
                 # we don't want to add bg car in junction or near it
                 # because it may cause a red light problem
-                if waypoint.is_junction or waypoint.next(30 * 3 / 3.6)[-1].is_junction:
+                if waypoint.is_junction:
                     continue
+                # if waypoint.is_junction or waypoint.next(30 * 3 / 3.6)[-1].is_junction:
+                #     continue
                 temp_flag = False
                 # don't let sensor distance too close in the same lane
                 for other_actor in actor_list:
@@ -577,7 +583,7 @@ def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road
         if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
             mark_actor(actor, 5 * c.FRAME_RATE)
         # 3.Delete vehicles that stuck too long
-        if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 4):
+        if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
             mark_actor(actor, 5 * c.FRAME_RATE)
 
 
@@ -704,11 +710,11 @@ def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, 
         world.apply_settings(settings)
         if conf.agent_type == c.AUTOWARE:
             cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
-            # autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
             t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
             t.daemon = True
             t.start()
-            check_autoware_status(world)
+            time.sleep(1)
+            check_autoware_status(world, 60)
         for actor in actor_list:
             actor.fresh = True
         for s in sensors:
@@ -719,10 +725,9 @@ def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, 
         for v in actor_vehicles:
             v.destroy()
         # check if everyone is deleted
-        time.sleep(1)
         vehicles = world.get_actors().filter("*vehicle.*")
-        while len(vehicles) > 1:
-            time.sleep(1)
+        time.sleep(1)
+        if len(vehicles) > 1:
             vehicles = world.get_actors().filter("*vehicle.*")
             for v in vehicles:
                 if conf.agent_type == c.AUTOWARE:
@@ -730,7 +735,6 @@ def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, 
                         v.destroy()
         for actor in actors_now:
             actor.instance = None
-
         return True
     except RuntimeError:
         return False
@@ -846,6 +850,22 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
         agents_now.append((agent, player, ego))
         print("[+] spawned cautious BehaviorAgent")
     else:
+        i = 0
+        autoware_agent_found = False
+        while True:
+            print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
+            vehicles = world.get_actors().filter("*vehicle.*")
+            for vehicle in vehicles:
+                if vehicle.attributes["role_name"] == "ego_vehicle":
+                    autoware_agent_found = True
+                    break
+            if autoware_agent_found:
+                break
+            if i > 60:
+                print("\n something is wrong")
+                exit(-1)
+            i += 1
+            time.sleep(0.5)
         vehicles = world.get_actors().filter("*vehicle.*")
         for vehicle in vehicles:
             if vehicle.attributes["role_name"] == "ego_vehicle":
@@ -856,27 +876,27 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
         loc = sp.location
         rot = sp.rotation
         cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
-        autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
+        t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
+        t.daemon = True
+        t.start()
+        check_autoware_status(world, 60)
+        # autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
         # print(result.output)
         time.sleep(5)
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
-        i = 0
-        while True:
-            output_state = proc_state.stdout.readline()
-            # print(output_state)
-            if b"---" in output_state:
-                output_state = proc_state.stdout.readline()
-            if b"VehicleReady" in output_state:
-                break
-            if i == 30:
-                print("    [-] something went wrong while launching Autoware.")
-                raise KeyboardInterrupt
-            i += 1
-            time.sleep(1)
+        timeout = 60
+        try:
+            signal.alarm(timeout)
+            check_output(proc_state)
+        except TimeoutError:
+            print("Vehicle did not Ready within timeout.")
+            raise KeyboardInterrupt
+        finally:
+            signal.alarm(0)
         world.tick()  # sync with simulator
         time.sleep(3)
-        x1 = x2 = 0
+        x2 = 0
         while True:
             world.tick()  # spin until the player is moved to the sp
             location_1 = player.get_location()
@@ -888,6 +908,7 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
             else:
                 x1 = location_1.distance(location_2)
                 if x1 == x2:
+                    print(x1)
                     raise RuntimeError
                 x2 = x1
                 time.sleep(1)
@@ -1188,12 +1209,22 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
     player_road_id = player_waypoint.road_id
     neighbors_A = nx.single_source_shortest_path_length(G,
                                                         source=(player_road_id, player_lane_id),
-                                                        cutoff=3)
+                                                        cutoff=2)
     neighbors_A[(player_road_id, player_lane_id)] = 0
     neighbors_B = nx.single_source_shortest_path_length(G, source=(
-        waypoint.road_id, waypoint.lane_id), cutoff=3)
+        waypoint.road_id, waypoint.lane_id), cutoff=2)
     neighbors_B[(waypoint.road_id, waypoint.lane_id)] = 0
     if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
         return False
     else:
         return True
+
+
+def check_output(proc):
+    while True:
+        output_state = non_blocking_read(proc.stdout)
+        # print(output_state)
+        if "VehicleReady" in output_state:
+            break
+        time.sleep(0.5)
+        print("[*] Waiting for Autoware vehicle Ready" + "\r", end="")

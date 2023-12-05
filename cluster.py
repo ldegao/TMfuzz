@@ -132,7 +132,7 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         img = base_image
     if len(trace) > 4:
         x = [shift_float(p[0], 256) for p in trace]
-        y = [shift_float(p[1], 256) for p in trace]
+        y = [shift_float(p[1], 255) for p in trace]
         weights = [p[2] for p in trace]
         x, y, weights = remove_duplicate_adjacent_points(x, y, weights)
         x, y, weights = uniform_sampling_with_weights(x, y, weights)
@@ -158,7 +158,7 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
                 i = i + 1
         except IndexError:
             print("IndexError")
-            pdb.set_trace()
+        return img
 
     return img
 
