@@ -18,8 +18,8 @@ MSG_BAD_SPAWN_ARG = "--spawn expects six args: x, y, z, pitch, yaw, roll"
 MSG_BAD_DEST_ARG = "--dest expects three args: x, y, z"
 # scope
 
-MIN_DIST = 100
-MAX_DIST = 200
+MIN_DIST = 50
+MAX_DIST = 150
 
 # Agent Types
 BEHAVIOR = 1

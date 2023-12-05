@@ -58,7 +58,7 @@ class Config:
         self.sim_tm_port = 0
 
         # Fuzzer config
-        self.topo_k = 3
+        self.topo_k = 2
         self.immobile_percentage = 0  # the percentage of the actors is immobile forever
         self.max_cycles = 0
         self.max_mutation = 0

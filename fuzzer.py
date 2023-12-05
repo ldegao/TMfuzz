@@ -262,7 +262,7 @@ def evaluation(ind: Scenario):
     ret = None
     # for test
     mutate_weather_fixed(ind)
-    signal.alarm(60 * 60)  # timeout after 60 min
+    # signal.alarm(60 * 60)  # timeout after 60 min
     try:
         # profiler = cProfile.Profile()
         # profiler.enable()  #
@@ -291,20 +291,19 @@ def evaluation(ind: Scenario):
         else:
             print("[-] run_test error:")
             traceback.print_exc()
-    signal.alarm(0)
+            exit(-1)
+    # signal.alarm(0)
     if ret is None:
         pass
     elif ret == -1:
-        print("simulation failure")
+        print("[-] Fatal error occurred during test")
+        exit(-1)
     elif ret == 1:
         print("fuzzer - found an error")
     elif ret == 128:
         print("Exit by user request")
         sys.exit(0)
-    else:
-        if ret == -1:
-            print("[-] Fatal error occurred during test")
-            exit(-1)
+
     # mutation loop ends
     if ind.found_error:
         print("[-]error detected. start a new cycle with a new seed")
@@ -475,26 +474,11 @@ def autoware_launch(world, conf, town_map):
             break
         print("[*] Waiting for Autoware container to be launched")
         time.sleep(1)
-    # pdb.set_trace()
+    print("[*] Waiting for ROS to be launched")
+    time.sleep(5)
     # wait for autoware bridge to spawn player vehicle
-    autoware_agent_found = False
-    i = 0
-    while True:
-        print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
-        vehicles = world.get_actors().filter("*vehicle.*")
-        for vehicle in vehicles:
-            if vehicle.attributes["role_name"] == "ego_vehicle":
-                autoware_agent_found = True
-                break
-        if autoware_agent_found:
-            break
-        if i > 60:
-            print("\n something is wrong")
-            exit(-1)
-        i += 1
-        time.sleep(0.5)
+    check_autoware_status(world, 60)
 
-    check_autoware_status(world)
     # exec a detached process that monitors the output of Autoware's
     # decision-maker state, with which we can get an idea of when Autoware
     # thinks it has reached the goal
