@@ -153,19 +153,23 @@ class Scenario:
             weather_dict=self.weather,
             actor_list=self.actor_list
         )
+        if ret == -1:
+            return -1
+        if not self.conf.function.startswith("eval"):
+            if ret == 128:
+                return 128
         log_filename = self.dump_states(self.state, log_type="queue")
         self.log_filename = log_filename
         error = self.check_error(self.state)
         # # reload scenario state
         # self.state = ScenarioState()
         self.save_video(error, log_filename)
-        self.save_trace(self.state.trace_graph_important, log_filename)
-        if not self.conf.function.startswith("eval"):
-            if ret == 128:
-                return 128
+        if self.state.trace_graph_important != []:
+            self.save_trace(self.state.trace_graph_important, log_filename)
         if error:
             self.found_error = True
             return 1
+
         # if state.num_frames <= c.FRAME_RATE:
         #     # Trap for an unlikely situation where test target didn't load
         #     # but we somehow got here.
@@ -193,27 +197,30 @@ class Scenario:
         self.state.other_error_val = 0
 
     def save_video(self, error, log_filename):
-        if error:
-            shutil.copyfile(
-                os.path.join(self.conf.queue_dir, log_filename),
-                os.path.join(self.conf.error_dir, log_filename)
-            )
-        # shutil.copyfile(
-        #     f"/tmp/fuzzerdata/{self.username}/front.mp4",
-        #     os.path.join(
-        #         self.conf.cam_dir,
-        #         log_filename.replace(".json", "-front.mp4")
-        #     )
-        # )
+        try:
+            if error:
+                shutil.copyfile(
+                    os.path.join(self.conf.queue_dir, log_filename),
+                    os.path.join(self.conf.error_dir, log_filename)
+                )
+            # shutil.copyfile(
+            #     f"/tmp/fuzzerdata/{self.username}/front.mp4",
+            #     os.path.join(
+            #         self.conf.cam_dir,
+            #         log_filename.replace(".json", "-front.mp4")
+            #     )
+            # )
 
-        shutil.copyfile(
-            f"/tmp/fuzzerdata/{self.username}/top.mp4",
-            os.path.join(
-                self.conf.cam_dir,
-                log_filename.replace(".json", "-top.mp4")
+            shutil.copyfile(
+                f"/tmp/fuzzerdata/{self.username}/top.mp4",
+                os.path.join(
+                    self.conf.cam_dir,
+                    log_filename.replace(".json", "-top.mp4")
+                )
             )
-        )
-        print("save video done")
+            print("save video done")
+        except FileNotFoundError:
+            print("FileNotFoundError")
 
     def save_trace(self, trace_graph, log_filename):
         new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])

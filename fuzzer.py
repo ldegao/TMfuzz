@@ -259,14 +259,17 @@ def evaluation(ind: Scenario):
     g_name = f'Generation_{ind.generation_id:05}'
     s_name = f'Scenario_{ind.scenario_id:05}'
     # todo: run test here
-    ret = None
     # for test
     mutate_weather_fixed(ind)
-    # signal.alarm(60 * 60)  # timeout after 60 min
+    signal.alarm(15 * 60)  # timeout after 15 min
+    print("timeout after 15 min")
     try:
         # profiler = cProfile.Profile()
         # profiler.enable()  #
         ret = ind.run_test(exec_state)
+        if ret == -1:
+            print("[-] Fatal error occurred during test")
+            exit(0)
         min_dist = ind.state.min_dist
         trace_graph_important = ind.state.trace_graph_important
         accumulated_trace_graphs.append(trace_graph_important)
@@ -285,24 +288,23 @@ def evaluation(ind: Scenario):
         # profiler.print_stats(sort="cumulative")
         # pdb.set_trace()
     except Exception as e:
-        if e.args[0] == "HANG":
+        if e == TimeoutError:
             print("[-] simulation hanging. abort.")
             ret = 1
         else:
             print("[-] run_test error:")
             traceback.print_exc()
-            exit(-1)
-    # signal.alarm(0)
+            exit(0)
+    signal.alarm(0)
     if ret is None:
         pass
     elif ret == -1:
         print("[-] Fatal error occurred during test")
-        exit(-1)
+        exit(0)
     elif ret == 1:
         print("fuzzer - found an error")
     elif ret == 128:
         print("Exit by user request")
-        sys.exit(0)
 
     # mutation loop ends
     if ind.found_error:
@@ -401,106 +403,7 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
     return ind1, ind2
 
 
-def autoware_launch(world, conf, town_map):
-    username = os.getenv("USER")
-    global autoware_container
-    docker_client = docker.from_env()
-    proj_root = config.get_proj_root()
-    xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
-    vol_dict = {
-        "{}/carla-autoware/autoware-contents".format(proj_root): {
-            "bind": "/home/autoware/autoware-contents",
-            "mode": "ro"
-        },
-        "/tmp/.X11-unix": {
-            "bind": "/tmp/.X11-unix",
-            "mode": "rw"
-        },
-        f"/home/{username}/.Xauthority": {
-            "bind": xauth,
-            "mode": "rw"
-        },
-        "/tmp/fuzzerdata/{}".format(username): {
-            "bind": "/tmp/fuzzerdata",
-            "mode": "rw"
-        }
-    }
-    env_dict = {
-        "DISPLAY": os.getenv("DISPLAY"),
-        "XAUTHORITY": xauth,
-        "QT_X11_NO_MITSHM": 1
-    }
-    list_spawn_points = town_map.get_spawn_points()
-    sp = list_spawn_points[1]
-    loc = sp.location
-    rot = sp.rotation
-    sp_str = "{},{},{},{},{},{}".format(loc.x, -1 * loc.y, loc.z, 0,
-                                        0, -1 * rot.yaw)
-    autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
-    print(autoware_cla)
-    exec_state.autoware_cmd = autoware_cla
-    while autoware_container is None:
-        try:
-            autoware_container = docker_client.containers.run(
-                "carla-autoware:improved",
-                command=autoware_cla,
-                detach=True,
-                auto_remove=True,
-                name="autoware-{}".format(os.getenv("USER")),
-                volumes=vol_dict,
-                privileged=True,
-                network_mode="host",
-                # runtime="nvidia",
-                device_requests=[
-                    docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
-                environment=env_dict,
-                stdout=True,
-                stderr=True
-            )
-        except docker.errors.APIError as e:
-            print("[-] Could not launch docker:", e)
-            if "Conflict" in str(e):
-                os.system("docker rm -f autoware-{}".format(
-                    os.getenv("USER")))
-                killed = True
-            time.sleep(1)
-        except:
-            # https://github.com/docker/for-mac/issues/4957
-            print("[-] Fatal error. Check dmesg")
-            exit(-1)
-    while True:
-        running_container_list = docker_client.containers.list()
-        if autoware_container in running_container_list:
-            break
-        print("[*] Waiting for Autoware container to be launched")
-        time.sleep(1)
-    print("[*] Waiting for ROS to be launched")
-    time.sleep(5)
-    # wait for autoware bridge to spawn player vehicle
-    check_autoware_status(world, 60)
 
-    # exec a detached process that monitors the output of Autoware's
-    # decision-maker state, with which we can get an idea of when Autoware
-    # thinks it has reached the goal
-    exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
-                                  shell=True, stdout=PIPE, stderr=PIPE)
-    # set_camera(conf, player, spectator)
-    # Wait for Autoware (esp, for Town04)
-    # i = 0
-    # while True:
-    #     output_state = state.proc_state.stdout.readline()
-    #     if b"---" in output_state:
-    #         output_state = state.proc_state.stdout.readline()
-    #     if b"VehicleReady" in output_state:
-    #         break
-    #     i += 1
-    #     if i == 45:
-    #         carla_error = True
-    #         print("    [-] something went wrong while launching Autoware.")
-    #         raise KeyboardInterrupt
-    #     time.sleep(1)
-    time.sleep(3)
-    return
 
 
 def seed_initialize(town, town_map):
@@ -625,8 +528,8 @@ def main():
         conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
         world = exec_state.world
         blueprint_library = world.get_blueprint_library()
-        if conf.agent_type == c.AUTOWARE:
-            autoware_launch(exec_state.world, conf, town)
+        # if conf.agent_type == c.AUTOWARE:
+        #     autoware_launch(exec_state.world, conf, town)
         population = []
         # GA Hyperparameters
         POP_SIZE = 5  # amount of population
@@ -665,7 +568,8 @@ def main():
                 test_scenario = future.result(timeout=15)
             population.append(test_scenario)
             test_scenario.scenario_id = len(population)
-
+        # monitor carla
+        utils.monitor_docker_container('carlasim/carla:0.9.13')
         while True:
             # Main loop
             curr_gen += 1
