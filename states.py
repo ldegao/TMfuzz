@@ -30,6 +30,7 @@ class ScenarioState:
         self.world = None
         self.G = None
         self.distance = 0
+        self.trace_graph_important = []
 
         self.first_frame_id = 0
         self.first_sim_elapsed_time = 0

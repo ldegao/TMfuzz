@@ -13,6 +13,8 @@ import signal
 import time
 import math
 import traceback
+from subprocess import Popen, PIPE
+
 import docker
 import networkx as nx
 import numpy as np
@@ -71,11 +73,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     wait_until_end = 0
     max_wheels_for_non_motorized = 2
     carla_error = False
-    autoware_container = None
     state.min_dist = 99999
-    player = None
     player_loc = None
-    town_map = None
 
     actors_now = []
     agents_now = []
@@ -97,6 +96,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
 
     trace_dict = {}
     valid_frames = 0
+    all_frame = 0
     try:
 
         # initialize the simulation and the ego vehicle
@@ -106,14 +106,14 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                                                                weather_dict,
                                                                                                                world)
         autoware_container, ego, player, max_steer_angle = ego_initialize(
-            agents_now, exec_state.proc_state,
+            agents_now, exec_state,
             blueprint_library, conf,
             player_bp, sensors,
             sp, state,
             world, wp)
         trace_dict[player.id] = []
         if conf.agent_type == c.AUTOWARE:
-            autoware_goal_publish(conf, goal_loc, goal_rot, state, world)
+            autoware_goal_publish(goal_loc, goal_rot, state, world)
 
         # SIMULATION LOOP FOR AUTOWARE and BasicAgent
         signal.signal(signal.SIGALRM, timeout_handler)
@@ -204,6 +204,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 if wait_until_end == 0:
                     valid_frames = nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames,
                                                  exec_state.G)
+                    all_frame += 1
                     retval, wait_until_end = check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed,
                                                              speed_limit, state, wait_until_end)
                 else:
@@ -231,43 +232,55 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         print("   (line #{0}) {1}".format(exc_tb.tb_lineno, exc_type))
         retval = -1
     finally:
+        settings = world.get_settings()
+        settings.synchronous_mode = False
+        settings.fixed_delta_seconds = None
+        world.apply_settings(settings)
+
+        try:
+            autoware_container.kill()
+        except docker.errors.APIError as e:
+            print("[-] Couldn't kill Autoware container:", e)
+        except UnboundLocalError:
+            print("[-] Autoware container was not launched")
+        except:
+            print("[-] Autoware container was not killed for an unknown reason")
+            print("    Trying manually")
+            os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
+        # Don't reload and exit if user requests so
+        if retval == 128:
+            print("[debug] exit by user requests")
+            return retval, actor_list, state
         # Finalize simulation
         if not is_carla_running():
             retval = -1
         if retval == -1:
             print("[debug] exit because of Runtime error")
             return retval, actor_list, state
-        if retval == 128:
-            print("[debug] exit by USER")
-            return retval, actor_list, state
         logging.info("crashed:%s", state.crashed)
         logging.info("nearby_car:%s", len(nearby_dict))
-        logging.info("valid_frames/num_frames: %s/%s", valid_frames, state.num_frames)
+        logging.info("valid_frames/num_frames: %s/%s", valid_frames, all_frame)
         logging.info("distance:%s", state.distance)
         state.end = True
         # save video in output_dir
         save_video(carla_error, state)
-
-        # remove behavior ego
-        if conf.agent_type == c.BEHAVIOR:
-            delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
+        # remove ego
+        # if conf.agent_type == c.BEHAVIOR:
+        #     delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
         # remove actors and sensors to reload the world
-        if not world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world,
-                            autoware_container,
-                            conf):
-            retval = 128
-            if conf.debug:
-                print("[debug] world reload fail")
-            return retval, actor_list, state
-        # Don't reload and exit if user requests so
-        if retval == 128:
-            print("[debug] exit by user requests")
-            return retval, actor_list, state
-        else:
-            if conf.debug:
-                print("[debug] reload")
-            # client.reload_world()
-            return retval, actor_list, state
+        # if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+        #     retval = 128
+        #     if conf.debug:
+        #         print("[debug] world reload fail")
+        #     return retval, actor_list, state
+        if conf.debug:
+            print("[debug] reload")
+        for actor in actors_now:
+            actor.instance = None
+        for actor in actor_list:
+            actor.fresh = True
+        client.reload_world()
+        return retval, actor_list, state
 
 
 def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict, trace_graph,
@@ -568,7 +581,8 @@ def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road
         vehicle_road_id = vehicle_waypoint.road_id
         # 1. Delete vehicles that are physically too far away
         if vehicle.get_location().distance(player_loc) > 50 * math.sqrt(2):
-            mark_actor(actor, 0)
+            if actor.death_time < 0:
+                mark_actor(actor, 0)
             # delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
             continue
         # 2. Delete vehicles that are topologically too far away
@@ -581,10 +595,13 @@ def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road
                                                             cutoff=conf.topo_k)
         neighbors_B[(vehicle_road_id, vehicle_lane_id)] = 0
         if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
-            mark_actor(actor, 5 * c.FRAME_RATE)
+            if actor.death_time < 0:
+                mark_actor(actor, 5 * c.FRAME_RATE)
         # 3.Delete vehicles that stuck too long
         if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
-            mark_actor(actor, 5 * c.FRAME_RATE)
+            if actor.death_time < 0:
+                print("mark:", actor.actor_id)
+                mark_actor(actor, 1 * c.FRAME_RATE)
 
 
 def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=None):
@@ -646,8 +663,8 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
         # # Check Autoware-defined destination
         # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
         # VehicleReady\nWaitOrder\nStopping\nWaitDriveReady\n
-        if speed < 1:
-            if dist_to_goal < 1:
+        if speed < 3.6:
+            if dist_to_goal < 3:
                 print("\n[*] (Autoware) Reached the destination dist_to_goal=",
                       dist_to_goal)
                 retval = 0
@@ -660,7 +677,7 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
             if "Go" in output_state:
                 s_started = True
                 autoware_stuck = 0
-            elif "nWaitDriveReady" in output_state and s_started:
+            elif "WaitDriveReady" in output_state and s_started:
                 # os.system(pub_cmd)
                 # print("[carla] Goal republished")
                 autoware_stuck += 1
@@ -701,20 +718,17 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
     return break_flag, retval, autoware_stuck, s_started
 
 
-def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world, autoware_container,
-                 conf):
+def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
     try:
-        settings = world.get_settings()
-        settings.synchronous_mode = False
-        settings.fixed_delta_seconds = None
-        world.apply_settings(settings)
-        if conf.agent_type == c.AUTOWARE:
-            cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
-            t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
-            t.daemon = True
-            t.start()
-            time.sleep(1)
-            check_autoware_status(world, 60)
+        # if conf.agent_type == c.AUTOWARE:
+        #     cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
+        #     t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
+        #     t.daemon = True
+        #     t.start()
+        #     time.sleep(1)
+        #     check_autoware_status(world, 60)
+        for actor in actors_now:
+            actor.instance = None
         for actor in actor_list:
             actor.fresh = True
         for s in sensors:
@@ -724,17 +738,7 @@ def world_reload(player, actor_list, actor_vehicles, actor_walkers, actors_now, 
             w.destroy()
         for v in actor_vehicles:
             v.destroy()
-        # check if everyone is deleted
-        vehicles = world.get_actors().filter("*vehicle.*")
-        time.sleep(1)
-        if len(vehicles) > 1:
-            vehicles = world.get_actors().filter("*vehicle.*")
-            for v in vehicles:
-                if conf.agent_type == c.AUTOWARE:
-                    if v.id != player.id:
-                        v.destroy()
-        for actor in actors_now:
-            actor.instance = None
+
         return True
     except RuntimeError:
         return False
@@ -803,7 +807,7 @@ def save_video(carla_error, state):
     os.system(cmd)
 
 
-def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
+def autoware_goal_publish(goal_loc, goal_rot, state, world):
     goal_quaternion = quaternion_from_euler(0.0, 0.0, goal_rot.yaw)
     goal_ox = goal_quaternion[0]
     goal_oy = goal_quaternion[1]
@@ -824,19 +828,119 @@ def autoware_goal_publish(conf, goal_loc, goal_rot, state, world):
     return
 
 
-def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, sensors, sp, state,
+def autoware_launch(exec_state, conf, town_map, sp):
+    world = exec_state.world
+    username = os.getenv("USER")
+    docker_client = docker.from_env()
+    proj_root = config.get_proj_root()
+    xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
+    vol_dict = {
+        "{}/carla-autoware/autoware-contents".format(proj_root): {
+            "bind": "/home/autoware/autoware-contents",
+            "mode": "ro"
+        },
+        "/tmp/.X11-unix": {
+            "bind": "/tmp/.X11-unix",
+            "mode": "rw"
+        },
+        f"/home/{username}/.Xauthority": {
+            "bind": xauth,
+            "mode": "rw"
+        },
+        "/tmp/fuzzerdata/{}".format(username): {
+            "bind": "/tmp/fuzzerdata",
+            "mode": "rw"
+        }
+    }
+    env_dict = {
+        "DISPLAY": os.getenv("DISPLAY"),
+        "XAUTHORITY": xauth,
+        "QT_X11_NO_MITSHM": 1
+    }
+    loc = sp.location
+    rot = sp.rotation
+    sp_str = "{},{},{},{},{},{}".format(loc.x, -1 * loc.y, loc.z, 0,
+                                        0, -1 * rot.yaw)
+    autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
+    print(autoware_cla)
+    temp_player = None
+    autoware_container = None
+    while autoware_container is None:
+        try:
+            autoware_container = docker_client.containers.run(
+                "carla-autoware:improved",
+                command=autoware_cla,
+                detach=True,
+                auto_remove=True,
+                name="autoware-{}".format(os.getenv("USER")),
+                volumes=vol_dict,
+                privileged=True,
+                network_mode="host",
+                # runtime="nvidia",
+                device_requests=[
+                    docker.types.DeviceRequest(device_ids=["0"], capabilities=[['gpu']])],
+                environment=env_dict,
+                stdout=True,
+                stderr=True
+            )
+        except docker.errors.APIError as e:
+            # print("[-] Could not launch docker:", e)
+            if "Conflict" in str(e):
+                os.system("docker rm -f autoware-{}".format(
+                    os.getenv("USER")))
+            time.sleep(1)
+        except:
+            # https://github.com/docker/for-mac/issues/4957
+            print("[-] Fatal error. Check dmesg")
+            exit(-1)
+    while True:
+        running_container_list = docker_client.containers.list()
+        if autoware_container in running_container_list:
+            break
+        print("[*] Waiting for Autoware container to be launched")
+        time.sleep(1)
+    print("[*] Waiting for ROS to be launched")
+    time.sleep(5)
+    if temp_player:
+        print("player loc after:", temp_player.get_transform())
+    # exec a detached process that monitors the output of Autoware's
+    # decision-maker state, with which we can get an idea of when Autoware
+    # thinks it has reached the goal
+    exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
+                                  shell=True, stdout=PIPE, stderr=PIPE)
+    # wait for autoware bridge to spawn player vehicle
+    check_autoware_status(world, 60)
+
+    # set_camera(conf, player, spectator)
+    # Wait for Autoware (esp, for Town04)
+    # i = 0
+    # while True:
+    #     output_state = state.proc_state.stdout.readline()
+    #     if b"---" in output_state:
+    #         output_state = state.proc_state.stdout.readline()
+    #     if b"VehicleReady" in output_state:
+    #         break
+    #     i += 1
+    #     if i == 45:
+    #         carla_error = True
+    #         print("    [-] something went wrong while launching Autoware.")
+    #         raise KeyboardInterrupt
+    #     time.sleep(1)
+    time.sleep(3)
+    return autoware_container
+
+
+def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, sensors, sp, state,
                    world, wp):
     # for autoware
-    autoware_container = get_docker("autoware-{}".format(os.getenv("USER")))
+    autoware_container = None
+    town = world.get_map()
     player = None
     if conf.agent_type == c.BEHAVIOR:
         player = world.try_spawn_actor(player_bp, sp)
         ego = Actor(actor_type=c.VEHICLE, spawn_point=sp,
                     actor_id=-1)
         ego.set_instance(player)
-        ego.attach_collision(world, sensors, state)
-        if conf.check_dict["lane"]:
-            ego.attach_lane_invasion(world, sensors, state)
         world.tick()  # sync once with simulator
         player.set_simulate_physics(True)
         agent = BehaviorAgent(
@@ -850,6 +954,7 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
         agents_now.append((agent, player, ego))
         print("[+] spawned cautious BehaviorAgent")
     else:
+        autoware_container = autoware_launch(exec_state, conf, town, sp)
         i = 0
         autoware_agent_found = False
         while True:
@@ -857,29 +962,26 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
             vehicles = world.get_actors().filter("*vehicle.*")
             for vehicle in vehicles:
                 if vehicle.attributes["role_name"] == "ego_vehicle":
-                    autoware_agent_found = True
-                    break
+                    if vehicle.get_location().distance(sp.location) < 1:
+                        player = vehicle
+                        autoware_agent_found = True
+                        break
             if autoware_agent_found:
                 break
             if i > 60:
-                print("\n something is wrong")
-                exit(-1)
+                print("\n Autoware agent launch fail")
+                raise TimeoutError
             i += 1
-            time.sleep(0.5)
-        vehicles = world.get_actors().filter("*vehicle.*")
-        for vehicle in vehicles:
-            if vehicle.attributes["role_name"] == "ego_vehicle":
-                player = vehicle
-                break
+            time.sleep(1)
         ego = Actor(actor_type=c.VEHICLE, spawn_point=sp, actor_id=-1)
         ego.set_instance(player)
-        loc = sp.location
-        rot = sp.rotation
-        cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
-        t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
-        t.daemon = True
-        t.start()
-        check_autoware_status(world, 60)
+        # loc = sp.location
+        # rot = sp.rotation
+        # cmd = f'bash -c "source /opt/ros/melodic/setup.bash && python /tmp/pub_initialpose.py {loc.x} {-1 * loc.y} {loc.z + 2} {0} {0} {-1 * rot.yaw / 180 * math.pi}"'
+        # t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
+        # t.daemon = True
+        # t.start()
+        # check_autoware_status(world, 60)
         # autoware_container.exec_run(cmd, stdout=True, stderr=True, user='root')
         # print(result.output)
         time.sleep(5)
@@ -887,53 +989,37 @@ def ego_initialize(agents_now, proc_state, blueprint_library, conf, player_bp, s
                                                   player.get_location()))
         timeout = 60
         try:
-            signal.alarm(timeout)
-            check_output(proc_state)
+            left = signal.alarm(timeout)
+            print("left time:", left)
+            check_vehicle(exec_state.proc_state)
         except TimeoutError:
             print("Vehicle did not Ready within timeout.")
             raise KeyboardInterrupt
         finally:
-            signal.alarm(0)
+            signal.alarm(left)
         world.tick()  # sync with simulator
         time.sleep(3)
-        x2 = 0
-        while True:
-            world.tick()  # spin until the player is moved to the sp
-            location_1 = player.get_location()
-            location_1.z = 0
-            location_2 = sp.location
-            location_2.z = 0
-            if location_1.distance(location_2) < 5:
-                break
-            else:
-                x1 = location_1.distance(location_2)
-                if x1 == x2:
-                    print(x1)
-                    raise RuntimeError
-                x2 = x1
-                time.sleep(1)
+        # x2 = 0
+        # while True:
+        #     world.tick()  # spin until the player is moved to the sp
+        #     location_1 = player.get_location()
+        #     location_1.z = 0
+        #     location_2 = sp.location
+        #     location_2.z = 0
+        #     if location_1.distance(location_2) < 5:
+        #         break
+        #     else:
+        #         x1 = location_1.distance(location_2)
+        #         if x1 == x2:
+        #             print(x1)
+        #             raise KeyboardInterrupt
+        #         x2 = x1
+        #         time.sleep(1)
     # Attach RGB camera (front)
     rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
     rgb_camera_bp.set_attribute("image_size_x", "800")
     rgb_camera_bp.set_attribute("image_size_y", "600")
     rgb_camera_bp.set_attribute("fov", "105")
-
-    # position relative to the parent actor (player)
-    # camera_tf = carla.Transform(carla.Location(z=1.8))
-
-    # time in seconds between sensor captures - should sync w/ fps?
-    # rgb_camera_bp.set_attribute("sensor_tick", "1.0")
-
-    # camera_front = world.spawn_actor(
-    #     rgb_camera_bp,
-    #     camera_tf,
-    #     attach_to=player,
-    #     attachment_type=carla.AttachmentType.Rigid
-    # )
-    #
-    # camera_front.listen(lambda image: _on_front_camera_capture(image, state))
-
-    # sensors.append(camera_front)
 
     camera_tf2 = carla.Transform(
         carla.Location(z=50.0),
@@ -1119,9 +1205,9 @@ def non_blocking_read(stdout):
     output_state = b""
     rlist, _, _ = select.select([stdout], [], [], 0.01)
     if stdout in rlist:
-        data = os.read(fd, 4096)  # ????????
+        data = os.read(fd, 4096)
         output_state = data
-    output_state = output_state.decode("utf-8")  # ??????????
+    output_state = output_state.decode("utf-8")
     return output_state
 
 
@@ -1220,10 +1306,9 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
         return True
 
 
-def check_output(proc):
+def check_vehicle(proc):
     while True:
         output_state = non_blocking_read(proc.stdout)
-        # print(output_state)
         if "VehicleReady" in output_state:
             break
         time.sleep(0.5)
