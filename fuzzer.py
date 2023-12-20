@@ -214,7 +214,7 @@ def mutate_weather_fixed(test_scenario):
 def set_args():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--debug", action="store_true", default=False)
-    argument_parser.add_argument("-o", "--out-dir", default="../data/output", type=str,
+    argument_parser.add_argument("-o", "--out-dir", default="./data/output", type=str,
                                  help="Directory to save fuzzing logs")
     argument_parser.add_argument("-m", "--max-mutations", default=5, type=int,
                                  help="Size of the mutated population per cycle")
@@ -224,7 +224,7 @@ def set_args():
                                  help="Hostname of Carla simulation server")
     argument_parser.add_argument("-p", "--sim-port", default=2000, type=int,
                                  help="RPC port of Carla simulation server")
-    argument_parser.add_argument("-s", "--seed-dir", default="../data/seed", type=str,
+    argument_parser.add_argument("-s", "--seed-dir", default="./data/seed", type=str,
                            help="Seed directory")
     argument_parser.add_argument("-t", "--target", default="behavior", type=str,
                                  help="Target autonomous driving system (behavior/Autoware)")
@@ -518,7 +518,7 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
-    logging.basicConfig(filename='../data/record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    logging.basicConfig(filename='./data/record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
     copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
     copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
     copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
