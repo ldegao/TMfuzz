@@ -1,9 +1,6 @@
-save/
-output/
-seed-artifact/
+data/
 .idea/
 __pycache__
 .vscode/
-run_carla.sh
-test.sh
-trace/
+carla-autoware
+carla

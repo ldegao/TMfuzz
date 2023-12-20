@@ -39,7 +39,6 @@ except ModuleNotFoundError as e:
 try:
     proj_root = config.get_proj_root()
     sys.path.append(os.path.join(proj_root, "carla", "PythonAPI", "carla"))
-    # pdb.set_trace()
 except IndexError:
     pass
 from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=import-error
@@ -236,7 +235,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         settings.synchronous_mode = False
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
-
+        if exec_state.proc_state:
+            exec_state.proc_state.terminate()
+            exec_state.proc_state.wait()
+            exec_state.proc_state.stdout.close()
+            exec_state.proc_state.stderr.close()
         try:
             autoware_container.kill()
         except docker.errors.APIError as e:
@@ -600,7 +603,6 @@ def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road
         # 3.Delete vehicles that stuck too long
         if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
             if actor.death_time < 0:
-                print("mark:", actor.actor_id)
                 mark_actor(actor, 1 * c.FRAME_RATE)
 
 
@@ -753,32 +755,32 @@ def check_and_remove_excess_images(pattern, max_frames):
 def save_video(carla_error, state):
     # # remove jpg files
     max_frames = c.FRAME_RATE * c.VIDEO_TIME
-    # if state.crashed and not state.laneinvaded:
-    #     print(f"Saving front camera video for last {c.VIDEO_TIME} second", end=" ")
-    #     check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
-    # else:
-    #     print(f"Saving the whole front camera video", end=" ")
-    # vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
-    # if os.path.exists(vid_filename):
-    #     os.remove(vid_filename)
-    # cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
-    # cmd_ffmpeg = " ".join([
-    #     "ffmpeg",
-    #     "-f image2pipe",
-    #     f"-r {c.FRAME_RATE}",
-    #     "-vcodec mjpeg",
-    #     "-i -",
-    #     "-vcodec libx264",
-    #     "-crf 5",
-    #     vid_filename
-    # ])
-    # cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-    # if not carla_error:
-    #     os.system(cmd)
-    # else:
-    #     print("error:dont save any video")
-    # cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
-    # os.system(cmd)
+    if state.crashed and not state.laneinvaded:
+        print(f"Saving front camera video for last {c.VIDEO_TIME} second", end=" ")
+        check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
+    else:
+        print(f"Saving the whole front camera video", end=" ")
+    vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
+    if os.path.exists(vid_filename):
+        os.remove(vid_filename)
+    cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
+    cmd_ffmpeg = " ".join([
+        "ffmpeg",
+        "-f image2pipe",
+        f"-r {c.FRAME_RATE}",
+        "-vcodec mjpeg",
+        "-i -",
+        "-vcodec libx264",
+        "-crf 5",
+        vid_filename
+    ])
+    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+    if not carla_error:
+        os.system(cmd)
+    else:
+        print("error:dont save any video")
+    cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
+    os.system(cmd)
     if state.crashed and not state.laneinvaded:
         print(f"Saving top camera video for last {c.VIDEO_TIME}", end=" ")
         check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/top-*.jpg", max_frames)
@@ -987,7 +989,7 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
         time.sleep(5)
         print("\n    [*] found [{}] at {}".format(player.id,
                                                   player.get_location()))
-        timeout = 60
+        timeout = 120
         try:
             left = signal.alarm(timeout)
             print("left time:", left)
@@ -1021,6 +1023,16 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
     rgb_camera_bp.set_attribute("image_size_y", "600")
     rgb_camera_bp.set_attribute("fov", "105")
 
+    camera_tf = carla.Transform(carla.Location(z=1.8))
+    camera_front = world.spawn_actor(
+        rgb_camera_bp,
+        camera_tf,
+        attach_to=player,
+        attachment_type=carla.AttachmentType.Rigid
+    )
+
+    camera_front.listen(lambda image: _on_front_camera_capture(image, state))
+    sensors.append(camera_front)
     camera_tf2 = carla.Transform(
         carla.Location(z=50.0),
         carla.Rotation(pitch=-90.0)
@@ -1151,9 +1163,9 @@ def spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, co
     actor.fresh = False
 
 
-# def _on_front_camera_capture(image, state):
-#     if not state.end:
-#         image.save_to_disk(f"/tmp/fuzzerdata/{username}/front-{image.frame:05d}.jpg")
+def _on_front_camera_capture(image, state):
+    if not state.end:
+        image.save_to_disk(f"/tmp/fuzzerdata/{username}/front-{image.frame:05d}.jpg")
 
 
 def _on_top_camera_capture(image, state):
@@ -1309,7 +1321,8 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
 def check_vehicle(proc):
     while True:
         output_state = non_blocking_read(proc.stdout)
+        print(output_state)
         if "VehicleReady" in output_state:
             break
-        time.sleep(0.5)
+        time.sleep(1)
         print("[*] Waiting for Autoware vehicle Ready" + "\r", end="")
