@@ -106,7 +106,8 @@ for scene_folder in scene_folders:
 
         # Now, we have the JSON file path (json_file_path) that corresponds to these videos
         for video_file in video_files:
-            source_video_path = os.path.join(camera_folder, video_file)
+            source_video_path_top = os.path.join(camera_folder, video_file)
+            source_video_path_front = source_video_path_top.replace("-top.mp4", "-front.mp4")
             destination_name = f"{scene_folder}-{video_file}"  # New video file name
 
             # Check if the corresponding JSON file has event information
@@ -119,11 +120,12 @@ for scene_folder in scene_folders:
                             event_folder = os.path.join('./save', event_type)
                             os.makedirs(event_folder, exist_ok=True)
                             destination = os.path.join(event_folder, destination_name)
-                            video_dur = video_duration(source_video_path)
+                            video_dur = video_duration(source_video_path_top)
                             if video_dur >= 1:
                                 # Copy the video file to the event folder
                                 # Comment out the following line to disable video copying
-                                shutil.copy2(source_video_path, destination)
+                                shutil.copy2(source_video_path_top, destination)
+                                shutil.copy2(source_video_path_front, destination.replace("-top.mp4", "-front.mp4"))
                                 video_durations[event_type].append(video_dur)
                             else:
                                 error_video_durations.append(video_dur)
@@ -132,11 +134,12 @@ for scene_folder in scene_folders:
                 # If no event information, classify the video as "correct"
                 os.makedirs(correct_folder, exist_ok=True)
                 destination = os.path.join(correct_folder, destination_name)
-                video_dur = video_duration(source_video_path)
+                video_dur = video_duration(source_video_path_top)
                 if video_dur >= 1:
                     # Copy the video file to the "correct" folder
                     # Comment out the following line to disable video copying
-                    shutil.copy2(source_video_path, destination)
+                    shutil.copy2(source_video_path_top, destination)
+                    shutil.copy2(source_video_path_front, destination.replace("-top.mp4", "-front.mp4"))
                     correct_video_durations.append(video_dur)
                 else:
                     error_video_durations.append(video_dur)
