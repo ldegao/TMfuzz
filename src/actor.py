@@ -5,10 +5,9 @@ import random
 import config
 import constants as c
 import math
-from shapely.geometry import Point, LineString, Polygon
+from shapely.geometry import Polygon
 
 from utils import _on_collision, _on_invasion
-from utils import get_carla_transform
 
 config.set_carla_api_path()
 import carla
