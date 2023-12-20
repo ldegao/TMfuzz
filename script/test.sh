@@ -16,9 +16,9 @@ for town in {3..3}; do
 		break
 	    fi
 	    if [ -n "$1" ]; then
-		cmd="./fuzzer.py  --sim-port 4000 -t $1 --density 0.4 --town $town"
+		cmd="../src/fuzzer.py  --sim-port 4000 -t $1 --density 0.8 --town $town"
 	    else
-		cmd="./fuzzer.py  --sim-port 4000 -t autoware --density 0.4 --town $town --no-traffic-light --debug"
+		cmd="../src/fuzzer.py  --sim-port 4000 -t autoware --density 0.8 --town $town --no-traffic-light"
 	    fi
 	    $cmd
 	    status=$(docker inspect -f '{{.State.Status}}' carla-$USER)

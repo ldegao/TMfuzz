@@ -203,13 +203,13 @@ class Scenario:
                     os.path.join(self.conf.queue_dir, log_filename),
                     os.path.join(self.conf.error_dir, log_filename)
                 )
-            # shutil.copyfile(
-            #     f"/tmp/fuzzerdata/{self.username}/front.mp4",
-            #     os.path.join(
-            #         self.conf.cam_dir,
-            #         log_filename.replace(".json", "-front.mp4")
-            #     )
-            # )
+            shutil.copyfile(
+                f"/tmp/fuzzerdata/{self.username}/front.mp4",
+                os.path.join(
+                    self.conf.cam_dir,
+                    log_filename.replace(".json", "-front.mp4")
+                )
+            )
 
             shutil.copyfile(
                 f"/tmp/fuzzerdata/{self.username}/top.mp4",
@@ -221,6 +221,7 @@ class Scenario:
             print("save video done")
         except FileNotFoundError:
             print("FileNotFoundError")
+            os._exit(0)
 
     def save_trace(self, trace_graph, log_filename):
         new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])

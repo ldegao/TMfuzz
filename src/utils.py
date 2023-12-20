@@ -17,6 +17,7 @@ import constants as c
 import config
 
 config.set_carla_api_path()
+
 try:
     import carla
 except ModuleNotFoundError as e:
@@ -45,7 +46,9 @@ def monitor_docker_container(image_name, check_interval=10):
             time.sleep(check_interval)
 
     monitoring_thread = threading.Thread(target=monitor)
+    monitoring_thread.daemon = True
     monitoring_thread.start()
+    return monitoring_thread
 
 
 def timeout_handler(signum, frame):

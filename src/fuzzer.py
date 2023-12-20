@@ -45,8 +45,8 @@ pca = cluster.create_pca()
 accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
-
-
+# monitor carla
+monitoring_thread = utils.monitor_docker_container('carlasim/carla:0.9.13')
 # vehicle_bp_library = blueprint_library.filter("vehicle.*")
 # vehicle_bp.set_attribute("color", "255,0,0")
 # walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
@@ -214,10 +214,8 @@ def mutate_weather_fixed(test_scenario):
 def set_args():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--debug", action="store_true", default=False)
-    argument_parser.add_argument("-o", "--out-dir", default="output", type=str,
+    argument_parser.add_argument("-o", "--out-dir", default="../data/output", type=str,
                                  help="Directory to save fuzzing logs")
-    argument_parser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
-                                 help="Seed directory")
     argument_parser.add_argument("-m", "--max-mutations", default=5, type=int,
                                  help="Size of the mutated population per cycle")
     argument_parser.add_argument("-d", "--determ-seed", type=float,
@@ -226,6 +224,8 @@ def set_args():
                                  help="Hostname of Carla simulation server")
     argument_parser.add_argument("-p", "--sim-port", default=2000, type=int,
                                  help="RPC port of Carla simulation server")
+    argument_parser.add_argument("-s", "--seed-dir", default="../data/seed", type=str,
+                           help="Seed directory")
     argument_parser.add_argument("-t", "--target", default="behavior", type=str,
                                  help="Target autonomous driving system (behavior/Autoware)")
     argument_parser.add_argument("-f", "--function", default="general", type=str,
@@ -518,85 +518,79 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
-    logging.basicConfig(filename='record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
-    with open("log.txt", "w") as log_file:
-        copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
-        copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
-        copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
-        copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
+    logging.basicConfig(filename='../data/record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
+    copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
+    copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
+    copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
 
-        conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
-        world = exec_state.world
-        blueprint_library = world.get_blueprint_library()
-        # if conf.agent_type == c.AUTOWARE:
-        #     autoware_launch(exec_state.world, conf, town)
-        population = []
-        # GA Hyperparameters
-        POP_SIZE = 5  # amount of population
-        OFF_SIZE = 5  # number of offspring to produce
-        MAX_GEN = 5  #
-        CXPB = 0.8  # crossover probability
-        MUTPB = 0.2  # mutation probability
-        toolbox = base.Toolbox()
-        toolbox.register("evaluate", evaluation)
-        toolbox.register("mate", cx_scenario)
-        toolbox.register("mutate", mut_scenario)
-        toolbox.register("select", tools.selNSGA2)
-        hof = tools.ParetoFront()
-        # Evaluate Initial Population
-        print(f' ====== Analyzing Initial Population ====== ')
-        log_file.write(f' ====== Analyzing Initial Population ====== ')
-        invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
+    world = exec_state.world
+    blueprint_library = world.get_blueprint_library()
+    # if conf.agent_type == c.AUTOWARE:
+    #     autoware_launch(exec_state.world, conf, town)
+    population = []
+    # GA Hyperparameters
+    POP_SIZE = 5  # amount of population
+    OFF_SIZE = 5  # number of offspring to produce
+    MAX_GEN = 5  #
+    CXPB = 0.8  # crossover probability
+    MUTPB = 0.2  # mutation probability
+    toolbox = base.Toolbox()
+    toolbox.register("evaluate", evaluation)
+    toolbox.register("mate", cx_scenario)
+    toolbox.register("mutate", mut_scenario)
+    toolbox.register("select", tools.selNSGA2)
+    hof = tools.ParetoFront()
+    # Evaluate Initial Population
+    print(f' ====== Analyzing Initial Population ====== ')
+    invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+    stats.register("avg", np.mean, axis=0)
+    stats.register("max", np.max, axis=0)
+    stats.register("min", np.min, axis=0)
+    logbook = tools.Logbook()
+    logbook.header = 'gen', 'avg', 'max', 'min'
+    # begin a generational process
+    curr_gen = 0
+    # init some seed if seed pool is empty
+    for i in range(POP_SIZE):
+        seed_dict = seed_initialize(town, town_map)
+        # Creates and initializes a Scenario instance based on the metadata
+        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
+            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
+            test_scenario = future.result(timeout=15)
+        population.append(test_scenario)
+        test_scenario.scenario_id = len(population)
+    while True:
+        # Main loop
+        curr_gen += 1
+        if curr_gen > MAX_GEN:
+            break
+        print(f' ====== GA Generation {curr_gen} ====== ')
+        # Vary the population
+        offspring = algorithms.varOr(
+            population, toolbox, OFF_SIZE, CXPB, MUTPB)
+        # update chromosome generation_id and scenario_id
+        for index, d in enumerate(offspring):
+            d.generation_id = curr_gen
+            d.scenario_id = index
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
-
-        stats = tools.Statistics(key=lambda ind: ind.fitness.values)
-        stats.register("avg", np.mean, axis=0)
-        stats.register("max", np.max, axis=0)
-        stats.register("min", np.min, axis=0)
-        logbook = tools.Logbook()
-        logbook.header = 'gen', 'avg', 'max', 'min'
-        # begin a generational process
-        curr_gen = 0
-        # init some seed if seed pool is empty
-        for i in range(POP_SIZE):
-            seed_dict = seed_initialize(town, town_map)
-            # Creates and initializes a Scenario instance based on the metadata
-            with concurrent.futures.ThreadPoolExecutor() as my_simulate:
-                future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-                test_scenario = future.result(timeout=15)
-            population.append(test_scenario)
-            test_scenario.scenario_id = len(population)
-        # monitor carla
-        utils.monitor_docker_container('carlasim/carla:0.9.13')
-        while True:
-            # Main loop
-            curr_gen += 1
-            if curr_gen > MAX_GEN:
-                break
-            print(f' ====== GA Generation {curr_gen} ====== ')
-            log_file.write(f' ====== GA Generation {curr_gen} ====== ')
-            # Vary the population
-            offspring = algorithms.varOr(
-                population, toolbox, OFF_SIZE, CXPB, MUTPB)
-            # update chromosome generation_id and scenario_id
-            for index, d in enumerate(offspring):
-                d.generation_id = curr_gen
-                d.scenario_id = index
-            # Evaluate the individuals with an invalid fitness
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
-            for ind, fit in zip(invalid_ind, fitnesses):
-                ind.fitness.values = fit
-            hof.update(offspring)
-            # Select the next generation population
-            population[:] = toolbox.select(population + offspring, POP_SIZE)
-            record = stats.compile(population)
-            logbook.record(gen=curr_gen, **record)
-            print(logbook.stream)
-            log_file.write(logbook.stream)
-            # Save directory for trace graphs
+        hof.update(offspring)
+        # Select the next generation population
+        population[:] = toolbox.select(population + offspring, POP_SIZE)
+        record = stats.compile(population)
+        logbook.record(gen=curr_gen, **record)
+        print(logbook.stream)
+        # Save directory for trace graphs
 
 
 if __name__ == "__main__":
