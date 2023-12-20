@@ -1321,7 +1321,6 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
 def check_vehicle(proc):
     while True:
         output_state = non_blocking_read(proc.stdout)
-        print(output_state)
         if "VehicleReady" in output_state:
             break
         time.sleep(1)
