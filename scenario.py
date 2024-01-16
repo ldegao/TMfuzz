@@ -46,12 +46,10 @@ class ScenarioFitness(deap.base.Fitness):
     Class to represent weight of each fitness function
     """
     # minimize the closest distance between a pair of ADC
-    weights = (-1.0, 1.0, -1.0)
+    # for test
+    weights = (-1.0, -1.0, -1.0)
     """
-    :note: minimize closest distance, maximize number of decisions,
-      maximize pairs having conflicting trajectory,
-      maximize unique violation. Refer to our paper for more
-      detailed explanation.
+    Todo: note: 
     """
 
 
@@ -96,7 +94,6 @@ class Scenario:
         }
         self.town = self.seed_data["map"]
         # utils.switch_map(conf, self.town, client)
-        # print("[+] test case initialized")
 
     def get_distance_from_player(self, location):
         sp = get_seed_sp_transform(self.seed_data)
@@ -143,7 +140,6 @@ class Scenario:
         self.reload_state()
         sp = get_seed_sp_transform(self.seed_data)
         wp = get_seed_wp_transform(self.seed_data)
-        # print(sp,wp)
         ret, self.actor_list, self.state = simulate(
             conf=self.conf,
             state=self.state,
@@ -198,26 +194,47 @@ class Scenario:
 
     def save_video(self, error, log_filename):
         try:
-            if error:
-                shutil.copyfile(
-                    os.path.join(self.conf.queue_dir, log_filename),
-                    os.path.join(self.conf.error_dir, log_filename)
-                )
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/front.mp4",
-                os.path.join(
-                    self.conf.cam_dir,
-                    log_filename.replace(".json", "-front.mp4")
-                )
-            )
+            if self.conf.agent_type == c.AUTOWARE:
+                if error:
+                    # print("copying bag & video files")
+                    shutil.copyfile(
+                        os.path.join(self.conf.queue_dir, log_filename),
+                        os.path.join(self.conf.error_dir, log_filename)
+                    )
+                    # shutil.copyfile(
+                    #     f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag",
+                    #     os.path.join(self.conf.rosbag_dir, log_filename.replace(".json", ".bag"))
+                    # )
 
-            shutil.copyfile(
-                f"/tmp/fuzzerdata/{self.username}/top.mp4",
-                os.path.join(
-                    self.conf.cam_dir,
-                    log_filename.replace(".json", "-top.mp4")
+                shutil.copyfile(
+                    f"/tmp/fuzzerdata/{c.USERNAME}/front.mp4",
+                    os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-front.mp4"))
                 )
-            )
+                shutil.copyfile(
+                    f"/tmp/fuzzerdata/{c.USERNAME}/top.mp4",
+                    os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-top.mp4"))
+                )
+            elif self.conf.agent_type == c.BEHAVIOR:
+                if error:
+                    shutil.copyfile(
+                        os.path.join(self.conf.queue_dir, log_filename),
+                        os.path.join(self.conf.error_dir, log_filename)
+                    )
+                shutil.copyfile(
+                    f"/tmp/fuzzerdata/{self.username}/front.mp4",
+                    os.path.join(
+                        self.conf.cam_dir,
+                        log_filename.replace(".json", "-front.mp4")
+                    )
+                )
+
+                shutil.copyfile(
+                    f"/tmp/fuzzerdata/{self.username}/top.mp4",
+                    os.path.join(
+                        self.conf.cam_dir,
+                        log_filename.replace(".json", "-top.mp4")
+                    )
+                )
             print("save video done")
         except FileNotFoundError:
             print("FileNotFoundError")

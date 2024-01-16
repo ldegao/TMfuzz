@@ -1,3 +1,6 @@
+import os
+
+
 def parse_line(line):
     """Parse each line and return a dictionary containing all relevant data"""
     parts = line.split(' - ')
@@ -14,6 +17,7 @@ def parse_line(line):
                 data['valid_frames'] = int(valid_frames)
                 data['num_frames'] = int(num_frames)
     return data
+
 
 def main(filename):
     total_rounds = 0
@@ -53,10 +57,11 @@ def main(filename):
         f"Overall Frame Ratio: {overall_frame_ratio}"
     ]
 
-    with open('result.log', 'w') as result_file:
+    with open('../data/result.log', 'w') as result_file:
         for line in results:
             print(line)
             result_file.write(line + '\n')
 
+
 if __name__ == "__main__":
-    main('record.log')
+    main('../data/record.log')

@@ -1,5 +1,7 @@
 """Define constants used across DriveFuzz modules."""
+import os
 
+USERNAME = os.environ['USER']
 # ERROR MESSAGES
 MSG_BAD_WEATHER_ARG = "Weather argument should be in range [0.0:100.0]."
 MSG_BAD_SUN_ARG = "Sun args require --angle [0:360], --altitude [-90:90]"
@@ -35,9 +37,9 @@ MAX_STEERING = 0.8
 # Static configurations
 MAX_DIST_FROM_PLAYER = 40
 MIN_DIST_FROM_PLAYER = 5
-FRAME_RATE = 20
+FRAME_RATE = 25
 INIT_SKIP_SECONDS = 2
-WAIT_AUTOWARE_NUM_NODES = 61
+WAIT_AUTOWARE_NUM_NODES = 64
 
 # Actors
 NULL = -1  # special type for traction testing

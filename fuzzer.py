@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import cProfile
 import logging
 import os
 import pdb
@@ -46,7 +47,7 @@ accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
 # monitor carla
-monitoring_thread = utils.monitor_docker_container('carlasim/carla:0.9.13')
+# monitoring_thread = utils.monitor_docker_container('carlasim/carla:0.9.13')
 # vehicle_bp_library = blueprint_library.filter("vehicle.*")
 # vehicle_bp.set_attribute("color", "255,0,0")
 # walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
@@ -285,7 +286,7 @@ def evaluation(ind: Scenario):
         # reload scenario state
         ind.state = states.ScenarioState()
         # profiler.disable()  #
-        # profiler.print_stats(sort="cumulative")
+        # profiler.dump_stats('profile_stats.prof')
         # pdb.set_trace()
     except Exception as e:
         if e == TimeoutError:
@@ -295,7 +296,6 @@ def evaluation(ind: Scenario):
             print("[-] run_test error:")
             traceback.print_exc()
             exit(0)
-    signal.alarm(0)
     if ret is None:
         pass
     elif ret == -1:
@@ -343,8 +343,6 @@ def mut_scenario(ind: Scenario):
     mut_pb = random.random()
     if mut_pb < 1:
         ind.actor_list = mut_actor_list(ind.actor_list)
-    # else:
-    #     ind.tc_section = mut_tc_section(ind.tc_section)
     return ind,
 
 
@@ -391,15 +389,9 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
 
 
 def cx_scenario(ind1: Scenario, ind2: Scenario):
-    cx_pb = random.random()
-    if cx_pb < 1:
-        ind1.actor_list, ind2.actor_list = cx_actor(
-            ind1.actor_list, ind2.actor_list
-        )
-    # else:
-    #     ind1.tc_section, ind2.tc_section = cx_tc_section(
-    #         ind1.tc_section, ind2.tc_section
-    #     )
+    ind1.actor_list, ind2.actor_list = cx_actor(
+        ind1.actor_list, ind2.actor_list
+    )
     return ind1, ind2
 
 
