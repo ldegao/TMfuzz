@@ -74,7 +74,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     carla_error = False
     state.min_dist = 99999
     player_loc = None
-
+    time_start = time.time()
     actors_now = []
     agents_now = []
     sensors = []
@@ -135,14 +135,26 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             s_started = False
             # actual monitoring of the driving simulation begins here
             print("START DRIVING: {} {}".format(first_frame_id, first_sim_time))
+            # mark goal position
+            if conf.debug:
+                world.debug.draw_box(
+                    box=carla.BoundingBox(
+                        goal_loc,
+                        carla.Vector3D(0.2, 0.2, 1.0)
+                    ),
+                    rotation=goal_rot,
+                    life_time=0,
+                    thickness=1.0,
+                    color=carla.Color(r=0, g=255, b=0)
+                )
             # simulate start here
             state.end = False
-
+            time_start = time.time()
             while True:
                 # world tick
                 if conf.agent_type == c.BEHAVIOR:
                     world.tick()
-                # Use sampling frequency of FPS for precision
+                # Use sampling frequency of FPS  for precision
                 clock.tick(c.FRAME_RATE)
                 # Get frame info
                 snapshot = world.get_snapshot()
@@ -164,9 +176,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 # Check destination
                 break_flag, retval, autoware_stuck, s_started = check_destination(actor_vehicles, actors_now,
                                                                                   agents_now, autoware_stuck, conf,
-                                                                                  goal_loc, player_loc,
+                                                                                  goal_loc, goal_rot, player_loc,
                                                                                   exec_state.proc_state, retval,
-                                                                                  s_started, sensors, speed, state)
+                                                                                  s_started, sensors, speed, state,
+                                                                                  world)
                 # record the min distance between every two actors
                 record_min_distance(actor_vehicles, player_loc, state)
                 # mark useless vehicles for any frame
@@ -201,7 +214,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 if break_flag:
                     break
                 if wait_until_end == 0:
-                    valid_frames = nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames,
+                    valid_frames = nearby_record(state, actor_vehicles, player, trace_dict, player_loc, town_map,
+                                                 valid_frames,
                                                  exec_state.G)
                     all_frame += 1
                     retval, wait_until_end = check_violation(conf, cur_frame_id, frame_speed_lim_changed, retval, speed,
@@ -231,15 +245,40 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         print("   (line #{0}) {1}".format(exc_tb.tb_lineno, exc_type))
         retval = -1
     finally:
+        signal.alarm(0)
         settings = world.get_settings()
         settings.synchronous_mode = False
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
+
+        all_time = time.time() - time_start
+        FPS = all_frame / all_time
+        valid_time = valid_frames / FPS
+        logging.info("crashed:%s", state.crashed)
+        logging.info("nearby_car:%s", len(nearby_dict))
+        logging.info("valid_time/time: %s/%s", valid_time, all_time)
+        logging.info("distance:%s", state.distance)
+        logging.info("FPS:%s", FPS)
+        state.end = True
+
         if exec_state.proc_state:
             exec_state.proc_state.terminate()
             exec_state.proc_state.wait()
             exec_state.proc_state.stdout.close()
             exec_state.proc_state.stderr.close()
+
+        # save video in output_dir
+        if conf.agent_type == c.BEHAVIOR:
+            save_behavior_video(carla_error, state)
+        elif conf.agent_type == c.AUTOWARE:
+            os.system("rosnode kill /recorder_video_front")
+            time.sleep(1)
+            os.system("rosnode kill /recorder_video_top")
+            time.sleep(1)
+            # os.system("rosnode kill /recorder_bag")
+            # while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
+            #     print("waiting for rosbag to dump data")
+            #     time.sleep(1)
         try:
             autoware_container.kill()
         except docker.errors.APIError as e:
@@ -250,23 +289,12 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             print("[-] Autoware container was not killed for an unknown reason")
             print("    Trying manually")
             os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
-        # Don't reload and exit if user requests so
-        if retval == 128:
-            print("[debug] exit by user requests")
-            return retval, actor_list, state
         # Finalize simulation
         if not is_carla_running():
             retval = -1
         if retval == -1:
             print("[debug] exit because of Runtime error")
             return retval, actor_list, state
-        logging.info("crashed:%s", state.crashed)
-        logging.info("nearby_car:%s", len(nearby_dict))
-        logging.info("valid_frames/num_frames: %s/%s", valid_frames, all_frame)
-        logging.info("distance:%s", state.distance)
-        state.end = True
-        # save video in output_dir
-        save_video(carla_error, state)
         # remove ego
         # if conf.agent_type == c.BEHAVIOR:
         #     delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
@@ -283,6 +311,9 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         for actor in actor_list:
             actor.fresh = True
         client.reload_world()
+        if retval == 128:
+            print("[debug] exit by user requests")
+            return retval, actor_list, state
         return retval, actor_list, state
 
 
@@ -319,7 +350,12 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
         if trace_dict.keys().__contains__(state.collision_to):
             trace_graph_important.append(trace_dict[state.collision_to])
     else:
-        trace_graph_important.append(trace_dict[state.closest_car.id])
+        # todo:better
+        # if state.closest_car:
+        #     trace_graph_important.append(trace_dict[state.closest_car])
+        for trace in trace_dict:
+            trace_graph_important.append(trace_dict[trace])
+            break
 
     # Do not change the speed
     ego_start_loc = (trace_graph_important[0][0][0], trace_graph_important[0][0][1], 0)
@@ -340,7 +376,7 @@ def normalize_points(points, start_point):
         points[i] = points[i] - origin_point
 
 
-def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
+def nearby_record(state, actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
     vel = player.get_velocity()
     speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
     player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
@@ -360,7 +396,7 @@ def nearby_record(actor_vehicles, player, trace_dict, player_loc, town_map, vali
             trace_dict[actor_vehicle.id].append(
                 (actor_vehicle.get_location().x, actor_vehicle.get_location().y, actor_vehicle_speed))
             has_nearby = True
-    if has_nearby:
+    if has_nearby and state.stuck_duration < 15 * c.FRAME_RATE:
         valid_frames += 1
     return valid_frames
 
@@ -415,17 +451,6 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
     else:
         add_flag = state.num_frames % add_car_frame == add_car_frame - 1
     if add_flag:
-        # mark goal position
-        world.debug.draw_box(
-            box=carla.BoundingBox(
-                goal_loc,
-                carla.Vector3D(0.2, 0.2, 1.0)
-            ),
-            rotation=goal_rot,
-            life_time=2,
-            thickness=1.0,
-            color=carla.Color(r=0, g=255, b=0)
-        )
         # try to spawn a test linear car to see if the simulation is still running
         # a choose actor from actor_list first
         # delete backgound car which is too far
@@ -657,10 +682,11 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
     return frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel
 
 
-def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, conf, goal_loc, player_loc,
-                      proc_state, retval, s_started, sensors, speed, state):
+def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, conf, goal_loc, goal_rot, player_loc,
+                      proc_state, retval, s_started, sensors, speed, state, world):
     dist_to_goal = player_loc.distance(goal_loc)
     break_flag = False
+    # mark goal position
     if conf.agent_type == c.AUTOWARE:
         # # Check Autoware-defined destination
         # VehicleReady\nDriving\nMoving\nLaneArea\nCruise\nStraight\nDrive\nGo\n
@@ -680,18 +706,15 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
                 s_started = True
                 autoware_stuck = 0
             elif "WaitDriveReady" in output_state and s_started:
-                # os.system(pub_cmd)
-                # print("[carla] Goal republished")
                 autoware_stuck += 1
-                if autoware_stuck == 24:
-                    print("\n[*] (Autoware) Reached the destination")
-                    print("      dist to goal:", dist_to_goal)
-                    if dist_to_goal > 2 and state.num_frames > 300:
+                if autoware_stuck >= 300 and speed < 3.6:
+                    if dist_to_goal > 2:
+                        print("\n[*] (Autoware) don't Reached the destination")
+                        print("      dist to goal:", dist_to_goal)
                         state.other_error = "goal"
                         state.other_error_val = dist_to_goal
                         retval = 1
-                    retval = 0
-                    break_flag = True
+                        break_flag = True
     elif conf.agent_type == c.BEHAVIOR:
         delete_indices = []
         for i in range(len(agents_now)):
@@ -752,7 +775,7 @@ def check_and_remove_excess_images(pattern, max_frames):
         os.remove(images.pop(0))
 
 
-def save_video(carla_error, state):
+def save_behavior_video(carla_error, state):
     # # remove jpg files
     max_frames = c.FRAME_RATE * c.VIDEO_TIME
     if state.crashed and not state.laneinvaded:
@@ -820,6 +843,8 @@ def autoware_goal_publish(goal_loc, goal_rot, state, world):
     goal_hdr = "header: {stamp: now, frame_id: \'map\'}"
     goal_pose = "pose: {position: {x: %.6f, y: %.6f, z: 0}, orientation: {x: %.6f, y: %.6f, z: %.6f, w: %.6f}}" % (
         goal_loc.x, (-1) * float(goal_loc.y), goal_ox, goal_oy, goal_oz, goal_ow)
+    # goal_pose = "pose: {position: {x: %.6f, y: %.6f, z: 0}, orientation: {x: %.6f, y: %.6f, z: %.6f, w: %.6f}}" % (
+    #     goal_loc.x, float(goal_loc.y), goal_ox, goal_oy, goal_oz, goal_ow)
     goal_msg = "'{" + goal_hdr + ", " + goal_pose + "}'"
     pub_cmd = "rostopic pub --once {} {} {} > /dev/null".format(pub_topic, msg_type, goal_msg)
     os.system(pub_cmd)
@@ -863,6 +888,8 @@ def autoware_launch(exec_state, conf, town_map, sp):
     rot = sp.rotation
     sp_str = "{},{},{},{},{},{}".format(loc.x, -1 * loc.y, loc.z, 0,
                                         0, -1 * rot.yaw)
+    # sp_str = "{},{},{},{},{},{}".format(loc.x, loc.y, loc.z, rot.roll,
+    #                                     rot.pitch, rot.yaw * -1)
     autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
     print(autoware_cla)
     temp_player = None
@@ -870,7 +897,7 @@ def autoware_launch(exec_state, conf, town_map, sp):
     while autoware_container is None:
         try:
             autoware_container = docker_client.containers.run(
-                "carla-autoware:improved",
+                "carla-autoware:improved-record",
                 command=autoware_cla,
                 detach=True,
                 auto_remove=True,
@@ -880,7 +907,7 @@ def autoware_launch(exec_state, conf, town_map, sp):
                 network_mode="host",
                 # runtime="nvidia",
                 device_requests=[
-                    docker.types.DeviceRequest(device_ids=["0"], capabilities=[['gpu']])],
+                    docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
                 environment=env_dict,
                 stdout=True,
                 stderr=True
@@ -911,7 +938,7 @@ def autoware_launch(exec_state, conf, town_map, sp):
     exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
                                   shell=True, stdout=PIPE, stderr=PIPE)
     # wait for autoware bridge to spawn player vehicle
-    check_autoware_status(world, 60)
+    check_autoware_status(world, 120)
 
     # set_camera(conf, player, spectator)
     # Wait for Autoware (esp, for Town04)
@@ -1018,34 +1045,34 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
         #         x2 = x1
         #         time.sleep(1)
     # Attach RGB camera (front)
-    rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
-    rgb_camera_bp.set_attribute("image_size_x", "800")
-    rgb_camera_bp.set_attribute("image_size_y", "600")
-    rgb_camera_bp.set_attribute("fov", "105")
-
-    camera_tf = carla.Transform(carla.Location(z=1.8))
-    camera_front = world.spawn_actor(
-        rgb_camera_bp,
-        camera_tf,
-        attach_to=player,
-        attachment_type=carla.AttachmentType.Rigid
-    )
-
-    camera_front.listen(lambda image: _on_front_camera_capture(image, state))
-    sensors.append(camera_front)
-    camera_tf2 = carla.Transform(
-        carla.Location(z=50.0),
-        carla.Rotation(pitch=-90.0)
-    )
-    camera_top = world.spawn_actor(
-        rgb_camera_bp,
-        camera_tf2,
-        attach_to=player,
-        attachment_type=carla.AttachmentType.Rigid
-    )
-
-    camera_top.listen(lambda image: _on_top_camera_capture(image, state))
-    sensors.append(camera_top)
+    # rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
+    # rgb_camera_bp.set_attribute("image_size_x", "800")
+    # rgb_camera_bp.set_attribute("image_size_y", "600")
+    # rgb_camera_bp.set_attribute("fov", "105")
+    #
+    # camera_tf = carla.Transform(carla.Location(z=1.8))
+    # camera_front = world.spawn_actor(
+    #     rgb_camera_bp,
+    #     camera_tf,
+    #     attach_to=player,
+    #     attachment_type=carla.AttachmentType.Rigid
+    # )
+    #
+    # camera_front.listen(lambda image: _on_front_camera_capture(image, state))
+    # sensors.append(camera_front)
+    # camera_tf2 = carla.Transform(
+    #     carla.Location(z=50.0),
+    #     carla.Rotation(pitch=-90.0)
+    # )
+    # camera_top = world.spawn_actor(
+    #     rgb_camera_bp,
+    #     camera_tf2,
+    #     attach_to=player,
+    #     attachment_type=carla.AttachmentType.Rigid
+    # )
+    #
+    # camera_top.listen(lambda image: _on_top_camera_capture(image, state))
+    # sensors.append(camera_top)
 
     ego.attach_collision(world, sensors, state)
     if conf.check_dict["lane"]:
@@ -1123,7 +1150,10 @@ def simulate_initialize(client, conf, weather_dict, world):
     world.apply_settings(settings)
     frame_id = world.tick()
     clock = pygame.time.Clock()
-    add_car_frame = c.FRAME_RATE // conf.density
+    if conf.density != 0:
+        add_car_frame = c.FRAME_RATE // conf.density
+    else:
+        add_car_frame = 9999999
     # set weather
     weather = world.get_weather()
     weather.cloudiness = weather_dict["cloud"]
