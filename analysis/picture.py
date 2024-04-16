@@ -88,14 +88,14 @@ for log_file, color, custom_legend_name in zip(log_files, custom_colors, custom_
         distance_totals.append(distance_total)
     if num_frames_total > 0:
         ratio = valid_frames_total / num_frames_total
-        print(f"{custom_legend_name} - TET-COV/Simulate Time ratio: {ratio:.4f}")
+        print(f"{custom_legend_name} - TET/Simulate Time ratio: {ratio:.4f}")
     else:
-        print(f"{custom_legend_name} - TET-COV/Simulate Time ratio: Undefined (Simulate Time is 0)")
+        print(f"{custom_legend_name} - TET/Simulate Time ratio: Undefined (Simulate Time is 0)")
     # Convert lists to a DataFrame for easier plotting
     df = pd.DataFrame({
         'Timestamp': timestamps,
         'Crashed': crashed_counts,
-        'TET-COV(h)': valid_frames_totals,
+        'TET(h)': valid_frames_totals,
         'Simulate(h)': num_frames_totals,
         'Distance(km)': distance_totals
     })
@@ -111,7 +111,7 @@ for log_file, color, custom_legend_name in zip(log_files, custom_colors, custom_
     # Mapping of plot titles to their respective data
     plot_data = {
         'Crashed Count Over Time': ('Hours', 'Crashed'),
-        'TET-COV Over Time': ('Hours', 'TET-COV(h)'),
+        'TET Over Time': ('Hours', 'TET(h)'),
         'Distance Over Time': ('Hours', 'Distance(km)'),
         'Simulate Time Over Time': ('Hours', 'Simulate(h)')
     }
@@ -139,4 +139,5 @@ fig.legend(legend_labels, loc='lower center', ncol=len(legend_labels))
 
 # Adjust layout and show only the desired plots
 plt.tight_layout(rect=[0, 0.1, 1, 0.95])
-plt.show()
+plt.savefig('plot.svg', dpi=300)
+# plt.show()

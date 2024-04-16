@@ -7,6 +7,7 @@ import os
 import pdb
 import random
 import select
+import shutil
 import sys
 import threading
 import signal
@@ -773,6 +774,22 @@ def check_and_remove_excess_images(pattern, max_frames):
     images = sorted(glob.glob(pattern))
     while len(images) > max_frames:
         os.remove(images.pop(0))
+
+
+def save_jpg_for_gpt(interval):
+    # save the last 15 s frame
+    src_dir = f"/tmp/fuzzerdata/{username}/front-*.jpg"
+    dest_dir = "data/output/gpt"
+    os.makedirs(dest_dir, exist_ok=True)
+    max_frames = c.FRAME_RATE * c.VIDEO_TIME
+    check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
+    files = sorted(glob.glob(src_dir))
+    for i, file in enumerate(files):
+        if i % interval == 0:
+            dest_file = os.path.join(dest_dir, f"top_{i // interval}.jpg")
+            shutil.copy(file, dest_file)
+            print(f"Copied {file} to {dest_file}")
+    print("done")
 
 
 def save_behavior_video(carla_error, state):
