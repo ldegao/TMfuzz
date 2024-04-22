@@ -88,11 +88,21 @@ def shift_scale_points_group(points_group, img_size):
         max_x = max(max_x, np.max(points[:, 0]))
         max_y = max(max_y, np.max(points[:, 1]))
 
+
     # Calculate scaling factors
     scale_x = img_size[0] / (max_x - min_x)
     scale_y = img_size[1] / (max_y - min_y)
     scale = min(scale_x, scale_y) * 0.8  # Scale down slightly to fit within the image
 
+    if (max_x - min_x) == 0:
+        scale_x = 1
+    else:
+        scale_x = img_size[0] / (max_x - min_x)
+
+    if (max_y - min_y) == 0:
+        scale_y = 1
+    else:
+        scale_y = img_size[1] / (max_y - min_y)
     # Calculate translation distances
     shift_x = (img_size[0] - (max_x - min_x) * scale) / 2
     shift_y = (img_size[1] - (max_y - min_y) * scale) / 2
@@ -135,9 +145,9 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         y = [shift_float(p[1], 255) for p in trace]
         weights = [p[2] for p in trace]
         x, y, weights = remove_duplicate_adjacent_points(x, y, weights)
-        x, y, weights = uniform_sampling_with_weights(x, y, weights)
-        # x = normalize_points(x, x[0])
-        # y = normalize_points(y, y[0])
+        # x, y, weights = uniform_sampling_with_weights(x, y, weights)
+        x = normalize_points(x, x[0])
+        y = normalize_points(y, y[0])
         try:
             tck, u = splprep([x, y], s=0)
         except ValueError:

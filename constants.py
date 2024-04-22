@@ -9,11 +9,11 @@ MSG_EMPTY_FRICTION_ARG = "--friction should be followed by level, size " \
                          "and location coordinate."
 MSG_BAD_FRICTION_ARG = "Number of friction args has to be 7."
 MSG_BAD_FRICTION_LEVEL = "Friction level should be in range [0.0-1.0]."
-MSG_EMPTY_ACTOR_ARG = "--actor should be followed by actor_type, and " \
+MSG_EMPTY_ACTOR_ARG = "--npc should be followed by npc_type, and " \
                       "corresponding values."
-MSG_BAD_ACTOR_TYPE = "--actor expects 0, 1, or 2 as actor_type."
+MSG_BAD_ACTOR_TYPE = "--npc expects 0, 1, or 2 as npc_type."
 MSG_BAD_ACTOR_ATTR = "Vehicle or walker requires 12 args: " \
-                     "actor_type, nav_type, sp_x, sp_y, sp_z, " \
+                     "npc_type, nav_type, sp_x, sp_y, sp_z, " \
                      "sp_pitch, sp_yaw, sp_roll, dp_x, dp_y, dp_z, " \
                      "speed."
 MSG_BAD_SPAWN_ARG = "--spawn expects six args: x, y, z, pitch, yaw, roll"
@@ -48,7 +48,7 @@ PEDESTRIAN = 1
 ACTOR_LIST = [VEHICLE, PEDESTRIAN]
 ACTOR_NAMES = ["vehicle", "walker"]
 
-# Actor Navigation Type
+# NPC Navigation Type
 BEHAVIOR_AGENT = 1
 IMMOBILE = 2
 STOP = 3
@@ -56,7 +56,7 @@ EGO = 4
 NAVTYPE_LIST = [BEHAVIOR_AGENT, IMMOBILE, STOP]
 NAVTYPE_NAMES = [ "behavior_agent", "immobile", "stop"]
 
-# Actor Attributes
+# NPC Attributes
 VEHICLE_MAX_SPEED = 30  # multiplied with forward vector
 WALKER_MAX_SPEED = 10  # m/s
 VIDEO_TIME = 15
