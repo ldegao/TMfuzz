@@ -24,7 +24,7 @@ import networkx as nx
 from shapely.geometry import LineString
 import config
 import constants as c
-from actor import Actor
+from npc import NPC
 from scenario import Scenario
 import states
 import utils
@@ -46,6 +46,8 @@ pca = cluster.create_pca()
 accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
+
+
 # monitor carla
 # monitoring_thread = utils.monitor_docker_container('carlasim/carla:0.9.13')
 # vehicle_bp_library = blueprint_library.filter("vehicle.*")
@@ -226,7 +228,7 @@ def set_args():
     argument_parser.add_argument("-p", "--sim-port", default=2000, type=int,
                                  help="RPC port of Carla simulation server")
     argument_parser.add_argument("-s", "--seed-dir", default="./data/seed", type=str,
-                           help="Seed directory")
+                                 help="Seed directory")
     argument_parser.add_argument("-t", "--target", default="behavior", type=str,
                                  help="Target autonomous driving system (behavior/Autoware)")
     argument_parser.add_argument("-f", "--function", default="general", type=str,
@@ -316,7 +318,7 @@ def evaluation(ind: Scenario):
 # MUTATION OPERATOR
 
 
-def mut_actor_list(ind: List[Actor]):
+def mut_npc_list(ind: List[NPC]):
     if len(ind) <= 1:
         return ind
     mut_pb = random.random()
@@ -327,13 +329,13 @@ def mut_actor_list(ind: List[Actor]):
         return ind
     # add a random 1
     if mut_pb < 0.4:
-        template_actor = ind[random_index]
-        new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+        template_npc = ind[random_index]
+        new_ad = NPC.get_npc_by_one(template_npc, town_map, len(ind) - 1)
         ind.append(new_ad)
         return ind
     # mutate a random agent
-    template_actor = ind[random_index]
-    new_ad = Actor.get_actor_by_one(template_actor, town_map, len(ind) - 1)
+    template_npc = ind[random_index]
+    new_ad = NPC.get_npc_by_one(template_npc, town_map, len(ind) - 1)
     ind.append(new_ad)
     ind.pop(random_index)
     return ind
@@ -342,13 +344,13 @@ def mut_actor_list(ind: List[Actor]):
 def mut_scenario(ind: Scenario):
     mut_pb = random.random()
     if mut_pb < 1:
-        ind.actor_list = mut_actor_list(ind.actor_list)
+        ind.npc_list = mut_npc_list(ind.npc_list)
     return ind,
 
 
 # CROSSOVER OPERATOR
 
-def cx_actor(ind1: List[Actor], ind2: List[Actor]):
+def cx_npc(ind1: List[NPC], ind2: List[NPC]):
     # todo: swap entire ad section
     cx_pb = random.random()
     if cx_pb < 0.05:
@@ -356,7 +358,7 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
 
     for adc1 in ind1:
         for adc2 in ind2:
-            Actor.actor_cross(adc1, adc2)
+            NPC.npc_cross(adc1, adc2)
 
     # # if len(ind1.adcs) < MAX_ADC_COUNT:
     # #     for adc in ind2.adcs:
@@ -389,13 +391,10 @@ def cx_actor(ind1: List[Actor], ind2: List[Actor]):
 
 
 def cx_scenario(ind1: Scenario, ind2: Scenario):
-    ind1.actor_list, ind2.actor_list = cx_actor(
-        ind1.actor_list, ind2.actor_list
+    ind1.npc_list, ind2.npc_list = cx_npc(
+        ind1.npc_list, ind2.npc_list
     )
     return ind1, ind2
-
-
-
 
 
 def seed_initialize(town, town_map):
@@ -510,7 +509,8 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
-    logging.basicConfig(filename='./data/record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    logging.basicConfig(filename='./data/record.log', filemode='a', level=logging.INFO,
+                        format='%(asctime)s - %(message)s')
     copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
     copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
     copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
