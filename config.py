@@ -60,7 +60,7 @@ class Config:
 
         # Fuzzer config
         self.topo_k = 2
-        self.immobile_percentage = 0  # the percentage of the actors is immobile forever
+        self.immobile_percentage = 0  # the percentage of the npcs is immobile forever
         self.max_cycles = 0
         self.max_mutation = 0
         self.num_dry_runs = 1

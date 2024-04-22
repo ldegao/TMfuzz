@@ -1,3 +1,4 @@
+import math
 import os
 import pdb
 
@@ -89,8 +90,16 @@ def shift_scale_points_group(points_group, img_size):
         max_y = max(max_y, np.max(points[:, 1]))
 
     # Calculate scaling factors
-    scale_x = img_size[0] / (max_x - min_x)
-    scale_y = img_size[1] / (max_y - min_y)
+    if (max_x - min_x) == 0:
+        scale_x = 1
+    else:
+        scale_x = img_size[0] / (max_x - min_x)
+
+    if (max_y - min_y) == 0:
+        scale_y = 1
+    else:
+        scale_y = img_size[1] / (max_y - min_y)
+
     scale = min(scale_x, scale_y) * 0.8  # Scale down slightly to fit within the image
 
     # Calculate translation distances
@@ -107,21 +116,42 @@ def shift_scale_points_group(points_group, img_size):
     return scaled_and_shifted_groups
 
 
+def distance(p1, p2):
+    return math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
+
+
+
+
+
 # Image Drawing
 def draw_picture(trace, img_size=(1024, 1024), color=(255, 255, 255), base_image=None):
+    # True draw_picture
+    arrow_length = 10
     if base_image is None:
         img = np.full((img_size[0], img_size[1], 3), 255, dtype=np.uint8)
     else:
         img = base_image
     curve_points = [np.array(point)[:2] for point in trace]
-    # curve_points = shift_scale_points(np.array(curve_points), img_size)
-    for j in range(len(curve_points) - 1):
+    last_point = curve_points[-1]
+    arrow_start_point = curve_points[0]
+    for point in curve_points:
+        if distance(point, last_point) >= arrow_length:
+            arrow_start_point = point
+    if np.array_equal(last_point, arrow_start_point):
+        # stuck, do not record trace
+        return img
+    direction_vector = np.subtract(last_point, arrow_start_point)
+    direction_vector = direction_vector / np.linalg.norm(direction_vector)
+    short_start_point = np.add(last_point, -direction_vector * arrow_length).astype(int)
+
+    if len(curve_points) >= 2:
+        cv2.polylines(img, [np.array(curve_points)], isClosed=False, color=color, thickness=2)
         cv2.arrowedLine(img,
-                        tuple(curve_points[j]),
-                        tuple(curve_points[j + 1]),
+                        tuple(short_start_point),
+                        tuple(last_point),
                         color=color,
                         thickness=2,
-                        tipLength=0.1)
+                        tipLength=1)
     return img
 
 
@@ -133,11 +163,12 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
     if len(trace) > 4:
         x = [shift_float(p[0], 256) for p in trace]
         y = [shift_float(p[1], 255) for p in trace]
+
         weights = [p[2] for p in trace]
         x, y, weights = remove_duplicate_adjacent_points(x, y, weights)
         x, y, weights = uniform_sampling_with_weights(x, y, weights)
-        # x = normalize_points(x, x[0])
-        # y = normalize_points(y, y[0])
+        x = normalize_points(x, x[0])
+        y = normalize_points(y, y[0])
         try:
             tck, u = splprep([x, y], s=0)
         except ValueError:
@@ -269,6 +300,7 @@ def calculate_distance(model, pca, accumulated_trace_graphs):
 
 
 def draw_and_save_traces(accumulated_trace_graphs, save_dir):
+    # test draw picture
     for i, trace_graph in enumerate(accumulated_trace_graphs):
         new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])
         trace_graph_points = shift_scale_points_group(np.array(new_trace_graph), (1024, 1024))
