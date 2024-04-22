@@ -20,11 +20,11 @@ import docker
 import networkx as nx
 import numpy as np
 import pygame
-from actor import Actor
+from npc import NPC
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, delete_actor, check_autoware_status, mark_actor, timeout_handler
+    set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler
 
 config.set_carla_api_path()
 try:
@@ -48,20 +48,20 @@ username = os.getenv("USER")
 docker_client = docker.from_env()
 
 
-def record_min_distance(actor_vehicles, player_loc, state):
+def record_min_distance(npc_vehicles, player_loc, state):
     min_dist = state.min_dist
     closest_car = None
-    for actor_vehicle in actor_vehicles:
-        distance = actor_vehicle.get_location().distance(player_loc)
+    for npc_vehicle in npc_vehicles:
+        distance = npc_vehicle.get_location().distance(player_loc)
         if distance < min_dist:
             min_dist = distance
-            closest_car = actor_vehicle
+            closest_car = npc_vehicle
     if min_dist < state.min_dist:
         state.min_dist = min_dist
         state.closest_car = closest_car
 
 
-def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
+def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     # simulate() is always called by Scenario instance,
     # so we won't need to switch a map unless a new instance is created.
     # switch_map(conf, client, town)
@@ -76,11 +76,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
     state.min_dist = 99999
     player_loc = None
     time_start = time.time()
-    actors_now = []
+    npc_now = []
     agents_now = []
     sensors = []
-    actor_vehicles = []
-    actor_walkers = []
+    npc_vehicles = []
+    npc_walkers = []
     trace_graph = []
     trace_graph_important = []
     nearby_dict = []
@@ -171,28 +171,28 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                 frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel = get_player_info(
                     cur_frame_id, goal_loc, player, sp, state, town_map, conf)
 
-                # drive-fuzz's thing, not sure if we need it yaw = sp.rotation.yaw calculate_control(actor_vehicles,
-                # actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw)
+                # drive-fuzz's thing, not sure if we need it yaw = sp.rotation.yaw calculate_control(npc_vehicles,
+                # npc_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw)
 
                 # Check destination
-                break_flag, retval, autoware_stuck, s_started = check_destination(actor_vehicles, actors_now,
+                break_flag, retval, autoware_stuck, s_started = check_destination(npc_vehicles, npc_now,
                                                                                   agents_now, autoware_stuck, conf,
                                                                                   goal_loc, goal_rot, player_loc,
                                                                                   exec_state.proc_state, retval,
                                                                                   s_started, sensors, speed, state,
                                                                                   world)
-                # record the min distance between every two actors
-                record_min_distance(actor_vehicles, player_loc, state)
+                # record the min distance between every two npcs
+                record_min_distance(npc_vehicles, player_loc, state)
                 # mark useless vehicles for any frame
-                mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road_id, exec_state.G, town_map)
+                mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, exec_state.G, town_map)
 
                 # add old vehicles for any frame
-                found_frame = add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf,
+                found_frame = add_old_npc(npc_list, npc_vehicles, npc_now, agents_now, conf,
                                           found_frame, max_wheels_for_non_motorized, player_loc,
                                           sensors, state, vel, world, wp)
-                # add a new actor per 1s here
+                # add a new npc per 1s here
                 # because of autoware's strange frame, we should use a interesting method
-                found_frame, autoware_last_frames, frame_gap = add_new_car(actor_list, actor_vehicles, actors_now,
+                found_frame, autoware_last_frames, frame_gap = add_new_car(npc_list, npc_vehicles, npc_now,
                                                                            add_car_frame,
                                                                            agents_now,
                                                                            autoware_last_frames, conf, ego, found_frame,
@@ -202,20 +202,20 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
-                control_actor(agents_now, speed_limit)
+                control_npc(agents_now, speed_limit)
                 # delete vehicles which life is end
-                for actor in actor_list:
-                    if actor.instance is not None:
-                        if actor.death_time == 0:
-                            delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
-                        elif actor.death_time > 0:
-                            actor.death_time -= 1
+                for npc in npc_list:
+                    if npc.instance is not None:
+                        if npc.death_time == 0:
+                            delete_npc(npc, npc_vehicles, sensors, agents_now, npc_now)
+                        elif npc.death_time > 0:
+                            npc.death_time -= 1
 
-                # record track of every actor_vehicle
+                # record track of every npc_vehicle
                 if break_flag:
                     break
                 if wait_until_end == 0:
-                    valid_frames = nearby_record(state, actor_vehicles, player, trace_dict, player_loc, town_map,
+                    valid_frames = nearby_record(state, npc_vehicles, player, trace_dict, player_loc, town_map,
                                                  valid_frames,
                                                  exec_state.G)
                     all_frame += 1
@@ -225,8 +225,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
                     wait_until_end += 1
                 if wait_until_end > 6:
                     break
-            # find the biggest weight of actor-list
-            nearby_dict, trace_graph_important = record_trace(actor_vehicles, exec_state, player, player_loc, state,
+            # find the biggest weight of npc-list
+            nearby_dict, trace_graph_important = record_trace(npc_vehicles, exec_state, player, player_loc, state,
                                                               town_map, trace_dict,
                                                               trace_graph, trace_graph_important)
             state.trace_graph_important = trace_graph_important
@@ -272,6 +272,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
         if conf.agent_type == c.BEHAVIOR:
             save_behavior_video(carla_error, state)
         elif conf.agent_type == c.AUTOWARE:
+            save_behavior_video(carla_error, state)
             os.system("rosnode kill /recorder_video_front")
             time.sleep(1)
             os.system("rosnode kill /recorder_video_top")
@@ -295,30 +296,30 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, actor_list):
             retval = -1
         if retval == -1:
             print("[debug] exit because of Runtime error")
-            return retval, actor_list, state
+            return retval, npc_list, state
         # remove ego
         # if conf.agent_type == c.BEHAVIOR:
-        #     delete_actor(ego, actor_vehicles, sensors, agents_now, actors_now)
-        # remove actors and sensors to reload the world
-        # if not world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+        #     delete_npc(ego, npc_vehicles, sensors, agents_now, npc_now)
+        # remove npcs and sensors to reload the world
+        # if not world_reload(npc_list, npc_vehicles, npc_walkers, npc_now, sensors, world):
         #     retval = 128
         #     if conf.debug:
         #         print("[debug] world reload fail")
-        #     return retval, actor_list, state
+        #     return retval, npc_list, state
         if conf.debug:
             print("[debug] reload")
-        for actor in actors_now:
-            actor.instance = None
-        for actor in actor_list:
-            actor.fresh = True
+        for npc in npc_now:
+            npc.instance = None
+        for npc in npc_list:
+            npc.fresh = True
         client.reload_world()
         if retval == 128:
             print("[debug] exit by user requests")
-            return retval, actor_list, state
-        return retval, actor_list, state
+            return retval, npc_list, state
+        return retval, npc_list, state
 
 
-def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map, trace_dict, trace_graph,
+def record_trace(npc_vehicles, exec_state, player, player_loc, state, town_map, trace_dict, trace_graph,
                  trace_graph_important):
     nearby_dict = {}
     for vehicle_id in trace_dict:
@@ -331,16 +332,16 @@ def record_trace(actor_vehicles, exec_state, player, player_loc, state, town_map
                                                 lane_type=carla.libcarla.LaneType.Driving)
     else:
         return [], []
-    for actor_vehicle in actor_vehicles:
+    for npc_vehicle in npc_vehicles:
         if state.crashed:
-            if state.collision_to == actor_vehicle.id:
+            if state.collision_to == npc_vehicle.id:
                 continue
-        waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
+        waypoint = town_map.get_waypoint(npc_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
         if check_topo(player_waypoint, waypoint, exec_state.G):
             # trim and thin the trace,return trace at last 5 seconds
             try:
-                trace = trace_dict[actor_vehicle.id]
+                trace = trace_dict[npc_vehicle.id]
             except KeyError:
                 continue
             # trace = trace_thin(trace, 5, 25)
@@ -377,25 +378,25 @@ def normalize_points(points, start_point):
         points[i] = points[i] - origin_point
 
 
-def nearby_record(state, actor_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
+def nearby_record(state, npc_vehicles, player, trace_dict, player_loc, town_map, valid_frames, G):
     vel = player.get_velocity()
     speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
     player_waypoint = town_map.get_waypoint(player_loc, project_to_road=True,
                                             lane_type=carla.libcarla.LaneType.Driving)
     trace_dict[player.id].append((player_loc.x, player_loc.y, speed))
     has_nearby = False
-    for actor_vehicle in actor_vehicles:
-        if actor_vehicle.id not in trace_dict:
-            trace_dict[actor_vehicle.id] = []
-        waypoint = town_map.get_waypoint(actor_vehicle.get_location(), project_to_road=True,
+    for npc_vehicle in npc_vehicles:
+        if npc_vehicle.id not in trace_dict:
+            trace_dict[npc_vehicle.id] = []
+        waypoint = town_map.get_waypoint(npc_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
         is_nearby = check_topo(player_waypoint, waypoint, G)
-        actor_vehicle_speed = 3.6 * math.sqrt(
-            actor_vehicle.get_velocity().x ** 2 + actor_vehicle.get_velocity().y ** 2)
-        not_stuck = (actor_vehicle_speed > 0.5) or (actor_vehicle_speed > 0.5)
+        npc_vehicle_speed = 3.6 * math.sqrt(
+            npc_vehicle.get_velocity().x ** 2 + npc_vehicle.get_velocity().y ** 2)
+        not_stuck = (npc_vehicle_speed > 0.5) or (npc_vehicle_speed > 0.5)
         if is_nearby and not_stuck:
-            trace_dict[actor_vehicle.id].append(
-                (actor_vehicle.get_location().x, actor_vehicle.get_location().y, actor_vehicle_speed))
+            trace_dict[npc_vehicle.id].append(
+                (npc_vehicle.get_location().x, npc_vehicle.get_location().y, npc_vehicle_speed))
             has_nearby = True
     if has_nearby and state.stuck_duration < 15 * c.FRAME_RATE:
         valid_frames += 1
@@ -418,12 +419,12 @@ def is_carla_running():
         return False
 
 
-def control_actor(agents_now, speed_limit):
+def control_npc(agents_now, speed_limit):
     for agent_tuple in agents_now:
         # todo:rewrite here
         agent = agent_tuple[0]
         agent_vehicle = agent_tuple[1]
-        agent_actor = agent_tuple[2]
+        agent_npc = agent_tuple[2]
         agent._update_information()
         agent.get_local_planner().set_speed(speed_limit)
         lp = agent.get_local_planner()
@@ -435,12 +436,12 @@ def control_actor(agents_now, speed_limit):
         speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
         # Check inactivity
         if speed < 1:  # km/h
-            agent_actor.stuck_duration += 1
+            agent_npc.stuck_duration += 1
         else:
-            agent_actor.stuck_duration = 0
+            agent_npc.stuck_duration = 0
 
 
-def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_now, autoware_last_frames, conf, ego,
+def add_new_car(npc_list, npc_vehicles, npc_now, add_car_frame, agents_now, autoware_last_frames, conf, ego,
                 found_frame, frame_gap, goal_loc, goal_rot, max_wheels_for_non_motorized, player_lane_id, player_loc,
                 player_road_id, sensors, state, town_map, vehicle_bp_library, world, wp, G):
     if conf.agent_type == c.AUTOWARE:
@@ -453,25 +454,25 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
         add_flag = state.num_frames % add_car_frame == add_car_frame - 1
     if add_flag:
         # try to spawn a test linear car to see if the simulation is still running
-        # a choose actor from actor_list first
-        # delete backgound car which is too far
+        # a choose npc from npc_list first
+        # delete background vehicle which is too far
         if abs(state.num_frames - found_frame) > add_car_frame:
-            add_type = random.randint(1, 100)  # this value controls the type of actor
-            actor_vehicle = None
-            new_actor = None
+            add_type = random.randint(1, 100)  # this value controls the type of npc
+            npc_vehicle = None
+            new_npc = None
             repeat_times = 0
-            while actor_vehicle is None:
+            while npc_vehicle is None:
                 repeat_times += 1
                 # stuck too long
                 if repeat_times > 100 or state.stuck_duration > 100:
-                    # add a fake actor
-                    new_actor = Actor(actor_type=None,
-                                      spawn_point=None, speed=None,
-                                      actor_id=len(actor_list),
-                                      ego_loc=player_loc)
-                    new_actor.instance = None
-                    actor_list.append(new_actor)
-                    new_actor.fresh = False
+                    # add a fake npc
+                    new_npc = NPC(npc_type=None,
+                                    spawn_point=None, speed=None,
+                                    npc_id=len(npc_list),
+                                    ego_loc=player_loc)
+                    new_npc.instance = None
+                    npc_list.append(new_npc)
+                    new_npc.fresh = False
                     break
                 x = random.uniform(-50, 50)
                 y = random.uniform(-50, 50)
@@ -493,22 +494,21 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                 if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
                     repeat_times -= 1
                     continue
-                # we don't want to add bg car in junction or near it
+                # 3.we don't want to add bg car in junction or near it
                 # because it may cause a red light problem
                 if waypoint.is_junction:
                     continue
                 # if waypoint.is_junction or waypoint.next(30 * 3 / 3.6)[-1].is_junction:
                 #     continue
                 temp_flag = False
-                # don't let sensor distance too close in the same lane
-                for other_actor in actor_list:
-                    if other_actor.instance is not None:
-                        other_actor_waypoint = other_actor.get_waypoint(town_map)
-                        if other_actor.instance.get_location().distance(waypoint.transform.location) < 10:
-                            if (other_actor_waypoint.lane_id == waypoint.lane_id) & (
-                                    other_actor_waypoint.road_id == waypoint.road_id):
-                                temp_flag = True
-                                break
+                # 4. don't add a vehicle in the same lane
+                for other_npc in npc_list:
+                    if other_npc.instance is not None:
+                        other_npc_waypoint = other_npc.get_waypoint(town_map)
+                        if (other_npc_waypoint.lane_id == waypoint.lane_id) & (
+                                other_npc_waypoint.road_id == waypoint.road_id):
+                            temp_flag = True
+                            break
                 if player_loc.distance(waypoint.transform.location) < 20:
                     if (player_lane_id == waypoint.lane_id) & (player_road_id == waypoint.road_id):
                         temp_flag = True
@@ -524,112 +524,140 @@ def add_new_car(actor_list, actor_vehicles, actors_now, add_car_frame, agents_no
                 road_direction_y = road_direction.y
                 roll = math.atan2(road_direction_y, road_direction_x)
                 roll_degrees = math.degrees(roll)
-                actor_spawn_point = carla.Transform(
+                npc_spawn_point = carla.Transform(
                     carla.Location(x=waypoint.transform.location.x, y=waypoint.transform.location.y,
                                    z=waypoint.transform.location.z + 0.1),
                     carla.Rotation(pitch=0, yaw=roll_degrees, roll=0)
                 )
                 # random choose a car bp from vehicle_bp_library
-                actor_bp = random.choice(vehicle_bp_library)
+                npc_bp = random.choice(vehicle_bp_library)
 
                 if add_type <= conf.immobile_percentage:
                     # add a immobile car
                     bg_speed = 0
-                    new_actor = Actor(actor_type=c.VEHICLE,
-                                      spawn_point=actor_spawn_point, speed=bg_speed,
-                                      actor_id=len(actor_list),
-                                      ego_loc=player_loc,
-                                      actor_bp=actor_bp, spawn_stuck_frame=state.stuck_duration)
+                    new_npc = NPC(npc_type=c.VEHICLE,
+                                    spawn_point=npc_spawn_point, speed=bg_speed,
+                                    npc_id=len(npc_list),
+                                    ego_loc=player_loc,
+                                    npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
                 else:
                     bg_speed = random.uniform(0 / 3.6, 20 / 3.6)
-                    new_actor = Actor(actor_type=c.VEHICLE,
-                                      spawn_point=actor_spawn_point, speed=bg_speed,
-                                      actor_id=len(actor_list),
-                                      ego_loc=player_loc,
-                                      actor_bp=actor_bp, spawn_stuck_frame=state.stuck_duration)
+                    new_npc = NPC(npc_type=c.VEHICLE,
+                                    spawn_point=npc_spawn_point, speed=bg_speed,
+                                    npc_id=len(npc_list),
+                                    ego_loc=player_loc,
+                                    npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
                 # do safe check
                 flag = True
-                for actor in actors_now:
-                    if not new_actor.safe_check(actor):
+                for npc in npc_now:
+                    if not new_npc.safe_check(npc):
                         flag = False
                         break
-                if not new_actor.safe_check(ego):
+                if not new_npc.safe_check(ego):
                     flag = False
                 if flag:
-                    actor_vehicle = world.try_spawn_actor(new_actor.actor_bp, actor_spawn_point)
+                    npc_vehicle = world.try_spawn_actor(new_npc.npc_bp, npc_spawn_point)
                 else:
                     continue
-            if actor_vehicle is not None:
-                spawn_actor(new_actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
-                            max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
-                actor_list.append(new_actor)
+            if npc_vehicle is not None:
+                spawn_npc(new_npc, npc_vehicle, npc_vehicles, npc_now, agents_now, conf,
+                          max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
+                npc_list.append(new_npc)
         found_frame = False
     return found_frame, autoware_last_frames, frame_gap
 
 
-def add_old_car(actor_list, actor_vehicles, actors_now, agents_now, conf, found_frame, max_wheels_for_non_motorized,
+def add_old_npc(npc_list, npc_vehicles, npc_now, agents_now, conf, found_frame, max_wheels_for_non_motorized,
                 player_loc, sensors, state, vel, world, wp):
-    for actor in actor_list:
-        if actor.fresh & (actor.ego_loc.distance(player_loc) < 1.5):
+    for npc in npc_list:
+        if npc.fresh & (npc.ego_loc.distance(player_loc) < 1.5):
             found_frame = state.num_frames
-            # check if this actor is good to spawn
-            v1 = carla.Vector2D(actor.ego_loc.x - player_loc.x, actor.ego_loc.y - player_loc.y)
+            # check if this npc is good to spawn
+            v1 = carla.Vector2D(npc.ego_loc.x - player_loc.x, npc.ego_loc.y - player_loc.y)
             v2 = vel
             if state.stuck_duration != 0:
                 # if ego is stuck,check stuck duration
-                if actor.spawn_stuck_frame != state.stuck_duration:
+                if npc.spawn_stuck_frame != state.stuck_duration:
                     continue
             angle = get_angle_between_vectors(v1, v2)
             if angle < 90 and angle != 0:
                 # the better time will come later
                 continue
-            # check if this actor is not exist
-            if actor.actor_type is None:
-                actor.fresh = False
+            # check if this npc is not exist
+            if npc.npc_type is None:
+                npc.fresh = False
                 break
-            actor_vehicle = world.try_spawn_actor(actor.actor_bp, actor.spawn_point)
-            if actor_vehicle is not None:
-                actor_spawn_rotation = actor.spawn_point.rotation
-                roll_degrees = actor_spawn_rotation.yaw
+            npc_vehicle = world.try_spawn_actor(npc.npc_bp, npc.spawn_point)
+            if npc_vehicle is not None:
+                npc_spawn_rotation = npc.spawn_point.rotation
+                roll_degrees = npc_spawn_rotation.yaw
                 roll = math.radians(roll_degrees)
                 road_direction_x = math.cos(roll)
                 road_direction_y = math.sin(roll)
                 road_direction = carla.Vector3D(road_direction_x, road_direction_y, 0.0)
-                spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf,
-                            max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
+                spawn_npc(npc, npc_vehicle, npc_vehicles, npc_now, agents_now, conf,
+                          max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
                 continue
     return found_frame
 
 
-def mark_useless_actor(actors_now, conf, player_lane_id, player_loc, player_road_id, G, town_map):
-    for actor in actors_now:
-        vehicle = actor.instance
+def is_in_front(yaw_degrees, car1_position, car2_position):
+    yaw_radians = math.radians(yaw_degrees)
+    direction_vector = (math.cos(yaw_radians), math.sin(yaw_radians))
+
+    vector_12 = (car2_position.x - car1_position.x, car2_position.y - car1_position.y)
+    angle_12 = math.atan2(vector_12[1], vector_12[0])
+
+    angle_diff = math.degrees(angle_12 - yaw_radians)
+    angle_diff = (angle_diff + 180) % 360 - 180  # Normalize to [-180, 180]
+
+    return -30 <= angle_diff <= 30
+
+
+def mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, G, town_map):
+    for npc in npc_now:
+        if npc.death_time != -1:
+            # (npc.death_time == -1) means it is alive
+            continue
+        # if is_in_front(player_rot.yaw, player_loc, npc.instance.get_location()):
+        #     print("npc in front")
+        #     continue
+        vehicle = npc.instance
         vehicle_waypoint = town_map.get_waypoint(vehicle.get_location(), project_to_road=True,
                                                  lane_type=carla.libcarla.LaneType.Driving)
         vehicle_lane_id = vehicle_waypoint.lane_id
         vehicle_road_id = vehicle_waypoint.road_id
         # 1. Delete vehicles that are physically too far away
-        if vehicle.get_location().distance(player_loc) > 50 * math.sqrt(2):
-            if actor.death_time < 0:
-                mark_actor(actor, 0)
-            # delete_actor(actor, actor_vehicles, sensors, agents_now, actors_now)
+        if vehicle.get_location().distance(player_loc) > 100 * math.sqrt(2):
+            if is_in_front(player_rot.yaw, player_loc, npc.instance.get_location()):
+                continue
+            mark_npc(npc, 0)
+            # delete_npc(npc, npc_vehicles, sensors, agents_now, npc_now)
             continue
         # 2. Delete vehicles that are topologically too far away
         neighbors_A = nx.single_source_shortest_path_length(G,
                                                             source=(player_road_id, player_lane_id),
-                                                            cutoff=conf.topo_k)
+                                                            cutoff=conf.topo_k + 1)
         neighbors_A[(player_road_id, player_lane_id)] = 0
         neighbors_B = nx.single_source_shortest_path_length(G,
                                                             source=(vehicle_road_id, vehicle_lane_id),
-                                                            cutoff=conf.topo_k)
+                                                            cutoff=conf.topo_k + 1)
         neighbors_B[(vehicle_road_id, vehicle_lane_id)] = 0
         if not any(node in neighbors_A and node in neighbors_B for node in G.nodes()):
-            if actor.death_time < 0:
-                mark_actor(actor, 5 * c.FRAME_RATE)
-        # 3.Delete vehicles that stuck too long
-        if actor.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
-            if actor.death_time < 0:
-                mark_actor(actor, 1 * c.FRAME_RATE)
+            if is_in_front(player_rot.yaw, player_loc, npc.instance.get_location()):
+                continue
+            mark_npc(npc, 1 * c.FRAME_RATE)
+        # 3. Delete vehicles that stuck too long
+        if npc.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
+            # let stuck car go away
+            npc_rot = npc.instance.get_transform().rotation
+            yaw_radians = math.radians(npc_rot.yaw)
+            direction_vector = (math.cos(yaw_radians), math.sin(yaw_radians))
+            velocity_magnitude = 5
+            velocity = carla.Vector3D(velocity_magnitude * direction_vector[0],
+                                      velocity_magnitude * direction_vector[1], 0)
+            npc.instance.set_target_velocity(velocity)
+            mark_npc(npc, 5 * c.FRAME_RATE)
 
 
 def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=None):
@@ -683,7 +711,7 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
     return frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel
 
 
-def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, conf, goal_loc, goal_rot, player_loc,
+def check_destination(npc_vehicles, npc_now, agents_now, autoware_stuck, conf, goal_loc, goal_rot, player_loc,
                       proc_state, retval, s_started, sensors, speed, state, world):
     dist_to_goal = player_loc.distance(goal_loc)
     break_flag = False
@@ -740,11 +768,11 @@ def check_destination(actor_vehicles, actors_now, agents_now, autoware_stuck, co
                 else:
                     delete_indices.append(i)
         for index in delete_indices:
-            delete_actor(agents_now[index][2], actor_vehicles, sensors, agents_now, actors_now)
+            delete_npc(agents_now[index][2], npc_vehicles, sensors, agents_now, npc_now)
     return break_flag, retval, autoware_stuck, s_started
 
 
-def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors, world):
+def world_reload(npc_list, npc_vehicles, npc_walkers, npc_now, sensors, world):
     try:
         # if conf.agent_type == c.AUTOWARE:
         #     cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
@@ -753,16 +781,16 @@ def world_reload(actor_list, actor_vehicles, actor_walkers, actors_now, sensors,
         #     t.start()
         #     time.sleep(1)
         #     check_autoware_status(world, 60)
-        for actor in actors_now:
-            actor.instance = None
-        for actor in actor_list:
-            actor.fresh = True
+        for npc in npc_now:
+            npc.instance = None
+        for npc in npc_list:
+            npc.fresh = True
         for s in sensors:
             s.stop()
             s.destroy()
-        for w in actor_walkers:
+        for w in npc_walkers:
             w.destroy()
-        for v in actor_vehicles:
+        for v in npc_vehicles:
             v.destroy()
 
         return True
@@ -984,8 +1012,8 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
     player = None
     if conf.agent_type == c.BEHAVIOR:
         player = world.try_spawn_actor(player_bp, sp)
-        ego = Actor(actor_type=c.VEHICLE, spawn_point=sp,
-                    actor_id=-1)
+        ego = NPC(npc_type=c.VEHICLE, spawn_point=sp,
+                  npc_id=-1)
         ego.set_instance(player)
         world.tick()  # sync once with simulator
         player.set_simulate_physics(True)
@@ -1019,7 +1047,7 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
                 raise TimeoutError
             i += 1
             time.sleep(1)
-        ego = Actor(actor_type=c.VEHICLE, spawn_point=sp, actor_id=-1)
+        ego = NPC(npc_type=c.VEHICLE, spawn_point=sp, npc_id=-1)
         ego.set_instance(player)
         # loc = sp.location
         # rot = sp.rotation
@@ -1062,34 +1090,34 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
         #         x2 = x1
         #         time.sleep(1)
     # Attach RGB camera (front)
-    # rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
-    # rgb_camera_bp.set_attribute("image_size_x", "800")
-    # rgb_camera_bp.set_attribute("image_size_y", "600")
-    # rgb_camera_bp.set_attribute("fov", "105")
-    #
-    # camera_tf = carla.Transform(carla.Location(z=1.8))
-    # camera_front = world.spawn_actor(
-    #     rgb_camera_bp,
-    #     camera_tf,
-    #     attach_to=player,
-    #     attachment_type=carla.AttachmentType.Rigid
-    # )
-    #
-    # camera_front.listen(lambda image: _on_front_camera_capture(image, state))
-    # sensors.append(camera_front)
-    # camera_tf2 = carla.Transform(
-    #     carla.Location(z=50.0),
-    #     carla.Rotation(pitch=-90.0)
-    # )
-    # camera_top = world.spawn_actor(
-    #     rgb_camera_bp,
-    #     camera_tf2,
-    #     attach_to=player,
-    #     attachment_type=carla.AttachmentType.Rigid
-    # )
-    #
-    # camera_top.listen(lambda image: _on_top_camera_capture(image, state))
-    # sensors.append(camera_top)
+    rgb_camera_bp = blueprint_library.find("sensor.camera.rgb")
+    rgb_camera_bp.set_attribute("image_size_x", "800")
+    rgb_camera_bp.set_attribute("image_size_y", "600")
+    rgb_camera_bp.set_attribute("fov", "105")
+
+    camera_tf = carla.Transform(carla.Location(z=1.8))
+    camera_front = world.spawn_actor(
+        rgb_camera_bp,
+        camera_tf,
+        attach_to=player,
+        attachment_type=carla.AttachmentType.Rigid
+    )
+
+    camera_front.listen(lambda image: _on_front_camera_capture(image, state))
+    sensors.append(camera_front)
+    camera_tf2 = carla.Transform(
+        carla.Location(z=50.0),
+        carla.Rotation(pitch=-90.0)
+    )
+    camera_top = world.spawn_actor(
+        rgb_camera_bp,
+        camera_tf2,
+        attach_to=player,
+        attachment_type=carla.AttachmentType.Rigid
+    )
+
+    camera_top.listen(lambda image: _on_top_camera_capture(image, state))
+    sensors.append(camera_top)
 
     ego.attach_collision(world, sensors, state)
     if conf.check_dict["lane"]:
@@ -1104,7 +1132,7 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
     return autoware_container, ego, player, max_steer_angle
 
 
-# def calculate_control(actor_vehicles, actor_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
+# def calculate_control(npc_vehicles, npc_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
 #     # record ego information
 #     control = player.get_control()
 #     state.cont_throttle.append(control.throttle)
@@ -1186,28 +1214,28 @@ def simulate_initialize(client, conf, weather_dict, world):
     return add_car_frame, blueprint_library, clock, player_bp, town_map, vehicle_bp_library
 
 
-def spawn_actor(actor, actor_vehicle, actor_vehicles, actors_now, agents_now, conf, max_wheels_for_non_motorized,
-                road_direction, sensors, state, world, wp):
-    actor_vehicles.append(actor_vehicle)
-    actor_vehicle.set_transform(actor.spawn_point)
+def spawn_npc(npc, npc_vehicle, npc_vehicles, npcs_now, agents_now, conf, max_wheels_for_non_motorized,
+              road_direction, sensors, state, world, wp):
+    npc_vehicles.append(npc_vehicle)
+    npc_vehicle.set_transform(npc.spawn_point)
     x_offset = random.uniform(5, 10)
     y_offset = random.uniform(5, 10)
     wp_new_location = wp.location + carla.Location(x=x_offset * random.choice([-1, 1]),
                                                    y=y_offset * random.choice([-1, 1]))
-    new_agent = set_autopilot(actor_vehicle, c.BEHAVIOR_AGENT, actor.spawn_point.location,
+    new_agent = set_autopilot(npc_vehicle, c.BEHAVIOR_AGENT, npc.spawn_point.location,
                               wp_new_location, world)
-    agents_now.append((new_agent, actor_vehicle, actor))
-    actor_vehicle.set_target_velocity(
-        actor.speed * road_direction)
-    actor.set_instance(actor_vehicle)
+    agents_now.append((new_agent, npc_vehicle, npc))
+    npc_vehicle.set_target_velocity(
+        npc.speed * road_direction)
+    npc.set_instance(npc_vehicle)
     # # just add it for behavior
     # if conf.agent_type == c.BEHAVIOR:
     #     # don't add sensors for non_motorized vehicles
-    #     if actor.actor_bp.get_attribute(
+    #     if npc.npc_bp.get_attribute(
     #             "number_of_wheels").as_int() > max_wheels_for_non_motorized:
-    #         actor.attach_collision(world, sensors, state)
-    actors_now.append(actor)
-    actor.fresh = False
+    #         npc.attach_collision(world, sensors, state)
+    npcs_now.append(npc)
+    npc.fresh = False
 
 
 def _on_front_camera_capture(image, state):

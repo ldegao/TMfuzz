@@ -288,30 +288,30 @@ def draw_arrow(world, start, end, color=carla.Color(255, 0, 0), arrow_size=0.2):
     world.debug.draw_line(arrow_start, arrow_end, life_time=0.5, color=color)
 
 
-def mark_actor(actor, frame=0):
-    actor.death_time = frame
+def mark_npc(npc, frame=0):
+    npc.death_time = frame
 
 
-def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=None):
+def delete_npc(npc, npc_vehicles, sensors, agents_now=None, npc_now=None):
     for agent_tuple in agents_now:
-        if agent_tuple[1] == actor.instance:
+        if agent_tuple[1] == npc.instance:
             agents_now.remove(agent_tuple)
             break
-    actor_vehicles.remove(actor.instance)
-    actors_now.remove(actor)
-    actor.instance.destroy()
-    actor.instance = None
-    actor.stuck_duration = 0
-    if actor.sensor_collision:
-        sensors.remove(actor.sensor_collision)
-        actor.sensor_collision.stop()
-        actor.sensor_collision.destroy()
-        actor.sensor_collision = None
-    if actor.sensor_lane_invasion:
-        sensors.remove(actor.sensor_lane_invasion)
-        actor.sensor_lane_invasion.stop()
-        actor.sensor_lane_invasion.destroy()
-        actor.sensor_lane_invasion = None
+    npc_vehicles.remove(npc.instance)
+    npc_now.remove(npc)
+    npc.instance.destroy()
+    npc.instance = None
+    npc.stuck_duration = 0
+    if npc.sensor_collision:
+        sensors.remove(npc.sensor_collision)
+        npc.sensor_collision.stop()
+        npc.sensor_collision.destroy()
+        npc.sensor_collision = None
+    if npc.sensor_lane_invasion:
+        sensors.remove(npc.sensor_lane_invasion)
+        npc.sensor_lane_invasion.stop()
+        npc.sensor_lane_invasion.destroy()
+        npc.sensor_lane_invasion = None
 
 
 def _on_collision(event, state):
