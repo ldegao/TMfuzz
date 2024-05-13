@@ -37,7 +37,7 @@ In addition, CARLA (the simulator we use) requires the following:
 
 ## Installation
 
-> Before installing TM-fuzzer, make sure docker has been installed properly in your machine.
+> Before installing TM-fuzzer, make sure docker and nvidia-docker2 has been installed properly in your machine.
 
 ### 1. Install CARLA 0.9.13
 
@@ -108,16 +108,81 @@ ROS is required on the host in order for TM-Fuzzer to communicate with
 the Autoware container.
 
 ```sh
-$ sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
-$ sudo apt install curl
-$ curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
-$ sudo apt update
-$ sudo apt install ros-melodic-desktop-full
-
-$ source /opt/ros/melodic/setup.bash
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+sudo apt install curl
+curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+sudo apt update
+sudo apt install ros-melodic-desktop-full
+source /opt/ros/melodic/setup.bash
 ```
 
 ## Usage
+
+### 1. Run carla simulator
+
+First check if carla is already running:
+```
+docker ps | grep carla-$USER
+```
+
+If not, run Carla container by executing:
+```sh
+docker run --name="carla-$USER" \
+    -d --rm \
+    -p 2000-2002:2000-2002 \
+    --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=0 --gpus 'device=0' \
+    carlasim/carla:0.9.10.1 \
+    /bin/bash -c  \
+    'SDL_VIDEODRIVER=offscreen CUDA_DEVICE_ORDER=PCI_BUS_ID \
+    CUDA_VISIBLE_DEVICES=1 ./CarlaUE4.sh -ResX=640 -ResY=360 \
+    -nosound -windowed -opengl \
+    -carla-rpc-port=2000 \
+    -quality-level=Epic'
+```
+
+### 2. Prepare environment
+
+```sh
+mkdir -p /tmp/fuzzerdata
+sudo chmod 777 /tmp/fuzzerdata
+mkdir -p bagfiles
+sudo chmod 777 $HOME/.Xauthority
+source /opt/ros/melodic/setup.bash
+```
+
+### 3. Run fuzzing
+
+* Testing Behavior Agent
+
+```sh
+cd ~/drivefuzz/src
+./fuzzer.py -o out-artifact -s seed-artifact -c 5 -m 5 -t behavior --timeout 60 --town 1 --strategy all
+```
+
+* Outputs (bugs, mutated test inputs, metadata, ...) will be stored in `out-artifact`
+* Sample seeds are provided in `seed-artifact`
+* Adjust the number of cycles (`-c`) and size of mutated population (`-m`)
+    (please refer to Algorithm 1 in the paper)
+* You can try other mutation strategies (congestion, entropy, instability,
+    trajectory); (please refer to Section 4.2.4 in the paper)
+* Check `./fuzzer.py --help` for further instructions
+
+Please note that Behavior Agent has a bug in the controller (that we found and
+reported), which leads to frequent lane invasions and finishing before
+reaching the goal. You can prevent these from triggering the misbehavior
+detector by adding `--no-lane-check` and `--no-other-check` flags, e.g.,
+
+```sh
+./fuzzer.py -o out-artifact -s seed-artifact -c 5 -m 5 -t behavior --timeout 60 --town 1 --strategy all --no-lane-check --no-other-check
+```
+
+* Testing Autoware
+```sh
+cd ~/drivefuzz/src
+rm -rf out-artifact
+./fuzzer.py -o out-artifact -s seed-artifact -c 5 -m 5 -t autoware --timeout 60 --town 1 --strategy all --sim-port 2000
+```
+
 
 ## Vioaltion details
 
