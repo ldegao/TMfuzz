@@ -1,15 +1,15 @@
 #!/bin/bash
 
 timestamp=$(date +"%Y%m%d%H%M%S")
-save_dir="./save/$timestamp/"
+save_dir="../data/save/$timestamp/"
 
-camera_dir="./output/camera/"
+camera_dir="../data/output/camera/"
 new_camera_dir="${save_dir}camera/"
 
-errors_dir="./output/errors/"
+errors_dir="../data/output/errors/"
 new_errors_dir="${save_dir}errors/"
 
-trace_dir="./output/trace/"
+trace_dir="../data/output/trace/"
 new_trace_dir="${save_dir}trace/"
 mkdir -p "$save_dir"
 if [ -d "$camera_dir" ]; then

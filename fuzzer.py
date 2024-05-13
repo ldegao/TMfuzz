@@ -45,8 +45,8 @@ pca = cluster.create_pca()
 accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
-
-
+# monitor carla
+monitoring_thread = utils.monitor_docker_container('carlasim/carla:0.9.13')
 # vehicle_bp_library = blueprint_library.filter("vehicle.*")
 # vehicle_bp.set_attribute("color", "255,0,0")
 # walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
@@ -214,10 +214,8 @@ def mutate_weather_fixed(test_scenario):
 def set_args():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--debug", action="store_true", default=False)
-    argument_parser.add_argument("-o", "--out-dir", default="output", type=str,
+    argument_parser.add_argument("-o", "--out-dir", default="./data/output", type=str,
                                  help="Directory to save fuzzing logs")
-    argument_parser.add_argument("-s", "--seed-dir", default="seed-artifact", type=str,
-                                 help="Seed directory")
     argument_parser.add_argument("-m", "--max-mutations", default=5, type=int,
                                  help="Size of the mutated population per cycle")
     argument_parser.add_argument("-d", "--determ-seed", type=float,
@@ -226,6 +224,8 @@ def set_args():
                                  help="Hostname of Carla simulation server")
     argument_parser.add_argument("-p", "--sim-port", default=2000, type=int,
                                  help="RPC port of Carla simulation server")
+    argument_parser.add_argument("-s", "--seed-dir", default="./data/seed", type=str,
+                           help="Seed directory")
     argument_parser.add_argument("-t", "--target", default="behavior", type=str,
                                  help="Target autonomous driving system (behavior/Autoware)")
     argument_parser.add_argument("-f", "--function", default="general", type=str,
@@ -259,14 +259,17 @@ def evaluation(ind: Scenario):
     g_name = f'Generation_{ind.generation_id:05}'
     s_name = f'Scenario_{ind.scenario_id:05}'
     # todo: run test here
-    ret = None
     # for test
     mutate_weather_fixed(ind)
-    # signal.alarm(60 * 60)  # timeout after 60 min
+    signal.alarm(15 * 60)  # timeout after 15 min
+    print("timeout after 15 min")
     try:
         # profiler = cProfile.Profile()
         # profiler.enable()  #
         ret = ind.run_test(exec_state)
+        if ret == -1:
+            print("[-] Fatal error occurred during test")
+            exit(0)
         min_dist = ind.state.min_dist
         trace_graph_important = ind.state.trace_graph_important
         accumulated_trace_graphs.append(trace_graph_important)
@@ -285,24 +288,23 @@ def evaluation(ind: Scenario):
         # profiler.print_stats(sort="cumulative")
         # pdb.set_trace()
     except Exception as e:
-        if e.args[0] == "HANG":
+        if e == TimeoutError:
             print("[-] simulation hanging. abort.")
             ret = 1
         else:
             print("[-] run_test error:")
             traceback.print_exc()
-            exit(-1)
-    # signal.alarm(0)
+            exit(0)
+    signal.alarm(0)
     if ret is None:
         pass
     elif ret == -1:
         print("[-] Fatal error occurred during test")
-        exit(-1)
+        exit(0)
     elif ret == 1:
         print("fuzzer - found an error")
     elif ret == 128:
         print("Exit by user request")
-        sys.exit(0)
 
     # mutation loop ends
     if ind.found_error:
@@ -401,106 +403,7 @@ def cx_scenario(ind1: Scenario, ind2: Scenario):
     return ind1, ind2
 
 
-def autoware_launch(world, conf, town_map):
-    username = os.getenv("USER")
-    global autoware_container
-    docker_client = docker.from_env()
-    proj_root = config.get_proj_root()
-    xauth = os.path.join(os.getenv("HOME"), ".Xauthority")
-    vol_dict = {
-        "{}/carla-autoware/autoware-contents".format(proj_root): {
-            "bind": "/home/autoware/autoware-contents",
-            "mode": "ro"
-        },
-        "/tmp/.X11-unix": {
-            "bind": "/tmp/.X11-unix",
-            "mode": "rw"
-        },
-        f"/home/{username}/.Xauthority": {
-            "bind": xauth,
-            "mode": "rw"
-        },
-        "/tmp/fuzzerdata/{}".format(username): {
-            "bind": "/tmp/fuzzerdata",
-            "mode": "rw"
-        }
-    }
-    env_dict = {
-        "DISPLAY": os.getenv("DISPLAY"),
-        "XAUTHORITY": xauth,
-        "QT_X11_NO_MITSHM": 1
-    }
-    list_spawn_points = town_map.get_spawn_points()
-    sp = list_spawn_points[1]
-    loc = sp.location
-    rot = sp.rotation
-    sp_str = "{},{},{},{},{},{}".format(loc.x, -1 * loc.y, loc.z, 0,
-                                        0, -1 * rot.yaw)
-    autoware_cla = "{} \'{}\' \'{}\'".format(town_map.name.split("/")[-1], sp_str, conf.sim_port)
-    print(autoware_cla)
-    exec_state.autoware_cmd = autoware_cla
-    while autoware_container is None:
-        try:
-            autoware_container = docker_client.containers.run(
-                "carla-autoware:improved",
-                command=autoware_cla,
-                detach=True,
-                auto_remove=True,
-                name="autoware-{}".format(os.getenv("USER")),
-                volumes=vol_dict,
-                privileged=True,
-                network_mode="host",
-                # runtime="nvidia",
-                device_requests=[
-                    docker.types.DeviceRequest(device_ids=["all"], capabilities=[['gpu']])],
-                environment=env_dict,
-                stdout=True,
-                stderr=True
-            )
-        except docker.errors.APIError as e:
-            print("[-] Could not launch docker:", e)
-            if "Conflict" in str(e):
-                os.system("docker rm -f autoware-{}".format(
-                    os.getenv("USER")))
-                killed = True
-            time.sleep(1)
-        except:
-            # https://github.com/docker/for-mac/issues/4957
-            print("[-] Fatal error. Check dmesg")
-            exit(-1)
-    while True:
-        running_container_list = docker_client.containers.list()
-        if autoware_container in running_container_list:
-            break
-        print("[*] Waiting for Autoware container to be launched")
-        time.sleep(1)
-    print("[*] Waiting for ROS to be launched")
-    time.sleep(5)
-    # wait for autoware bridge to spawn player vehicle
-    check_autoware_status(world, 60)
 
-    # exec a detached process that monitors the output of Autoware's
-    # decision-maker state, with which we can get an idea of when Autoware
-    # thinks it has reached the goal
-    exec_state.proc_state = Popen(["rostopic echo /decision_maker/state"],
-                                  shell=True, stdout=PIPE, stderr=PIPE)
-    # set_camera(conf, player, spectator)
-    # Wait for Autoware (esp, for Town04)
-    # i = 0
-    # while True:
-    #     output_state = state.proc_state.stdout.readline()
-    #     if b"---" in output_state:
-    #         output_state = state.proc_state.stdout.readline()
-    #     if b"VehicleReady" in output_state:
-    #         break
-    #     i += 1
-    #     if i == 45:
-    #         carla_error = True
-    #         print("    [-] something went wrong while launching Autoware.")
-    #         raise KeyboardInterrupt
-    #     time.sleep(1)
-    time.sleep(3)
-    return
 
 
 def seed_initialize(town, town_map):
@@ -615,84 +518,79 @@ def print_all_attr(obj):
 def main():
     # STEP 0: init env
     global client, world, G, blueprint_library, town_map
-    logging.basicConfig(filename='record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
-    with open("log.txt", "w") as log_file:
-        copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
-        copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
-        copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
-        copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
+    logging.basicConfig(filename='./data/record.log', filemode='a', level=logging.INFO, format='%(asctime)s - %(message)s')
+    copyreg.pickle(carla.libcarla.Location, carla_location_pickle, carla_location_unpickle)
+    copyreg.pickle(carla.libcarla.Rotation, carla_rotation_pickle, carla_rotation_unpickle)
+    copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
+    copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
 
-        conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
-        world = exec_state.world
-        blueprint_library = world.get_blueprint_library()
-        if conf.agent_type == c.AUTOWARE:
-            autoware_launch(exec_state.world, conf, town)
-        population = []
-        # GA Hyperparameters
-        POP_SIZE = 5  # amount of population
-        OFF_SIZE = 5  # number of offspring to produce
-        MAX_GEN = 5  #
-        CXPB = 0.8  # crossover probability
-        MUTPB = 0.2  # mutation probability
-        toolbox = base.Toolbox()
-        toolbox.register("evaluate", evaluation)
-        toolbox.register("mate", cx_scenario)
-        toolbox.register("mutate", mut_scenario)
-        toolbox.register("select", tools.selNSGA2)
-        hof = tools.ParetoFront()
-        # Evaluate Initial Population
-        print(f' ====== Analyzing Initial Population ====== ')
-        log_file.write(f' ====== Analyzing Initial Population ====== ')
-        invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
+    world = exec_state.world
+    blueprint_library = world.get_blueprint_library()
+    # if conf.agent_type == c.AUTOWARE:
+    #     autoware_launch(exec_state.world, conf, town)
+    population = []
+    # GA Hyperparameters
+    POP_SIZE = 5  # amount of population
+    OFF_SIZE = 5  # number of offspring to produce
+    MAX_GEN = 5  #
+    CXPB = 0.8  # crossover probability
+    MUTPB = 0.2  # mutation probability
+    toolbox = base.Toolbox()
+    toolbox.register("evaluate", evaluation)
+    toolbox.register("mate", cx_scenario)
+    toolbox.register("mutate", mut_scenario)
+    toolbox.register("select", tools.selNSGA2)
+    hof = tools.ParetoFront()
+    # Evaluate Initial Population
+    print(f' ====== Analyzing Initial Population ====== ')
+    invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+    stats.register("avg", np.mean, axis=0)
+    stats.register("max", np.max, axis=0)
+    stats.register("min", np.min, axis=0)
+    logbook = tools.Logbook()
+    logbook.header = 'gen', 'avg', 'max', 'min'
+    # begin a generational process
+    curr_gen = 0
+    # init some seed if seed pool is empty
+    for i in range(POP_SIZE):
+        seed_dict = seed_initialize(town, town_map)
+        # Creates and initializes a Scenario instance based on the metadata
+        with concurrent.futures.ThreadPoolExecutor() as my_simulate:
+            future = my_simulate.submit(create_test_scenario, conf, seed_dict)
+            test_scenario = future.result(timeout=15)
+        population.append(test_scenario)
+        test_scenario.scenario_id = len(population)
+    while True:
+        # Main loop
+        curr_gen += 1
+        if curr_gen > MAX_GEN:
+            break
+        print(f' ====== GA Generation {curr_gen} ====== ')
+        # Vary the population
+        offspring = algorithms.varOr(
+            population, toolbox, OFF_SIZE, CXPB, MUTPB)
+        # update chromosome generation_id and scenario_id
+        for index, d in enumerate(offspring):
+            d.generation_id = curr_gen
+            d.scenario_id = index
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
-
-        stats = tools.Statistics(key=lambda ind: ind.fitness.values)
-        stats.register("avg", np.mean, axis=0)
-        stats.register("max", np.max, axis=0)
-        stats.register("min", np.min, axis=0)
-        logbook = tools.Logbook()
-        logbook.header = 'gen', 'avg', 'max', 'min'
-        # begin a generational process
-        curr_gen = 0
-        # init some seed if seed pool is empty
-        for i in range(POP_SIZE):
-            seed_dict = seed_initialize(town, town_map)
-            # Creates and initializes a Scenario instance based on the metadata
-            with concurrent.futures.ThreadPoolExecutor() as my_simulate:
-                future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-                test_scenario = future.result(timeout=15)
-            population.append(test_scenario)
-            test_scenario.scenario_id = len(population)
-
-        while True:
-            # Main loop
-            curr_gen += 1
-            if curr_gen > MAX_GEN:
-                break
-            print(f' ====== GA Generation {curr_gen} ====== ')
-            log_file.write(f' ====== GA Generation {curr_gen} ====== ')
-            # Vary the population
-            offspring = algorithms.varOr(
-                population, toolbox, OFF_SIZE, CXPB, MUTPB)
-            # update chromosome generation_id and scenario_id
-            for index, d in enumerate(offspring):
-                d.generation_id = curr_gen
-                d.scenario_id = index
-            # Evaluate the individuals with an invalid fitness
-            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-            fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
-            for ind, fit in zip(invalid_ind, fitnesses):
-                ind.fitness.values = fit
-            hof.update(offspring)
-            # Select the next generation population
-            population[:] = toolbox.select(population + offspring, POP_SIZE)
-            record = stats.compile(population)
-            logbook.record(gen=curr_gen, **record)
-            print(logbook.stream)
-            log_file.write(logbook.stream)
-            # Save directory for trace graphs
+        hof.update(offspring)
+        # Select the next generation population
+        population[:] = toolbox.select(population + offspring, POP_SIZE)
+        record = stats.compile(population)
+        logbook.record(gen=curr_gen, **record)
+        print(logbook.stream)
+        # Save directory for trace graphs
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ case $USER in
         ;;
     chenpansong)
         port=5000
-        idle_gpu=0
+        idle_gpu=1
         ;;
     *)
         port=2000

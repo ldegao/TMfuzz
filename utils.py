@@ -2,13 +2,12 @@ import os
 import json
 import math
 import pdb
-import select
+import re
 import signal
 import subprocess
 import sys
 import threading
 import time
-from subprocess import Popen, PIPE
 
 import numpy as np
 from pygame.draw_py import Point
@@ -18,6 +17,7 @@ import constants as c
 import config
 
 config.set_carla_api_path()
+
 try:
     import carla
 except ModuleNotFoundError as e:
@@ -33,7 +33,25 @@ except IndexError:
 from agents.navigation.behavior_agent import BehaviorAgent
 
 
-def timeout_handler():
+def monitor_docker_container(image_name, check_interval=10):
+    def monitor():
+        while True:
+            result = subprocess.run(["docker", "ps", "-a"], stdout=subprocess.PIPE)
+            output = result.stdout.decode('utf-8')
+
+            match = re.search(r'(\w+)\s+(' + re.escape(image_name) + r')\s+.*\s+(\w+ \w+ ago)\s+(\w+)', output)
+            if match and match.group(4) != 'Up':
+                exit(-1)
+
+            time.sleep(check_interval)
+
+    monitoring_thread = threading.Thread(target=monitor)
+    monitoring_thread.daemon = True
+    monitoring_thread.start()
+    return monitoring_thread
+
+
+def timeout_handler(signum, frame):
     raise TimeoutError
 
 
@@ -279,11 +297,8 @@ def delete_actor(actor, actor_vehicles, sensors, agents_now=None, actors_now=Non
         if agent_tuple[1] == actor.instance:
             agents_now.remove(agent_tuple)
             break
-    try:
-        actor_vehicles.remove(actor.instance)
-        actors_now.remove(actor)
-    except ValueError:
-        print("remove ego")
+    actor_vehicles.remove(actor.instance)
+    actors_now.remove(actor)
     actor.instance.destroy()
     actor.instance = None
     actor.stuck_duration = 0
@@ -366,27 +381,26 @@ def carla_rotation_to_RPY(carla_rotation):
 
 
 def check_autoware_status(world, timeout):
+    left = 15 * 60
     try:
-        signal.alarm(timeout)
-        check_autoware_output(world)
+        left = signal.alarm(timeout)
+        print("left time:", left)
+        i = 0
+        while True:
+            time.sleep(1)
+            output = subprocess.check_output("rosnode list | wc -l", shell=True)
+            print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
+            i += 1
+            world.tick()
+            if output == b"":
+                continue
+            output = int(output.strip())
+            if output >= c.WAIT_AUTOWARE_NUM_NODES:
+                print("Autoware nodes are ready.")
+                break
     except TimeoutError:
         print("Autoware nodes did not Ready within timeout.")
         raise KeyboardInterrupt
     finally:
-        signal.alarm(0)
+        signal.alarm(left)
 
-
-def check_autoware_output(world):
-    i = 0
-    while True:
-        time.sleep(1)
-        output = subprocess.check_output("rosnode list | wc -l", shell=True)
-        print("[*] Waiting for Autoware nodes " + "." * i + "\r", end="")
-        i += 1
-        world.tick()
-        if output == b"":
-            continue
-        output = int(output.strip())
-        if output >= c.WAIT_AUTOWARE_NUM_NODES:
-            print("Autoware nodes are ready.")
-            break

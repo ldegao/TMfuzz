@@ -28,8 +28,8 @@ echo "Deleted files in $fuzzerdata_dir"
 ./savefile.sh
 
 # Remove directories
-rm -rf output
-rm -rf seed-artifact
+rm -rf ../data/output
+rm -rf ../data/seed-artifact
 
 # Remove Docker containers
 containers=$(docker ps -a --filter ancestor=carla-autoware:improved --format="{{.ID}}")
