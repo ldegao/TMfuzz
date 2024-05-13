@@ -40,3 +40,23 @@ In addition, CARLA (the simulator we use) requires the following:
 ### 1. Install CARLA
 ### 2. Install Autoware-Ai
 ### 3. Install Carla-autoware
+
+## Usage
+
+## Citation
+If you use TM-fuzzer in your research, please cite our paper:
+
+> Shenghao Lin, Fansong Chen, Laile Xi et al. TM-fuzzer: fuzzing autonomous driving systems through traffic management, 03 April 2024, PREPRINT (Version 1) available at Research Square [https://doi.org/10.21203/rs.3.rs-4185312/v1]
+
+BibTeX:
+```
+@inproceedings{Kim_2022, series={CCS ’22},
+   title={DriveFuzz: Discovering Autonomous Driving Bugs through Driving Quality-Guided Fuzzing},
+   url={http://dx.doi.org/10.1145/3548606.3560558},
+   DOI={10.1145/3548606.3560558},
+   booktitle={Proceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security},
+   publisher={ACM},
+   author={Kim, Seulbae and Liu, Major and Rhee, Junghwan “John” and Jeon, Yuseok and Kwon, Yonghwi and Kim, Chung Hwan},
+   year={2022},
+   month=nov, collection={CCS ’22} }
+```
