@@ -241,6 +241,26 @@ class Scenario:
             print("FileNotFoundError")
             os._exit(0)
 
+    def save_trace_point(self, trace_graph_points, param, log_filename):
+        output_filename = log_filename.replace(".json", ".txt")
+        output_path = os.path.join(self.conf.trace_dir, output_filename)
+
+        # Open the file for writing
+        with open(output_path, 'w') as file:
+            for i, trace in enumerate(trace_graph_points):
+                file.write(f'Trace {i + 1}:\n')
+                # Calculate the step for sampling points from each trace
+                step = max(1, len(trace) // param)
+                # Sample points from the trace
+                sampled_points = trace[::step]
+                # If the number of points is less than param, use all points
+                if len(trace) < param:
+                    sampled_points = trace
+
+                # Write the coordinates of each point to the file
+                for point in sampled_points:
+                    file.write(f'({point[0]},{point[1]},{point[2]})\n')
+
     def save_trace(self, trace_graph, log_filename):
         new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])
         trace_graph_points = shift_scale_points_group(np.array(new_trace_graph), (1024, 1024))
@@ -252,6 +272,7 @@ class Scenario:
                 self.conf.trace_dir,
                 log_filename.replace(".json", ".png")
             ), img)
+        self.save_trace_point(trace_graph, 15, log_filename)
         print("save trace done")
 
     def check_error(self, state):
