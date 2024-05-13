@@ -37,11 +37,46 @@ In addition, CARLA (the simulator we use) requires the following:
 
 ## Installation
 
-### 1. Install CARLA
+### 1. Install CARLA 0.9.13
+
+#### Installing 
+Please refer to the official CARLA installation guide:
+[Installing Carla from docker](https://carla.readthedocs.io/en/0.9.13/download/)
+
+Or just try:
+```
+docker pull carlasim/carla:0.9.13
+```
+
+#### Quick-running Carla
+Carla can be run using a wrapper script `run_carla.sh`.
+If you have multiple GPUs installed, it is recommended that
+you "pin" Carla simulator to one of the GPUs (other than #0).
+You can do that by opening `run_carla.sh` and modifying the following:
+```
+-e NVIDIA_VISIBLE_DEVICES={DESIRED_GPU_ID} --gpus 'device={DESIRED_GPU_ID}
+```
+
+To run carla simulator, execute the script:
+```sh
+$ ./run_carla.sh
+```
+It will run carla simulator container, and name it carla-${USER} .
+
+To stop the container, do:
+```sh
+$ docker rm -f carla-${USER}
+```
+
 ### 2. Install Autoware-Ai
+
+Please refer to the official Autoware-Ai installation guide:
+
 ### 3. Install Carla-autoware
 
 ## Usage
+
+## Vioaltion details
 
 ## Citation
 If you use TM-fuzzer in your research, please cite our paper:
