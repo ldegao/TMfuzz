@@ -239,13 +239,9 @@ If you use TM-fuzzer in your research, please cite our paper:
 
 BibTeX:
 ```
-@inproceedings{Kim_2022, series={CCS ’22},
-   title={DriveFuzz: Discovering Autonomous Driving Bugs through Driving Quality-Guided Fuzzing},
-   url={http://dx.doi.org/10.1145/3548606.3560558},
-   DOI={10.1145/3548606.3560558},
-   booktitle={Proceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security},
-   publisher={ACM},
-   author={Kim, Seulbae and Liu, Major and Rhee, Junghwan “John” and Jeon, Yuseok and Kwon, Yonghwi and Kim, Chung Hwan},
-   year={2022},
-   month=nov, collection={CCS ’22} }
+@article{lin2024tm,
+  title={TM-fuzzer: fuzzing autonomous driving systems through traffic management},
+  author={Lin, Shenghao and Chen, Fansong and Xi, Laile and Wang, Gaosheng and Xi, Rongrong and Sun, Yuyan and Zhu, Hongsong},
+  year={2024}
+}
 ```
