@@ -648,6 +648,7 @@ def mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, play
                 continue
             mark_npc(npc, 1 * c.FRAME_RATE)
         # 3. Delete vehicles that stuck too long
+        # Update: According to the reviewer's opinion, the weight is increased here to ensure scene coverage.
         if npc.stuck_duration > (conf.timeout * c.FRAME_RATE / 10):
             # let stuck car go away
             npc_rot = npc.instance.get_transform().rotation
