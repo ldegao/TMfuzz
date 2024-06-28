@@ -4,6 +4,13 @@ An innovative open-source framework designed to improve the safety and reliabili
 
 Developed using insights from cutting-edge research, TM-fuzzer leverages unique techniques for traffic management and scenario diversity to identify critical scenarios that expose potential vulnerabilities in ADS.
 
+
+<p align="center">
+  <img src="gif/B-6.gif" alt="violation_B-6" width="30%">
+  <img src="gif/B-11.gif" alt="violation_B-11" width="30%">
+  <img src="gif/C-4.gif" alt="violation_C-4" width="30%">
+</p>
+
 ## Key Features
 
 **NPC Traffic Management:** TM-fuzzer introduces a novel method for Non-Player Character (NPC) traffic management, which includes dynamic insertion, deletion, and management of NPCs. This approach increases interactions between NPCs and the ego vehicle, enhancing the complexity of test scenarios.
