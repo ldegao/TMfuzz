@@ -1,17 +1,15 @@
 import math
 import os
-import pdb
-
+import random
 import cv2
 import numpy as np
-import random
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
-from sklearn.decomposition import PCA
-from sklearn import metrics
-from sklearn.cluster import KMeans
-from sklearn.cluster import DBSCAN
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from scipy.interpolate import splprep, splev, interp1d
+from torchvision import models, transforms, datasets
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances, silhouette_score
 
 # Global Variables
 colors = [
@@ -19,33 +17,53 @@ colors = [
 ]
 
 
-# CNN Model Initialization
-def create_cnn_model():
-    model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=(256, 256, 4)),
-        MaxPooling2D((2, 2)),
-        Flatten(),
-        Dense(128, activation='relu'),
-    ])
-    return model
+# ResNet-50 Feature Extractor Initialization
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        super(FeatureExtractor, self).__init__()
+        resnet50 = models.resnet50(pretrained=True)
+        self.features = nn.Sequential(*list(resnet50.children())[:-1])  # ?????????
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)  # ???2D??
+        return x
 
 
-# PCA Initialization
-def create_pca():
-    return PCA(n_components=2)
+def compute_wcss(X, labels):
+    k = len(np.unique(labels))
+    centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+    wcss = np.sum([np.sum((X[labels == i] - centroids[i]) ** 2) for i in range(k)])
+    return wcss
 
 
-# DBSCAN Initialization
-def create_dbscan():
-    return DBSCAN(eps=0.5, min_samples=5)
+def compute_inter_cluster_dist(centroids):
+    dist_matrix = pairwise_distances(centroids)
+    k = len(centroids)
+    inter_dist = np.sum(dist_matrix) / (k * (k - 1))
+    return inter_dist
+
+
+def compute_silhouette_loss(X, labels):
+    return -silhouette_score(X, labels)
+
+
+def combined_loss(X, labels, alpha=1.0, beta=1.0):
+    k = len(np.unique(labels))
+    centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+
+    wcss = compute_wcss(X, labels)
+    inter_dist = compute_inter_cluster_dist(centroids)
+    silhouette_loss = compute_silhouette_loss(X, labels)
+
+    loss = wcss - alpha * inter_dist + beta * silhouette_loss
+    return loss
 
 
 # Data Generation
-
 def test_create_trace(num_points=25, noise_level=0.5, max_weight=10):
     start_x = random.uniform(-64, 64)
     start_y = random.uniform(-64, 64)
-    # print(start_x,start_y)
     direction_x = random.choice([random.uniform(-2, -1), random.uniform(1, 2)])
     direction_y = random.choice([random.uniform(-2, -1), random.uniform(1, 2)])
     trace = []
@@ -78,19 +96,15 @@ def shift_float(number, mod_value=256):
 
 
 def shift_scale_points_group(points_group, img_size):
-    # Initialize the min and max values to the values of the first point set
     min_x, min_y = np.min(points_group[0], axis=0)
     max_x, max_y = np.max(points_group[0], axis=0)
 
-    # Iterate over each point set to update the overall min and max values
     for points in points_group:
         min_x = min(min_x, np.min(points[:, 0]))
         min_y = min(min_y, np.min(points[:, 1]))
         max_x = max(max_x, np.max(points[:, 0]))
         max_y = max(max_y, np.max(points[:, 1]))
 
-
-    # Calculate scaling factors
     if (max_x - min_x) == 0:
         scale_x = 1
     else:
@@ -101,22 +115,21 @@ def shift_scale_points_group(points_group, img_size):
     else:
         scale_y = img_size[1] / (max_y - min_y)
 
-    scale = min(scale_x, scale_y) * 0.8  # Scale down slightly to fit within the image
+    scale = min(scale_x, scale_y) * 0.8
 
-    if (max_x - min_x) == 0:
-        scale_x = 1
-    else:
-        scale_x = img_size[0] / (max_x - min_x)
+    # if (max_x - min_x) == 0:
+    #     scale_x = 1
+    # else:
+    #     scale_x = img_size[0] / (max_x - min_x)
+    #
+    # if (max_y - min_y) == 0:
+    #     scale_y = 1
+    # else:
+    #     scale_y = img_size[1] / (max_y - min_y)
 
-    if (max_y - min_y) == 0:
-        scale_y = 1
-    else:
-        scale_y = img_size[1] / (max_y - min_y)
-    # Calculate translation distances
     shift_x = (img_size[0] - (max_x - min_x) * scale) / 2
     shift_y = (img_size[1] - (max_y - min_y) * scale) / 2
 
-    # Apply scaling and translation to each point set
     scaled_and_shifted_groups = []
     for points in points_group:
         points_scaled = (points - np.array([min_x, min_y])) * scale
@@ -130,12 +143,7 @@ def distance(p1, p2):
     return math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
 
 
-
-
-
-# Image Drawing
 def draw_picture(trace, img_size=(1024, 1024), color=(255, 255, 255), base_image=None):
-    # True draw_picture
     arrow_length = 10
     if base_image is None:
         img = np.full((img_size[0], img_size[1], 3), 255, dtype=np.uint8)
@@ -148,7 +156,6 @@ def draw_picture(trace, img_size=(1024, 1024), color=(255, 255, 255), base_image
         if distance(point, last_point) >= arrow_length:
             arrow_start_point = point
     if np.array_equal(last_point, arrow_start_point):
-        # stuck, do not record trace
         return img
     direction_vector = np.subtract(last_point, arrow_start_point)
     direction_vector = direction_vector / np.linalg.norm(direction_vector)
@@ -225,8 +232,8 @@ def remove_duplicate_adjacent_points(x, y, weights):
     for i in range(1, len(x)):
         if x[i] == x[i - 1] and y[i] == y[i - 1]:
             keep[i] = False
-    if len(weights) > 0:
-        return x[keep], y[keep], weights[keep]
+        if len(weights) > 0:
+            return x[keep], y[keep], weights[keep]
     else:
         return x[keep], y[keep], weights
 
@@ -239,10 +246,8 @@ def uniform_sampling(x, y, num_points=25):
     total_points = len(x)
     if total_points < num_points:
         return x, y
-    # Calculate sampling interval
     indices = np.linspace(0, total_points - 1, num_points, dtype=int)
 
-    # Sample using slicing
     return x[indices], y[indices]
 
 
@@ -259,11 +264,13 @@ def uniform_sampling_with_weights(x, y, weights, num_points=25):
     return x[indices], y[indices], weights[indices]
 
 
-# Feature Transformation
-def transform_traces_to_features(model, pca, accumulated_trace_graphs):
+# Feature Transformation using ResNet-50
+def transform_traces_to_features(model, accumulated_trace_graphs):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trace_images = []
+
     for tg in accumulated_trace_graphs:
-        img = np.zeros((256, 256, 4), dtype=np.uint8)
+        img = np.zeros((256, 256, 3), dtype=np.uint8)
         for j, trace in enumerate(tg):
             color = colors[j % len(colors)]
             img = draw_curve(trace, img_size=(256, 256), color=color, base_image=img)
@@ -271,8 +278,19 @@ def transform_traces_to_features(model, pca, accumulated_trace_graphs):
 
     trace_images = np.array(trace_images)
 
-    features = model.predict(trace_images)
-    return features
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    trace_images = torch.stack([transform(img) for img in trace_images]).to(device)
+
+    with torch.no_grad():
+        features = model(trace_images)
+
+    return features.cpu().numpy()
 
 
 # Clustering and Distance Calculation
@@ -285,8 +303,7 @@ def calculate_optimal_clusters(pca_result):
     for n_clusters in n_clusters_range:
         kmeans = KMeans(n_clusters=n_clusters)
         kmeans.fit(pca_result)
-        labels = kmeans.labels_
-        bic_score = metrics.calinski_harabasz_score(pca_result, labels)
+        bic_score = compute_bic(kmeans, pca_result)
         bic_scores.append(bic_score)
     if not bic_scores:
         return 1
@@ -294,8 +311,23 @@ def calculate_optimal_clusters(pca_result):
         return n_clusters_range[np.argmax(bic_scores)]
 
 
-def calculate_distance(model, pca, accumulated_trace_graphs):
-    pca_features = transform_traces_to_features(model, pca, accumulated_trace_graphs)
+def compute_bic(kmeans, X):
+    N, d = X.shape
+    k = kmeans.n_clusters
+    centers = kmeans.cluster_centers_
+    labels = kmeans.labels_
+    m = np.bincount(labels)
+    cl_var = (1.0 / (N - k) / d) * sum([np.sum((X[np.where(labels == i)] - centers[i]) ** 2) for i in range(k)])
+    const_term = 0.5 * k * np.log(N) * (d + 1)
+    bic = np.sum([m[i] * np.log(m[i]) -
+                  m[i] * np.log(N) -
+                  ((m[i] * d) / 2) * np.log(2 * np.pi * cl_var) -
+                  ((m[i] - 1) * d / 2) for i in range(k)]) - const_term
+    return bic
+
+
+def calculate_distance(model, accumulated_trace_graphs):
+    pca_features = transform_traces_to_features(model, accumulated_trace_graphs)
 
     optimal_n_clusters = calculate_optimal_clusters(pca_features)
 
@@ -310,7 +342,6 @@ def calculate_distance(model, pca, accumulated_trace_graphs):
 
 
 def draw_and_save_traces(accumulated_trace_graphs, save_dir):
-    # test draw picture
     for i, trace_graph in enumerate(accumulated_trace_graphs):
         new_trace_graph = np.array([np.array([point[:2] for point in trace]) for trace in trace_graph])
         trace_graph_points = shift_scale_points_group(np.array(new_trace_graph), (1024, 1024))
@@ -319,28 +350,26 @@ def draw_and_save_traces(accumulated_trace_graphs, save_dir):
             color = colors[j % len(colors)]
             img = draw_picture(trace, color=color, base_image=img)
         filename = f"{save_dir}/combined_trace_graph_{i}.png"
-        # if filename not exists, then save
         if not os.path.exists(filename):
             cv2.imwrite(filename, img)
 
 
-# Main Function
 def main():
-    model = create_cnn_model()
-    pca = create_pca()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = FeatureExtractor().to(device)
     accumulated_trace_graphs = []
     for _ in range(10):
         traces = test_create_trace_graph(random.randint(2, 2))
         accumulated_trace_graphs.append(traces)
 
-    distance_list = calculate_distance(model, pca, accumulated_trace_graphs)
+    distance_list = calculate_distance(model, accumulated_trace_graphs)
     print(distance_list)
-    # Save directory for trace graphs
-    save_dir = "trace"  # Replace with your actual save path
+    save_dir = "trace"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     draw_and_save_traces(accumulated_trace_graphs, save_dir)
 
 
 if __name__ == '__main__':
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     main()

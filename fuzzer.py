@@ -17,6 +17,7 @@ from subprocess import Popen, PIPE
 
 import docker
 import numpy as np
+import torch
 from deap import base, tools, algorithms
 import signal
 import traceback
@@ -40,9 +41,9 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 client, world, G, blueprint_library, town_map = None, None, None, None, None
-model = cluster.create_cnn_model()
-pca = cluster.create_pca()
+model = cluster.FeatureExtractor().to(device)
 accumulated_trace_graphs = []
 autoware_container = None
 exec_state = states.ExecState()
@@ -277,7 +278,8 @@ def evaluation(ind: Scenario):
         trace_graph_important = ind.state.trace_graph_important
         accumulated_trace_graphs.append(trace_graph_important)
         if not ind.state.stuck:
-            distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
+            # distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
+            distance_list = cluster.calculate_distance(model, accumulated_trace_graphs)
             distance = distance_list[-1]
         else:
             distance = 0
