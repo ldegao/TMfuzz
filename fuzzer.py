@@ -542,6 +542,8 @@ def main():
     copyreg.pickle(carla.libcarla.Transform, carla_transform_pickle, carla_transform_unpickle)
     copyreg.pickle(carla.libcarla.ActorBlueprint, carla_ActorBlueprint_pickle, carla_ActorBlueprint_unpickle)
 
+    torch.cuda.empty_cache()
+
     conf, town, town_map, exec_state.client, exec_state.world, exec_state.G = init_env()
     world = exec_state.world
     blueprint_library = world.get_blueprint_library()

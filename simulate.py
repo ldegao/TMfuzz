@@ -281,16 +281,16 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             # while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
             #     print("waiting for rosbag to dump data")
             #     time.sleep(1)
-        try:
-            autoware_container.kill()
-        except docker.errors.APIError as e:
-            print("[-] Couldn't kill Autoware container:", e)
-        except UnboundLocalError:
-            print("[-] Autoware container was not launched")
-        except:
-            print("[-] Autoware container was not killed for an unknown reason")
-            print("    Trying manually")
-            os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
+            try:
+                autoware_container.kill()
+            except docker.errors.APIError as e:
+                print("[-] Couldn't kill Autoware container:", e)
+            except UnboundLocalError:
+                print("[-] Autoware container was not launched")
+            except:
+                print("[-] Autoware container was not killed for an unknown reason")
+                print("    Trying manually")
+                os.system("docker rm -f autoware-{}".format(os.getenv("USER")))
         # Finalize simulation
         if not is_carla_running():
             retval = -1

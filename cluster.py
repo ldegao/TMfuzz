@@ -45,7 +45,11 @@ def compute_inter_cluster_dist(centroids):
 
 
 def compute_silhouette_loss(X, labels):
-    return -silhouette_score(X, labels)
+    # Compute silhouette score only if there are at least 2 clusters
+    if len(np.unique(labels)) > 1:
+        return -silhouette_score(X, labels)
+    else:
+        return 0  # Return 0 if only 1 cluster or silhouette score can't be computed
 
 
 def combined_loss(X, labels, alpha=1.0, beta=1.0):
@@ -180,7 +184,6 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
     if len(trace) > 4:
         x = [shift_float(p[0], 256) for p in trace]
         y = [shift_float(p[1], 255) for p in trace]
-
         weights = [p[2] for p in trace]
         x, y, weights = remove_duplicate_adjacent_points(x, y, weights)
         x, y, weights = uniform_sampling_with_weights(x, y, weights)
@@ -189,10 +192,10 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         try:
             tck, u = splprep([x, y], s=0)
         except ValueError:
-            print("ValueError")
+            # print("ValueError")
             return img
         except TypeError:
-            print("TypeError")
+            # print("TypeError")
             return img
         u_new = np.linspace(u.min(), u.max(), 100)
         new_points = splev(u_new, tck, der=0)
@@ -201,11 +204,16 @@ def draw_curve(trace, img_size=(256, 256), color=(255, 255, 255), base_image=Non
         i = 0
         try:
             for new_point in new_points:
+                test_point = new_point
                 img[int(new_point[0]), int(new_point[1]), :3] = color
                 img[int(new_point[0]), int(new_point[1]), 3] = new_weights[i]
+                # print(test_point[0], test_point[1])
+                # print("IndexGood")
                 i = i + 1
         except IndexError:
-            print("IndexError")
+            # print(test_point[0], test_point[1])
+            # print("IndexError")
+            pass
         return img
 
     return img
@@ -295,20 +303,23 @@ def transform_traces_to_features(model, accumulated_trace_graphs):
 
 # Clustering and Distance Calculation
 def calculate_optimal_clusters(pca_result):
-    n_samples = pca_result.shape[0]
+    unique_points = np.unique(pca_result, axis=0)
+    n_samples = len(unique_points)
     if n_samples < 2:
-        return 1
-    n_clusters_range = range(2, min(10, pca_result.shape[0]))
+        return 1  # Return 1 cluster if fewer than 2 unique samples
+
+    # Dynamically adjust the cluster range based on unique points
+    n_clusters_range = range(2, min(10, n_samples + 1))
     bic_scores = []
     for n_clusters in n_clusters_range:
         kmeans = KMeans(n_clusters=n_clusters)
         kmeans.fit(pca_result)
+
+        # Call compute_bic with boundary checks
         bic_score = compute_bic(kmeans, pca_result)
         bic_scores.append(bic_score)
-    if not bic_scores:
-        return 1
-    else:
-        return n_clusters_range[np.argmax(bic_scores)]
+
+    return n_clusters_range[np.argmax(bic_scores)] if bic_scores else 1
 
 
 def compute_bic(kmeans, X):
@@ -317,12 +328,21 @@ def compute_bic(kmeans, X):
     centers = kmeans.cluster_centers_
     labels = kmeans.labels_
     m = np.bincount(labels)
+
+    # Check to avoid division by zero, set BIC to a large number if clustering is not feasible
+    if N <= k:
+        return np.inf  # Return a large BIC value for infeasible clustering
+
+    # Calculate cluster variance
     cl_var = (1.0 / (N - k) / d) * sum([np.sum((X[np.where(labels == i)] - centers[i]) ** 2) for i in range(k)])
     const_term = 0.5 * k * np.log(N) * (d + 1)
-    bic = np.sum([m[i] * np.log(m[i]) -
-                  m[i] * np.log(N) -
-                  ((m[i] * d) / 2) * np.log(2 * np.pi * cl_var) -
-                  ((m[i] - 1) * d / 2) for i in range(k)]) - const_term
+
+    # Ensure the index does not exceed the length of m to avoid IndexError
+    bic = np.sum([
+        m[i] * np.log(m[i]) - m[i] * np.log(N) - ((m[i] * d) / 2) * np.log(2 * np.pi * cl_var) -
+        ((m[i] - 1) * d / 2) if i < len(m) else 0
+        for i in range(k)
+    ]) - const_term
     return bic
 
 
