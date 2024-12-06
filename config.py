@@ -49,6 +49,7 @@ class Config:
         self.trace_dir = None
         self.meta_file = None
         self.error_dir = None
+        self.time_record_dir = None
         self.queue_dir = None
         self.debug = True
 
@@ -100,6 +101,7 @@ class Config:
         self.meta_file = os.path.join(self.out_dir, "meta")
         self.cam_dir = os.path.join(self.out_dir, "camera")
         self.trace_dir = os.path.join(self.out_dir, "trace")
+        self.time_record_dir = os.path.join(self.out_dir, "time_record")
         self.rosbag_dir = os.path.join(self.out_dir, "rosbags")
 
     # def enqueue_seed_scenarios(self):

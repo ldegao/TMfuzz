@@ -9,8 +9,9 @@ new_camera_dir="${save_dir}camera/"
 errors_dir="../data/output/errors/"
 new_errors_dir="${save_dir}errors/"
 
-trace_dir="../data/output/trace/"
-new_trace_dir="${save_dir}trace/"
+npc_dir="../data/output/time_record/"
+new_npc_dir="${save_dir}time_record/"
+
 mkdir -p "$save_dir"
 if [ -d "$camera_dir" ]; then
   if [ "$(ls -A $camera_dir)" ]; then
@@ -34,6 +35,18 @@ if [ -d "$errors_dir" ]; then
   fi
 else
   echo "$errors_dir does not exist. Skipping..."
+fi
+
+if [ -d "$npc_dir" ]; then
+  if [ "$(ls -A $npc_dir)" ]; then
+    mkdir -p "$new_npc_dir"
+    cp "$npc_dir"* "$new_npc_dir"
+    echo "Copied files from $npc_dir to $new_npc_dir"
+  else
+    echo "$npc_dir is empty. Skipping..."
+  fi
+else
+  echo "$npc_dir does not exist. Skipping..."
 fi
 
 if [ -d "$trace_dir" ]; then

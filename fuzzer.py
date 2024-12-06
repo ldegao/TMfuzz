@@ -193,6 +193,7 @@ def ini_hyperparameters(conf, args):
         os.mkdir(conf.rosbag_dir)
         os.mkdir(conf.cam_dir)
         os.mkdir(conf.trace_dir)
+        os.mkdir(conf.time_record_dir)
     except Exception as e:
         print(e)
         sys.exit(-1)
@@ -294,19 +295,25 @@ def evaluation(ind: Scenario):
     try:
         # profiler = cProfile.Profile()
         # profiler.enable()  #
+        ind.state.scenario_id = ind.scenario_id
+        ind.state.generation_id = ind.generation_id
         ret = ind.run_test(exec_state)
         if ret == -1:
             print("[-] Fatal error occurred during test")
             exit(0)
         min_dist = ind.state.min_dist
-        trace_graph_important = ind.state.trace_graph_important
-        accumulated_trace_graphs.append(trace_graph_important)
-        if not ind.state.stuck:
-            # distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
-            distance_list = cluster.calculate_distance(model, accumulated_trace_graphs)
-            distance = distance_list[-1]
-        else:
-            distance = 0
+
+        # trace_graph_important = ind.state.trace_graph_important
+        # accumulated_trace_graphs.append(trace_graph_important)
+        # if not ind.state.stuck:
+        #     # distance_list = cluster.calculate_distance(model, pca, accumulated_trace_graphs)
+        #     distance_list = cluster.calculate_distance(model, accumulated_trace_graphs)
+        #     distance = distance_list[-1]
+        # else:
+        #     distance = 0
+
+        distance = 0
+
         for i in range(1, len(ind.state.speed)):
             acc = abs(ind.state.speed[i] - ind.state.speed[i - 1])
             nova += acc

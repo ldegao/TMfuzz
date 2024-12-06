@@ -20,11 +20,14 @@ import docker
 import networkx as nx
 import numpy as np
 import pygame
+
+from MyDSL.record_info import DSL2Parser
 from npc import NPC
 import config
 import constants as c
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
-    set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler
+    set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler, update_vehicle_file, \
+    write_json_cache_to_file, record_closest_cars
 
 config.set_carla_api_path()
 try:
@@ -58,6 +61,7 @@ def record_min_distance(npc_vehicles, player_loc, state):
             closest_car = npc_vehicle
     if min_dist < state.min_dist:
         state.min_dist = min_dist
+        state.min_dist_frame = state.num_frames
         state.closest_car = closest_car
 
 
@@ -74,6 +78,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     max_wheels_for_non_motorized = 2
     carla_error = False
     state.min_dist = 99999
+    state.min_dist_frame = -1
+    state.DSLScene = None
     player_loc = None
     time_start = time.time()
     npc_now = []
@@ -84,6 +90,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     trace_graph = []
     trace_graph_important = []
     nearby_dict = []
+    json_cache = {}
 
     # for autoware
     frame_gap = 0
@@ -183,6 +190,9 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                                   world)
                 # record the min distance between every two npcs
                 record_min_distance(npc_vehicles, player_loc, state)
+                # record the closest cars and dangerous score every timestep
+                closest_cars_list = record_closest_cars(npc_vehicles, player_loc, state)
+                json_cache = update_vehicle_file(state, closest_cars_list, player, npc_list, json_cache)
                 # mark useless vehicles for any frame
                 mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, exec_state.G, town_map)
 
@@ -202,6 +212,15 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
+                # record DSL
+                if state.num_frames % c.FRAME_RATE == 0:
+                    parser = DSL2Parser(world)
+                    parser.set_ads(player)
+                    parser.get_actors()
+                    parser.previous_scene = state.DSLScene
+                    scene = parser.parse_scene()
+                    state.DSLScene = scene
+                    print(scene)
                 control_npc(agents_now, speed_limit)
                 # delete vehicles which life is end
                 for npc in npc_list:
@@ -254,13 +273,19 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
 
         all_time = time.time() - time_start
         FPS = all_frame / all_time
-        valid_time = valid_frames / FPS
+        if FPS != 0:
+            valid_time = valid_frames / FPS
+        else:
+            valid_time = 0
         logging.info("crashed:%s", state.crashed)
         logging.info("nearby_car:%s", len(nearby_dict))
         logging.info("valid_time/time: %s/%s", valid_time, all_time)
         logging.info("distance:%s", state.distance)
         logging.info("FPS:%s", FPS)
         state.end = True
+
+        # save npc json
+        write_json_cache_to_file(conf, state, json_cache)
 
         if exec_state.proc_state:
             exec_state.proc_state.terminate()
@@ -277,10 +302,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             time.sleep(1)
             os.system("rosnode kill /recorder_video_top")
             time.sleep(1)
-            # os.system("rosnode kill /recorder_bag")
-            # while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
-            #     print("waiting for rosbag to dump data")
-            #     time.sleep(1)
+            os.system("rosnode kill /recorder_bag")
+            while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
+                print("waiting for rosbag to dump data")
+                time.sleep(1)
             try:
                 autoware_container.kill()
             except docker.errors.APIError as e:

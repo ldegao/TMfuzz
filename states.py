@@ -15,6 +15,8 @@ class ExecState:
         self.elapsed_time = 0
         self.end = False
         self.proc_state = None
+        self.generation_id = -1
+        self.scenario_id = -1
 
 
 class ScenarioState:
@@ -38,6 +40,8 @@ class ScenarioState:
         self.num_frames = 0
         self.elapsed_time = 0
         self.end = False
+        self.generation_id = -1
+        self.scenario_id = -1
 
         self.other = None
         self.closest_car = None
@@ -75,6 +79,7 @@ class ScenarioState:
         self.yaw_rate_list = []
         self.lat_speed_list = []
         self.lon_speed_list = []
+
 
         self.min_dist = 99998
 
