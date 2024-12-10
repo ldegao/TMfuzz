@@ -17,6 +17,40 @@ except ModuleNotFoundError as e:
 from MyDSL.TTC import TTC, TTC_with_zone
 
 
+def record_DSL_data(state, world, town_map, player, FRAME_RATE, sampling_rate):
+    try:
+        # Parse the scene
+        parser = DSL2Parser(world, town_map, sampling_rate)
+        parser.set_ads(player)
+        parser.get_actors()
+        parser.previous_scene = state.DSLScene
+        scene = parser.parse_scene()
+    except Exception as e:
+        # If an error occurs, use a default empty scene
+        print(f"Error parsing scene: {e}")
+        scene = {
+            "Road": {},  # Default empty road information
+            "Environment": {},  # Default empty environment information
+            "NPCs": {},  # No NPCs
+            "ADS": {}  # No ADS behavior
+        }
+
+    # Update the state with the parsed or default scene
+    state.DSLScene = scene
+
+    # Step 1: Create an in-memory JSON buffer if not exists
+    if not hasattr(state, "json_data_buffer"):
+        state.json_data_buffer = []  # Initialize the JSON data buffer
+
+    # Step 2: Add the scene with timestamp to the memory buffer
+    timestamp = state.num_frames / FRAME_RATE
+    scene_with_timestamp = {
+        "timestamp": timestamp,
+        "scene": scene
+    }
+    state.json_data_buffer.append(scene_with_timestamp)
+
+
 def is_lane_reachable(current_wp, target_wp):
     """
     Check if the target waypoint is reachable by sequential lane changes from the current waypoint.
@@ -72,7 +106,7 @@ def is_lane_reachable(current_wp, target_wp):
     return False
 
 
-def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval=0.5, debug=False):
+def determine_moving_restricted_zone(vehicle, map, max_time=5, sampling_time_interval=0.5, debug=False):
     """
     Determine the nearest restricted zone the vehicle is moving towards based on its velocity and heading.
 
@@ -89,8 +123,7 @@ def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval
     # Get vehicle's location, velocity, rotation, and map
     location = vehicle.get_location()
     velocity = vehicle.get_velocity()
-    world = vehicle.get_world()
-    carla_map = world.get_map()
+    carla_map = map
     rotation = vehicle.get_transform().rotation
 
     # Get the current waypoint
@@ -261,60 +294,6 @@ def steer_to_angle_radians(control_steer, max_steer_angle=45):
     steering_angle_degrees = control_steer * max_steer_angle
     return steering_angle_degrees
 
-
-def determine_moving_lane(vehicle, max_time=5, sampling_time_interval=0.5):
-    """
-    Determine which lane the vehicle is moving towards based on its velocity.
-
-    Parameters:
-        vehicle (carla.Vehicle): The vehicle actor.
-        max_time (float): The maximum time (in seconds) to sample along the velocity direction.
-        sampling_time_interval (float): Time interval (in seconds) for sampling points.
-
-    Returns:
-        carla.Waypoint: The waypoint of the lane the vehicle is moving towards.
-    """
-    # Get vehicle's location, velocity, and map
-    location = vehicle.get_location()
-    velocity = vehicle.get_velocity()
-    world = vehicle.get_world()
-    carla_map = world.get_map()
-    current_waypoint = carla_map.get_waypoint(location)
-
-    # Get the current lane_id and road_id
-    lane_id = current_waypoint.lane_id
-    road_id = current_waypoint.road_id
-
-    # Calculate the velocity vector and magnitude
-    velocity_vector = np.array([velocity.x, velocity.y])
-    velocity_magnitude = np.linalg.norm(velocity_vector)
-
-    # If the vehicle is stationary or nearly stationary, return the current waypoint
-    if velocity_magnitude < 1e-3:
-        return current_waypoint
-
-    # Normalize the velocity direction vector
-    velocity_direction = velocity_vector / velocity_magnitude
-
-    # Sample points based on time intervals
-    forward_points = [
-        carla.Location(
-            x=location.x + velocity_direction[0] * velocity_magnitude * t,
-            y=location.y + velocity_direction[1] * velocity_magnitude * t,
-            z=location.z
-        )
-        for t in np.arange(0, max_time, sampling_time_interval)
-    ]
-
-    # Iterate through the sampled points and find the first valid lane
-    for point in forward_points:
-        waypoint = carla_map.get_waypoint(point, project_to_road=False)
-        if waypoint and waypoint.lane_id != lane_id:
-            if waypoint.road_id == road_id:
-                return waypoint
-            return waypoint
-    # If no new lane is found in the sampled points, return the current waypoint
-    return current_waypoint
 
 
 def get_heading_direction(yaw):
@@ -497,8 +476,9 @@ def get_road_slope(waypoint):
 
 
 class DSL2Parser:
-    def __init__(self, world, sampling_rate=1):
+    def __init__(self, world, town_map, sampling_rate=1):
         self.world = world
+        self.map = town_map
         self.npcs = []
         self.ads = None
         self.previous_scene = None
@@ -533,7 +513,7 @@ class DSL2Parser:
 
     def get_road_info(self):
         """Extract road information including RoadType, Lanes, RoadSlope, and SpeedLimit."""
-        map_data = self.world.get_map()
+        map_data = self.map
         waypoint = map_data.get_waypoint(self.ads.get_location())
         lanes = get_all_lanes(waypoint)
         road_info = {
@@ -557,7 +537,7 @@ class DSL2Parser:
     def get_lane_departure_status(self, vehicle):
         """Calculate the lane departure status."""
         vehicle_location = vehicle.get_location()
-        waypoint = self.world.get_map().get_waypoint(vehicle_location)
+        waypoint = self.map.get_waypoint(vehicle_location)
         lane_center = waypoint.transform.location
         lane_departure_distance = np.linalg.norm([
             vehicle_location.x - lane_center.x,
@@ -575,13 +555,13 @@ class DSL2Parser:
 
     def get_speed_limit(self):
         """Get the speed limit near the ADS vehicle."""
-        waypoint = self.world.get_map().get_waypoint(self.ads.get_location())
+        waypoint = self.map.get_waypoint(self.ads.get_location())
         return waypoint.get_speed_limit()
 
     def get_environment_info(self):
         """Extract environment information."""
         weather = self.world.get_weather()
-        waypoint = self.world.get_map().get_waypoint(self.ads.get_location())
+        waypoint = self.map.get_waypoint(self.ads.get_location())
         road_condition = "wet" if weather.precipitation > 0 else "dry"
         if weather.fog_density > 50:
             road_condition = "icy"
@@ -591,12 +571,64 @@ class DSL2Parser:
             "TrafficSignals": get_traffic_light_for_waypoint(self.world, waypoint)
         }
 
+    def determine_moving_lane(self, vehicle, max_time=3, sampling_time_interval=1):
+        """
+        Determine which lane the vehicle is moving towards based on its velocity.
+
+        Parameters:
+            vehicle (carla.Vehicle): The vehicle actor.
+            max_time (float): The maximum time (in seconds) to sample along the velocity direction.
+            sampling_time_interval (float): Time interval (in seconds) for sampling points.
+
+        Returns:
+            carla.Waypoint: The waypoint of the lane the vehicle is moving towards.
+        """
+        # Get vehicle's location, velocity, and map
+        location = vehicle.get_location()
+        velocity = vehicle.get_velocity()
+        carla_map = self.map
+        current_waypoint = carla_map.get_waypoint(location)
+
+        # Get the current lane_id and road_id
+        lane_id = current_waypoint.lane_id
+        road_id = current_waypoint.road_id
+
+        # Calculate the velocity vector and magnitude
+        velocity_vector = np.array([velocity.x, velocity.y])
+        velocity_magnitude = np.linalg.norm(velocity_vector)
+
+        # If the vehicle is stationary or nearly stationary, return the current waypoint
+        if velocity_magnitude < 1e-3:
+            return current_waypoint
+
+        # Normalize the velocity direction vector
+        velocity_direction = velocity_vector / velocity_magnitude
+
+        # Sample points based on time intervals
+        forward_points = [
+            carla.Location(
+                x=location.x + velocity_direction[0] * velocity_magnitude * t,
+                y=location.y + velocity_direction[1] * velocity_magnitude * t,
+                z=location.z
+            )
+            for t in np.arange(0, max_time, sampling_time_interval)
+        ]
+
+        # Iterate through the sampled points and find the first valid lane
+        for point in forward_points:
+            waypoint = carla_map.get_waypoint(point, project_to_road=False)
+            if waypoint and waypoint.lane_id != lane_id:
+                if waypoint.road_id == road_id:
+                    return waypoint
+                return waypoint
+        # If no new lane is found in the sampled points, return the current waypoint
+        return current_waypoint
     def get_npc_behavior(self, npc):
         """Extract the behavior of a single NPC."""
         transform = npc.get_transform()
         velocity = npc.get_velocity()
         control = npc.get_control()
-        lane = self.world.get_map().get_waypoint(transform.location)
+        lane = self.map.get_waypoint(transform.location)
         steeringAngle = steer_to_angle_radians(control.steer, get_max_steer_angle(npc))
         # Determine the type of NPC
         npc_type = "motorized vehicle"
@@ -611,7 +643,7 @@ class DSL2Parser:
             acceleration = (speed - previous_behavior["Speed"]) / self.sampling_rate
         else:
             acceleration = 0
-        MovingToWhichWaypoint = determine_moving_lane(npc)
+        MovingToWhichWaypoint = self.determine_moving_lane(npc)
         # Behavior information
         behavior = {
             "Type": npc_type,
@@ -636,7 +668,7 @@ class DSL2Parser:
         transform = self.ads.get_transform()
         velocity = self.ads.get_velocity()
         control = self.ads.get_control()
-        lane = self.world.get_map().get_waypoint(transform.location)
+        lane = self.map.get_waypoint(transform.location)
         steeringAngle = steer_to_angle_radians(control.steer, get_max_steer_angle(self.ads))
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
         if self.previous_scene:
@@ -647,7 +679,7 @@ class DSL2Parser:
             acceleration = (speed - previous_behavior["Speed"]) / self.sampling_rate
         else:
             acceleration = 0
-        MovingToWhichWaypoint = determine_moving_lane(self.ads)
+        MovingToWhichWaypoint = self.determine_moving_lane(self.ads)
         # Behavior information
         behavior = {
             "ID": self.ads.id,
@@ -826,6 +858,7 @@ class DSL2Parser:
         # Step 1: Get the restricted zone waypoint
         restricted_zone_wp = determine_moving_restricted_zone(
             vehicle=self.ads,
+            map=self.map,
             max_time=5,
             sampling_time_interval=0.5,
             debug=debug
@@ -942,22 +975,3 @@ class DSL2Parser:
         # Map the angle to one of the 8 categories
         index = int((angle + 22.5) % 360 // 45)
         return directions[index]
-
-
-# Example usage
-if __name__ == "__main__":
-    client = carla.Client("localhost", 5000)
-    client.set_timeout(10.0)
-    world = client.get_world()
-    settings = world.get_settings()
-    settings.synchronous_mode = True
-    world.apply_settings(settings)
-    DSLScene = None
-    vehicles = world.get_actors().filter("*vehicle.*")
-    ads_vehicle = vehicles[0]
-    parser = DSL2Parser(world)
-    parser.set_ads(ads_vehicle)
-    parser.get_actors()
-    parser.previous_scene = DSLScene
-    scene = parser.parse_scene()
-    DSLScene = scene

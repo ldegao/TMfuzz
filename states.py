@@ -61,6 +61,7 @@ class ScenarioState:
         self.speeding = False
         self.speed = []
         self.speed_lim = []
+        self.json_data_buffer = []
         self.on_red = False
         self.on_red_speed = []
         self.red_violation = False
