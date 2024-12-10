@@ -304,4 +304,3 @@ def TTC_with_zone(samples, zone, toreturn='dataframe'):
         return samples
     elif toreturn == 'values':
         return result
-

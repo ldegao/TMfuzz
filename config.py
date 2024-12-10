@@ -85,7 +85,7 @@ class Config:
             "lane": True,
             "crash": True,
             "stuck": True,
-            "red": True,
+            "red": False,
             "other": True,
         }
 
