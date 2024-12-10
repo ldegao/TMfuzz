@@ -17,7 +17,62 @@ except ModuleNotFoundError as e:
 from MyDSL.TTC import TTC, TTC_with_zone
 
 
-def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval=0.5):
+def is_lane_reachable(current_wp, target_wp):
+    """
+    Check if the target waypoint is reachable by sequential lane changes from the current waypoint.
+
+    Parameters:
+        current_wp (carla.Waypoint): The current waypoint.
+        target_wp (carla.Waypoint): The target waypoint.
+
+    Returns:
+        bool: True if the target waypoint is reachable, False otherwise.
+    """
+    # Check if the two waypoints are on the same road
+    if current_wp.road_id != target_wp.road_id:
+        return False
+
+    # Determine the lane change direction
+    if current_wp.lane_id < target_wp.lane_id:
+        # Move to the right
+        direction = "right"
+    elif current_wp.lane_id > target_wp.lane_id:
+        # Move to the left
+        direction = "left"
+    else:
+        # Same lane
+        return True
+
+    # Start from the current waypoint
+    wp = current_wp
+
+    while wp:
+        # Get the next waypoint based on direction
+        if direction == "right":
+            next_wp = wp.get_right_lane()
+            allowed_change = wp.lane_change in [carla.LaneChange.Right, carla.LaneChange.Both]
+        elif direction == "left":
+            next_wp = wp.get_left_lane()
+            allowed_change = wp.lane_change in [carla.LaneChange.Left, carla.LaneChange.Both]
+        else:
+            break
+
+        # If lane change is not allowed or there's a discontinuity, return False
+        if not allowed_change or not next_wp or abs(next_wp.lane_id - wp.lane_id) != 1:
+            return False
+
+        # Check if we have reached the target lane
+        if next_wp.lane_id == target_wp.lane_id:
+            return True
+
+        # Move to the next waypoint
+        wp = next_wp
+
+    # If the loop ends without finding the target lane, return False
+    return False
+
+
+def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval=0.5, debug=False):
     """
     Determine the nearest restricted zone the vehicle is moving towards based on its velocity and heading.
 
@@ -25,10 +80,12 @@ def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval
         vehicle (carla.Vehicle): The vehicle actor.
         max_time (float): Maximum time (in seconds) to sample along the velocity and heading direction.
         sampling_time_interval (float): Time interval (in seconds) for sampling points.
+        debug (bool): If True, prints debug information.
 
     Returns:
         carla.Waypoint or None: The waypoint of the nearest restricted zone, or None if none found.
     """
+
     # Get vehicle's location, velocity, rotation, and map
     location = vehicle.get_location()
     velocity = vehicle.get_velocity()
@@ -36,15 +93,15 @@ def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval
     carla_map = world.get_map()
     rotation = vehicle.get_transform().rotation
 
+    # Get the current waypoint
+    current_waypoint = carla_map.get_waypoint(location)
+
     # Calculate velocity vector and magnitude
     velocity_vector = np.array([velocity.x, velocity.y])
     velocity_magnitude = np.linalg.norm(velocity_vector)
 
     # Normalize velocity direction
-    if velocity_magnitude > 0:
-        velocity_direction = velocity_vector / velocity_magnitude
-    else:
-        velocity_direction = np.array([0, 0])  # Stationary vehicle
+    velocity_direction = velocity_vector / velocity_magnitude if velocity_magnitude > 0 else np.array([0, 0])
 
     # Calculate heading direction
     hx, hy = get_heading_direction(rotation.yaw)
@@ -67,12 +124,34 @@ def determine_moving_restricted_zone(vehicle, max_time=5, sampling_time_interval
         for t in np.arange(0, max_time, sampling_time_interval)
     ]
 
-    # Find the first restricted zone along the sampled points
-    for point in forward_points + heading_points:
+    # Iterate through sampled points
+    for idx, point in enumerate(forward_points + heading_points):
         waypoint = carla_map.get_waypoint(point, project_to_road=False)
-        if waypoint and waypoint.lane_type != carla.LaneType.Driving:
-            return waypoint  # Return the first restricted zone waypoint
+        if not waypoint:
+            continue  # Skip if there's no valid waypoint
 
+        # Check if the lane is of Driving type
+        if waypoint.lane_type != carla.LaneType.Driving:
+            if debug:
+                print("Debug: Restricted Zone Found (Not 'Driving' Lane)")
+                print(
+                    f" - Location: ({waypoint.transform.location.x}, {waypoint.transform.location.y}, {waypoint.transform.location.z})")
+                print(f" - Lane ID: {waypoint.lane_id}, Road ID: {waypoint.road_id}")
+                print(f" - Lane Type: {waypoint.lane_type}")
+            return waypoint  # Return the restricted zone waypoint
+
+        # Check if the lane is not reachable
+        if not is_lane_reachable(current_waypoint, waypoint):
+            if debug:
+                print("Debug: Restricted Zone Found (Not Reachable)")
+                print(
+                    f" - Location: ({waypoint.transform.location.x}, {waypoint.transform.location.y}, {waypoint.transform.location.z})")
+                print(f" - Lane ID: {waypoint.lane_id}, Road ID: {waypoint.road_id}")
+            return waypoint  # Return the restricted zone waypoint
+
+    # No restricted zone found
+    if debug:
+        print("Debug: No restricted zones found.")
     return None  # No restricted zone found
 
 
@@ -86,7 +165,7 @@ def get_traffic_light_for_waypoint(world, waypoint, search_distance=10.0):
         search_distance (float): The search radius for finding nearby traffic lights.
 
     Returns:
-        carla.TrafficLight or None: The nearest traffic light affecting the waypoint, or None if none found.
+        str: The state of the closest traffic light, or "None" if no traffic light is found.
     """
     # Get all traffic lights in the world
     traffic_lights = world.get_actors().filter("*traffic_light*")
@@ -107,8 +186,10 @@ def get_traffic_light_for_waypoint(world, waypoint, search_distance=10.0):
         if distance < closest_distance:
             closest_distance = distance
             closest_traffic_light = traffic_light
-
-    return closest_traffic_light
+    if not closest_traffic_light:
+        return "None"
+    else:
+        return str(closest_traffic_light.state)
 
 
 def determine_prior_action(current_behavior, previous_behavior):
@@ -416,11 +497,12 @@ def get_road_slope(waypoint):
 
 
 class DSL2Parser:
-    def __init__(self, world):
+    def __init__(self, world, sampling_rate=1):
         self.world = world
         self.npcs = []
         self.ads = None
         self.previous_scene = None
+        self.sampling_rate = sampling_rate
 
     def set_ads(self, ads_vehicle):
         """Set the ADS vehicle."""
@@ -526,7 +608,7 @@ class DSL2Parser:
         else:
             previous_behavior = None
         if previous_behavior:
-            acceleration = (speed - previous_behavior["Speed"])
+            acceleration = (speed - previous_behavior["Speed"]) / self.sampling_rate
         else:
             acceleration = 0
         MovingToWhichWaypoint = determine_moving_lane(npc)
@@ -562,7 +644,7 @@ class DSL2Parser:
         else:
             previous_behavior = None
         if previous_behavior:
-            acceleration = (speed - previous_behavior["Speed"])
+            acceleration = (speed - previous_behavior["Speed"]) / self.sampling_rate
         else:
             acceleration = 0
         MovingToWhichWaypoint = determine_moving_lane(self.ads)
@@ -578,7 +660,7 @@ class DSL2Parser:
             "Accelerate": "Accelerating" if acceleration > 1 else "Braking" if acceleration < -1 else "constant-speed",
             "LaneDeparture": self.get_lane_departure_status(self.ads),
             "TTCToNPCs": self.calculate_ttc_to_npcs(),
-            "TTCToRestrictedZone": self.calculate_ttc_to_restricted_zone()
+            "TTCToRestrictedZone": self.calculate_ttc_to_restricted_zones()
         }
 
         behavior["PriorAction"] = determine_prior_action(behavior, previous_behavior)
@@ -633,29 +715,53 @@ class DSL2Parser:
         # Return the classified TTC value
         return classify_ttc(ttc)
 
-    def calculate_ttc_to_npcs(self):
+    def calculate_ttc_to_npcs(self, debug=False):
         """
         Calculate the minimum Time-to-Collision (TTC) between the ADS and any NPC using the TTC function.
+
+        Parameters:
+            debug (bool): If True, prints debug information.
+
+        Returns:
+            str: Classification of the minimum TTC as per the defined categories.
         """
+        # If there are no NPCs, return "very long"
         if not self.npcs:
+            if debug:
+                print("Debug: No NPCs detected.")
             return "very long"
+
         # ADS (ego vehicle) information
         ego_location = self.ads.get_location()
         ego_velocity = self.ads.get_velocity()
         ego_transform = self.ads.get_transform()
         ego_heading = get_heading_direction(ego_transform.rotation.yaw)
-        ego_length = get_vehicle_dimensions(self.ads)[0]
-        ego_width = get_vehicle_dimensions(self.ads)[1]
+        ego_length, ego_width = get_vehicle_dimensions(self.ads)
+
+        # Debug: Print ADS vehicle information
+        if debug:
+            print("Debug: ADS Vehicle Info:")
+            print(f" - Location: (x={ego_location.x}, y={ego_location.y})")
+            print(f" - Velocity: (vx={ego_velocity.x}, vy={ego_velocity.y})")
+            print(f" - Heading: (hx={ego_heading[0]}, hy={ego_heading[1]})")
+            print(f" - Dimensions: Length={ego_length}, Width={ego_width}")
 
         # Prepare data for all NPCs
         npc_data = []
-        for npc in self.npcs:
+        for idx, npc in enumerate(self.npcs):
             npc_location = npc.get_location()
             npc_velocity = npc.get_velocity()
             npc_transform = npc.get_transform()
             npc_heading = get_heading_direction(npc_transform.rotation.yaw)
-            npc_length = get_vehicle_dimensions(npc)[0]
-            npc_width = get_vehicle_dimensions(npc)[1]
+            npc_length, npc_width = get_vehicle_dimensions(npc)
+
+            # Debug: Print NPC information
+            if debug:
+                print(f"Debug: NPC {idx + 1} Info:")
+                print(f" - Location: (x={npc_location.x}, y={npc_location.y})")
+                print(f" - Velocity: (vx={npc_velocity.x}, vy={npc_velocity.y})")
+                print(f" - Heading: (hx={npc_heading[0]}, hy={npc_heading[1]})")
+                print(f" - Dimensions: Length={npc_length}, Width={npc_width}")
 
             # Append ego and NPC information to the data list
             npc_data.append({
@@ -680,70 +786,139 @@ class DSL2Parser:
         # Convert to pandas DataFrame
         samples = pd.DataFrame(npc_data)
 
+        # Debug: Print samples DataFrame
+        if debug:
+            print("Debug: Samples DataFrame:")
+            print(samples)
+
         # Compute TTC values
         ttc_results = TTC(samples, 'values')
 
+        # Debug: Print TTC results
+        if debug:
+            print("Debug: TTC Results:")
+            print(ttc_results)
+
         # Find the minimum TTC value
         min_ttc = ttc_results.min() if len(ttc_results) > 0 else float('inf')
-        # Return the classification based on the minimum TTC
-        return classify_ttc(min_ttc)
 
-    def calculate_ttc_to_restricted_zone(self):
+        # Debug: Print the minimum TTC value
+        if debug:
+            print(f"Debug: Minimum TTC: {min_ttc}")
+
+        # Return the classification based on the minimum TTC
+        classified_ttc = classify_ttc(min_ttc)
+        if debug:
+            print(f"Debug: Classified TTC: {classified_ttc}")
+        return classified_ttc
+
+    def calculate_ttc_to_restricted_zones(self, debug=False):
         """
-        Calculate Time-to-Collision (TTC) between the ADS and the nearest restricted zone.
+        Calculate Time-to-Collision (TTC) between the ADS and restricted zones,
+        including specific restricted waypoints and nearby obstacles.
+
+        Parameters:
+            debug (bool): If True, prints debug information.
 
         Returns:
             str: Classification of the TTC as per the defined categories.
         """
-        # Get the nearest restricted zone waypoint
+        # Step 1: Get the restricted zone waypoint
         restricted_zone_wp = determine_moving_restricted_zone(
             vehicle=self.ads,
             max_time=5,
-            sampling_time_interval=0.5
+            sampling_time_interval=0.5,
+            debug=debug
         )
 
-        # If no restricted zone is found, return "very long"
-        if not restricted_zone_wp:
-            return "very long"
+        # Step 2: Get obstacles from the environment
+        world = self.ads.get_world()
+        obstacle_objects = world.get_environment_objects(carla.CityObjectLabel.Walls) + \
+                           world.get_environment_objects(carla.CityObjectLabel.Poles)
 
-        # Get ADS parameters
-        vehicle_location = self.ads.get_location()
-        vehicle_velocity = self.ads.get_velocity()
-        vehicle_rotation = self.ads.get_transform().rotation
-        vehicle_length, vehicle_width = get_vehicle_dimensions(self.ads)
+        # Filter obstacles within 20 meters
+        nearby_obstacles = [
+            obstacle for obstacle in obstacle_objects
+            if self.ads.get_location().distance(obstacle.transform.location) <= 20
+        ]
 
-        # Calculate heading direction
-        hx_i, hy_i = get_heading_direction(vehicle_rotation.yaw)
+        # Step 3: Get ADS parameters
+        ego_location = self.ads.get_location()
+        ego_velocity = self.ads.get_velocity()
+        ego_rotation = self.ads.get_transform().rotation
+        ego_length, ego_width = get_vehicle_dimensions(self.ads)
+        ego_heading = get_heading_direction(ego_rotation.yaw)
 
-        # Build the samples DataFrame
+        # Step 4: Compute TTC for restricted zone waypoint
         samples = pd.DataFrame({
-            "x_i": [vehicle_location.x],
-            "y_i": [vehicle_location.y],
-            "vx_i": [vehicle_velocity.x],
-            "vy_i": [vehicle_velocity.y],
-            "hx_i": [hx_i],
-            "hy_i": [hy_i],
-            "length_i": [vehicle_length],
-            "width_i": [vehicle_width],
+            "x_i": [ego_location.x],
+            "y_i": [ego_location.y],
+            "vx_i": [ego_velocity.x],
+            "vy_i": [ego_velocity.y],
+            "hx_i": [ego_heading[0]],
+            "hy_i": [ego_heading[1]],
+            "length_i": [ego_length],
+            "width_i": [ego_width],
         })
+        ttc_values = []
 
-        # Compute TTC using the restricted zone waypoint
-        ttc_values = TTC_with_zone(samples, restricted_zone_wp, toreturn="values")
+        if restricted_zone_wp:
+            ttc_zone = TTC_with_zone(samples, restricted_zone_wp, toreturn="values")[0]
+            ttc_values.append((ttc_zone, restricted_zone_wp))  # Append tuple of TTC and source
 
-        # # Debug: Print detailed information
-        # print(
-        #     f"Restricted Zone Info: Position: ({restricted_zone_wp.transform.location.x}, {restricted_zone_wp.transform.location.y})")
-        # print(
-        #     f" - Heading (Yaw): {restricted_zone_wp.transform.rotation.yaw}, Lane Width: {restricted_zone_wp.lane_width}")
-        # print("TTC Values:", ttc_values)
+        # Step 5: Compute TTC for nearby obstacles
+        npc_data = []
+        for obstacle in nearby_obstacles:
+            obstacle_location = obstacle.bounding_box.location
+            obstacle_rotation = obstacle.bounding_box.rotation
+            hx, hy = get_heading_direction(obstacle_rotation.yaw)
+            npc_data.append({
+                'x_i': ego_location.x,
+                'y_i': ego_location.y,
+                'vx_i': ego_velocity.x,
+                'vy_i': ego_velocity.y,
+                'hx_i': ego_heading[0],
+                'hy_i': ego_heading[1],
+                'length_i': ego_length,
+                'width_i': ego_width,
+                'x_j': obstacle_location.x,
+                'y_j': obstacle_location.y,
+                'vx_j': 0,
+                'vy_j': 0,
+                'hx_j': hx,
+                'hy_j': hy,
+                'length_j': obstacle.bounding_box.extent.x * 2,
+                'width_j': obstacle.bounding_box.extent.y * 2
+            })
 
-        # Get the minimum TTC value
-        min_ttc = ttc_values[0]
+        # Convert to DataFrame and compute TTC for obstacles
+        if npc_data:
+            npc_samples = pd.DataFrame(npc_data)
+            ttc_obstacles = TTC(npc_samples, 'values')
+            for ttc, obstacle in zip(ttc_obstacles, nearby_obstacles):
+                ttc_values.append((ttc, obstacle))  # Append tuple of TTC and source
 
-        # # Debug: Print the final minimum TTC
-        # print(f"Final Minimum TTC to Restricted Zone: {min_ttc}")
+        # Step 6: Get the minimum TTC value and its source
+        if ttc_values:
+            min_ttc, min_source = min(ttc_values, key=lambda x: x[0])
+        else:
+            min_ttc, min_source = float('inf'), None
 
-        # Return classified TTC
+        # Debug: Print only key information for min_ttc
+        if debug and min_source:
+            if isinstance(min_source, carla.Waypoint):
+                print("Debug: Final Minimum TTC Source (Waypoint)")
+                print(f" - TTC: {min_ttc}")
+                print(f" - Position: ({min_source.transform.location.x}, {min_source.transform.location.y})")
+                print(f" - Lane Width: {min_source.lane_width}")
+            elif isinstance(min_source, carla.EnvironmentObject):
+                print("Debug: Final Minimum TTC Source (Obstacle)")
+                print(f" - TTC: {min_ttc}")
+                print(f" - Obstacle ID: {min_source.id}")
+                print(f" - Location: ({min_source.bounding_box.location.x}, {min_source.bounding_box.location.y})")
+                print(f" - Extent: ({min_source.bounding_box.extent.x}, {min_source.bounding_box.extent.y})")
+
+        # Step 7: Return classified TTC
         return classify_ttc(min_ttc) if min_ttc != float('inf') else "very long"
 
     def get_side_to_ads(self, npc):

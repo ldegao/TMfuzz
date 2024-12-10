@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import fcntl
 import glob
+import json
 import logging
 # Python packages
 import os
@@ -194,7 +195,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                 closest_cars_list = record_closest_cars(npc_vehicles, player_loc, state)
                 json_cache = update_vehicle_file(state, closest_cars_list, player, npc_list, json_cache)
                 # mark useless vehicles for any frame
-                mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, exec_state.G, town_map)
+                mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, exec_state.G,
+                                 town_map)
 
                 # add old vehicles for any frame
                 found_frame = add_old_npc(npc_list, npc_vehicles, npc_now, agents_now, conf,
@@ -212,15 +214,69 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
+                sampling_rate = 5
                 # record DSL
-                if state.num_frames % c.FRAME_RATE == 0:
-                    parser = DSL2Parser(world)
-                    parser.set_ads(player)
-                    parser.get_actors()
-                    parser.previous_scene = state.DSLScene
-                    scene = parser.parse_scene()
+                if state.num_frames % (c.FRAME_RATE // sampling_rate) == 0:
+                    try:
+                        # Parse the scene
+                        parser = DSL2Parser(world, sampling_rate)
+                        parser.set_ads(player)
+                        parser.get_actors()
+                        parser.previous_scene = state.DSLScene
+                        scene = parser.parse_scene()
+                    except Exception as e:
+                        # Return a default empty scene to avoid breaking later logic
+                        print(f"Error parsing scene: {e}")
+                        scene = {
+                            "Road": {},  # Default empty road information
+                            "Environment": {},  # Default empty environment information
+                            "NPCs": {},  # No NPCs
+                            "ADS": {}  # No ADS behavior
+                        }
+
+                        # Update the state with the parsed or default scene
                     state.DSLScene = scene
-                    print(scene)
+
+                    # Step 1: Define the output directory and file name
+                    try:
+                        output_dir = "./data/output/queue"
+                        # Check if the directory exists and create it if necessary
+                        os.makedirs(output_dir, exist_ok=True)
+                    except Exception as e:
+                        print(f"Error creating output directory '{output_dir}': {e}")
+                        traceback.print_exc()  # Print detailed exception traceback
+
+                    try:
+                        # Step 2: Generate the file name based on frame number
+                        output_file = os.path.join(output_dir, "SceneDSL_gid:{}_sid:{}.json".format(state.generation_id,
+                                                                                                    state.scenario_id))
+                        # Step 3: Save the scene to the file
+                        try:
+                            # Include timestamp in the scene data
+                            timestamp = state.num_frames / c.FRAME_RATE
+                            scene_with_timestamp = {
+                                "timestamp": timestamp,
+                                "scene": scene
+                            }
+
+                            # Check if the output file can be accessed
+                            with open(output_file, "a") as f:
+                                # Append the new scene data as a JSON object
+                                f.write(
+                                    json.dumps(scene_with_timestamp, indent=4) + ",\n")  # Add a newline for readability
+                        except FileNotFoundError:
+                            print(f"Error: FileNotFoundError. Unable to open or create the file '{output_file}'")
+                            traceback.print_exc()
+                        except PermissionError:
+                            print(f"Error: PermissionError. No write permission for the file '{output_file}'")
+                            traceback.print_exc()
+                        except Exception as e:
+                            print(f"Error saving scene to '{output_file}': {e}")
+                            traceback.print_exc()
+                    except Exception as e:
+                        print(f"Error during file operations: {e}")
+                        traceback.print_exc()
+
                 control_npc(agents_now, speed_limit)
                 # delete vehicles which life is end
                 for npc in npc_list:
@@ -302,10 +358,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             time.sleep(1)
             os.system("rosnode kill /recorder_video_top")
             time.sleep(1)
-            os.system("rosnode kill /recorder_bag")
-            while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
-                print("waiting for rosbag to dump data")
-                time.sleep(1)
+            # os.system("rosnode kill /recorder_bag")
+            # while os.path.exists(f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag.active"):
+            #     print("waiting for rosbag to dump data")
+            #     time.sleep(1)
             try:
                 autoware_container.kill()
             except docker.errors.APIError as e:
@@ -492,9 +548,9 @@ def add_new_car(npc_list, npc_vehicles, npc_now, add_car_frame, agents_now, auto
                 if repeat_times > 100 or state.stuck_duration > 100:
                     # add a fake npc
                     new_npc = NPC(npc_type=None,
-                                    spawn_point=None, speed=None,
-                                    npc_id=len(npc_list),
-                                    ego_loc=player_loc)
+                                  spawn_point=None, speed=None,
+                                  npc_id=len(npc_list),
+                                  ego_loc=player_loc)
                     new_npc.instance = None
                     npc_list.append(new_npc)
                     new_npc.fresh = False
@@ -561,17 +617,17 @@ def add_new_car(npc_list, npc_vehicles, npc_now, add_car_frame, agents_now, auto
                     # add a immobile car
                     bg_speed = 0
                     new_npc = NPC(npc_type=c.VEHICLE,
-                                    spawn_point=npc_spawn_point, speed=bg_speed,
-                                    npc_id=len(npc_list),
-                                    ego_loc=player_loc,
-                                    npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
+                                  spawn_point=npc_spawn_point, speed=bg_speed,
+                                  npc_id=len(npc_list),
+                                  ego_loc=player_loc,
+                                  npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
                 else:
                     bg_speed = random.uniform(0 / 3.6, 20 / 3.6)
                     new_npc = NPC(npc_type=c.VEHICLE,
-                                    spawn_point=npc_spawn_point, speed=bg_speed,
-                                    npc_id=len(npc_list),
-                                    ego_loc=player_loc,
-                                    npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
+                                  spawn_point=npc_spawn_point, speed=bg_speed,
+                                  npc_id=len(npc_list),
+                                  ego_loc=player_loc,
+                                  npc_bp=npc_bp, spawn_stuck_frame=state.stuck_duration)
                 # do safe check
                 flag = True
                 for npc in npc_now:
