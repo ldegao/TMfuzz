@@ -27,6 +27,7 @@ import cProfile
 import logging
 import os
 import pdb
+import pstats
 import sys
 import time
 import random
@@ -293,8 +294,8 @@ def evaluation(ind: Scenario):
     signal.alarm(15 * 60)  # timeout after 15 min
     print("timeout after 15 min")
     try:
-        # profiler = cProfile.Profile()
-        # profiler.enable()  #
+        profiler = cProfile.Profile()
+        profiler.enable()  #
         ind.state.scenario_id = ind.scenario_id
         ind.state.generation_id = ind.generation_id
         ret = ind.run_test(exec_state)
@@ -320,9 +321,11 @@ def evaluation(ind: Scenario):
         nova = nova / len(ind.state.speed)
         # reload scenario state
         ind.state = states.ScenarioState()
-        # profiler.disable()  #
-        # profiler.dump_stats('profile_stats.prof')
-        # pdb.set_trace()
+        stats = pstats.Stats(profiler)
+        stats.strip_dirs()
+        stats.sort_stats('cumulative')
+        stats.print_stats(10)
+
     except Exception as e:
         if e == TimeoutError:
             print("[-] simulation hanging. abort.")

@@ -22,7 +22,8 @@ import networkx as nx
 import numpy as np
 import pygame
 
-from MyDSL.record_info import DSL2Parser
+from MyDSL.record_info import DSL2Parser, record_DSL_data
+from MyDSL.utils import initialize_vehicle_from_json, save_json_to_file
 from npc import NPC
 import config
 import constants as c
@@ -140,7 +141,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             state.sim_start_time = snapshot0.timestamp.platform_timestamp
             state.num_frames = 0
             state.elapsed_time = 0
-            frame_speed_lim_changed = 0
             s_started = False
             # actual monitoring of the driving simulation begins here
             print("START DRIVING: {} {}".format(first_frame_id, first_sim_time))
@@ -159,12 +159,45 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             # simulate start here
             state.end = False
             time_start = time.time()
+
+            # player_loc = player.get_transform().location
+            # player_rot = player.get_transform().rotation
+            # test_json_data = {
+            #     "transform": {
+            #         "location": {
+            #             "x": player_loc.x,
+            #             "y": player_loc.y,
+            #             "z": player_loc.z
+            #         },
+            #         "rotation": {
+            #             "pitch": player_rot.pitch,
+            #             "yaw": player_rot.yaw,
+            #             "roll": player_rot.roll
+            #         }
+            #     },
+            #     "velocity": {
+            #         "x": 5,
+            #         "y": 5,
+            #         "z": 5
+            #     },
+            #     "control": {
+            #         "throttle": 0.5,
+            #         "steer": 0,
+            #         "brake": 0,
+            #         "hand_brake": False,
+            #         "reverse": False,
+            #         "gear": 1
+            #     }
+            # }
+            # initialize_vehicle_from_json(test_json_data,player)
+
             while True:
                 # world tick
                 if conf.agent_type == c.BEHAVIOR:
                     world.tick()
-                # Use sampling frequency of FPS  for precision
+                # Use sampling frequency of FPS for precision
                 clock.tick(c.FRAME_RATE)
+
                 # Get frame info
                 snapshot = world.get_snapshot()
                 cur_frame_id = snapshot.frame
@@ -215,67 +248,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
                 sampling_rate = 5
-                # record DSL
-                if state.num_frames % (c.FRAME_RATE // sampling_rate) == 0:
-                    try:
-                        # Parse the scene
-                        parser = DSL2Parser(world, sampling_rate)
-                        parser.set_ads(player)
-                        parser.get_actors()
-                        parser.previous_scene = state.DSLScene
-                        scene = parser.parse_scene()
-                    except Exception as e:
-                        # Return a default empty scene to avoid breaking later logic
-                        print(f"Error parsing scene: {e}")
-                        scene = {
-                            "Road": {},  # Default empty road information
-                            "Environment": {},  # Default empty environment information
-                            "NPCs": {},  # No NPCs
-                            "ADS": {}  # No ADS behavior
-                        }
-
-                        # Update the state with the parsed or default scene
-                    state.DSLScene = scene
-
-                    # Step 1: Define the output directory and file name
-                    try:
-                        output_dir = "./data/output/queue"
-                        # Check if the directory exists and create it if necessary
-                        os.makedirs(output_dir, exist_ok=True)
-                    except Exception as e:
-                        print(f"Error creating output directory '{output_dir}': {e}")
-                        traceback.print_exc()  # Print detailed exception traceback
-
-                    try:
-                        # Step 2: Generate the file name based on frame number
-                        output_file = os.path.join(output_dir, "SceneDSL_gid:{}_sid:{}.json".format(state.generation_id,
-                                                                                                    state.scenario_id))
-                        # Step 3: Save the scene to the file
-                        try:
-                            # Include timestamp in the scene data
-                            timestamp = state.num_frames / c.FRAME_RATE
-                            scene_with_timestamp = {
-                                "timestamp": timestamp,
-                                "scene": scene
-                            }
-
-                            # Check if the output file can be accessed
-                            with open(output_file, "a") as f:
-                                # Append the new scene data as a JSON object
-                                f.write(
-                                    json.dumps(scene_with_timestamp, indent=4) + ",\n")  # Add a newline for readability
-                        except FileNotFoundError:
-                            print(f"Error: FileNotFoundError. Unable to open or create the file '{output_file}'")
-                            traceback.print_exc()
-                        except PermissionError:
-                            print(f"Error: PermissionError. No write permission for the file '{output_file}'")
-                            traceback.print_exc()
-                        except Exception as e:
-                            print(f"Error saving scene to '{output_file}': {e}")
-                            traceback.print_exc()
-                    except Exception as e:
-                        print(f"Error during file operations: {e}")
-                        traceback.print_exc()
 
                 control_npc(agents_now, speed_limit)
                 # delete vehicles which life is end
@@ -285,6 +257,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                             delete_npc(npc, npc_vehicles, sensors, agents_now, npc_now)
                         elif npc.death_time > 0:
                             npc.death_time -= 1
+
+                # record DSL
+                if state.num_frames % (c.FRAME_RATE // sampling_rate) == 0:
+                    record_DSL_data(state, world,town_map, player, c.FRAME_RATE, sampling_rate)
 
                 # record track of every npc_vehicle
                 if break_flag:
@@ -342,6 +318,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
 
         # save npc json
         write_json_cache_to_file(conf, state, json_cache)
+
+        # save the DSLScene
+        # save_json_to_file(json_data, output_dir, generation_id, scenario_id)
+        save_json_to_file(state.json_data_buffer, conf.out_dir, state.generation_id, state.scenario_id)
 
         if exec_state.proc_state:
             exec_state.proc_state.terminate()
