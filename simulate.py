@@ -23,7 +23,7 @@ import numpy as np
 import pygame
 
 from MyDSL.record_info import DSL2Parser, record_DSL_data
-from MyDSL.utils import initialize_vehicle_from_json, save_json_to_file
+from MyDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
 from npc import NPC
 import config
 import constants as c
@@ -195,8 +195,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                 # world tick
                 if conf.agent_type == c.BEHAVIOR:
                     world.tick()
-                # Use sampling frequency of FPS for precision
-                clock.tick(c.FRAME_RATE)
+                # Use sampling frequency of FPS * 2 for precision
+                clock.tick(c.FRAME_RATE * 2)
 
                 # Get frame info
                 snapshot = world.get_snapshot()
@@ -320,8 +320,29 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         write_json_cache_to_file(conf, state, json_cache)
 
         # save the DSLScene
-        # save_json_to_file(json_data, output_dir, generation_id, scenario_id)
-        save_json_to_file(state.json_data_buffer, conf.out_dir, state.generation_id, state.scenario_id)
+        SceneDSL_file = save_json_to_file(state.json_data_buffer, conf.out_dir, state.generation_id, state.scenario_id)
+
+        dangerous_frame_first = find_timestamp(SceneDSL_file, find_first=False, find_first_first=True)
+        dangerous_frame_last = find_timestamp(SceneDSL_file, find_first=False, find_first_first=False)
+        # save the dangerous_frame at the same dir in SceneDSL_file
+
+        dangerous_frame_file = SceneDSL_file.replace(".json", "_dangerous_frame.json")
+
+        # Check if the file exists and is not empty before reading it
+        if os.path.exists(dangerous_frame_file) and os.path.getsize(dangerous_frame_file) > 0:
+            with open(dangerous_frame_file, 'r') as f:
+                data = json.load(f)
+        else:
+            # If the file doesn't exist or is empty, initialize an empty data structure
+            data = {}
+
+        # Add the dangerous_frame information
+        data["dangerous_frame_first"] = dangerous_frame_first
+        data["dangerous_frame_last"] = dangerous_frame_last
+
+        # Save the updated data back to the file
+        with open(dangerous_frame_file, 'w') as f:
+            json.dump(data, f, indent=4)
 
         if exec_state.proc_state:
             exec_state.proc_state.terminate()

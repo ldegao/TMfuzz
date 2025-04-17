@@ -269,7 +269,7 @@ def set_args():
                                  help="density of vehicles,1.0 means add 1 bg vehicle per 1 sec")
     argument_parser.add_argument("--town", default=3, type=int,
                                  help="Test on a specific town (e.g., '--town 3' forces Town03)")
-    argument_parser.add_argument("--timeout", default="60", type=int,
+    argument_parser.add_argument("--timeout", default="30", type=int,
                                  help="Seconds to timeout if vehicle is not moving")
     argument_parser.add_argument("--no-speed-check", action="store_true")
     argument_parser.add_argument("--no-lane-check", action="store_true")
@@ -299,6 +299,12 @@ def evaluation(ind: Scenario):
         ind.state.scenario_id = ind.scenario_id
         ind.state.generation_id = ind.generation_id
         ret = ind.run_test(exec_state)
+        stats = pstats.Stats(profiler)
+        stats.strip_dirs()
+        stats.sort_stats('cumulative')
+        stats.print_stats(50)
+        # pdb.set_trace()
+
         if ret == -1:
             print("[-] Fatal error occurred during test")
             exit(0)
@@ -321,10 +327,7 @@ def evaluation(ind: Scenario):
         nova = nova / len(ind.state.speed)
         # reload scenario state
         ind.state = states.ScenarioState()
-        stats = pstats.Stats(profiler)
-        stats.strip_dirs()
-        stats.sort_stats('cumulative')
-        stats.print_stats(10)
+
 
     except Exception as e:
         if e == TimeoutError:

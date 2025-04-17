@@ -162,7 +162,8 @@ def determine_moving_restricted_zone(vehicle, map, max_time=5, sampling_time_int
         waypoint = carla_map.get_waypoint(point, project_to_road=False)
         if not waypoint:
             continue  # Skip if there's no valid waypoint
-
+        if waypoint.is_junction:
+            continue  # Skip junction temporary
         # Check if the lane is of Driving type
         if waypoint.lane_type != carla.LaneType.Driving:
             if debug:
@@ -293,7 +294,6 @@ def steer_to_angle_radians(control_steer, max_steer_angle=45):
     control_steer = max(-1.0, min(1.0, control_steer))
     steering_angle_degrees = control_steer * max_steer_angle
     return steering_angle_degrees
-
 
 
 def get_heading_direction(yaw):
@@ -623,6 +623,7 @@ class DSL2Parser:
                 return waypoint
         # If no new lane is found in the sampled points, return the current waypoint
         return current_waypoint
+
     def get_npc_behavior(self, npc):
         """Extract the behavior of a single NPC."""
         transform = npc.get_transform()
@@ -864,16 +865,16 @@ class DSL2Parser:
             debug=debug
         )
 
-        # Step 2: Get obstacles from the environment
-        world = self.ads.get_world()
-        obstacle_objects = world.get_environment_objects(carla.CityObjectLabel.Walls) + \
-                           world.get_environment_objects(carla.CityObjectLabel.Poles)
-
-        # Filter obstacles within 20 meters
-        nearby_obstacles = [
-            obstacle for obstacle in obstacle_objects
-            if self.ads.get_location().distance(obstacle.transform.location) <= 20
-        ]
+        # # Step 2: Get obstacles from the environment
+        # world = self.ads.get_world()
+        # obstacle_objects = world.get_environment_objects(carla.CityObjectLabel.Walls) + \
+        #                    world.get_environment_objects(carla.CityObjectLabel.Poles)
+        #
+        # # Filter obstacles within 20 meters
+        # nearby_obstacles = [
+        #     obstacle for obstacle in obstacle_objects
+        #     if self.ads.get_location().distance(obstacle.transform.location) <= 20
+        # ]
 
         # Step 3: Get ADS parameters
         ego_location = self.ads.get_location()
@@ -898,38 +899,38 @@ class DSL2Parser:
         if restricted_zone_wp:
             ttc_zone = TTC_with_zone(samples, restricted_zone_wp, toreturn="values")[0]
             ttc_values.append((ttc_zone, restricted_zone_wp))  # Append tuple of TTC and source
-
-        # Step 5: Compute TTC for nearby obstacles
-        npc_data = []
-        for obstacle in nearby_obstacles:
-            obstacle_location = obstacle.bounding_box.location
-            obstacle_rotation = obstacle.bounding_box.rotation
-            hx, hy = get_heading_direction(obstacle_rotation.yaw)
-            npc_data.append({
-                'x_i': ego_location.x,
-                'y_i': ego_location.y,
-                'vx_i': ego_velocity.x,
-                'vy_i': ego_velocity.y,
-                'hx_i': ego_heading[0],
-                'hy_i': ego_heading[1],
-                'length_i': ego_length,
-                'width_i': ego_width,
-                'x_j': obstacle_location.x,
-                'y_j': obstacle_location.y,
-                'vx_j': 0,
-                'vy_j': 0,
-                'hx_j': hx,
-                'hy_j': hy,
-                'length_j': obstacle.bounding_box.extent.x * 2,
-                'width_j': obstacle.bounding_box.extent.y * 2
-            })
-
-        # Convert to DataFrame and compute TTC for obstacles
-        if npc_data:
-            npc_samples = pd.DataFrame(npc_data)
-            ttc_obstacles = TTC(npc_samples, 'values')
-            for ttc, obstacle in zip(ttc_obstacles, nearby_obstacles):
-                ttc_values.append((ttc, obstacle))  # Append tuple of TTC and source
+        #
+        # # Step 5: Compute TTC for nearby obstacles
+        # npc_data = []
+        # for obstacle in nearby_obstacles:
+        #     obstacle_location = obstacle.bounding_box.location
+        #     obstacle_rotation = obstacle.bounding_box.rotation
+        #     hx, hy = get_heading_direction(obstacle_rotation.yaw)
+        #     npc_data.append({
+        #         'x_i': ego_location.x,
+        #         'y_i': ego_location.y,
+        #         'vx_i': ego_velocity.x,
+        #         'vy_i': ego_velocity.y,
+        #         'hx_i': ego_heading[0],
+        #         'hy_i': ego_heading[1],
+        #         'length_i': ego_length,
+        #         'width_i': ego_width,
+        #         'x_j': obstacle_location.x,
+        #         'y_j': obstacle_location.y,
+        #         'vx_j': 0,
+        #         'vy_j': 0,
+        #         'hx_j': hx,
+        #         'hy_j': hy,
+        #         'length_j': obstacle.bounding_box.extent.x * 2,
+        #         'width_j': obstacle.bounding_box.extent.y * 2
+        #     })
+        #
+        # # Convert to DataFrame and compute TTC for obstacles
+        # if npc_data:
+        #     npc_samples = pd.DataFrame(npc_data)
+        #     ttc_obstacles = TTC(npc_samples, 'values')
+        #     for ttc, obstacle in zip(ttc_obstacles, nearby_obstacles):
+        #         ttc_values.append((ttc, obstacle))  # Append tuple of TTC and source
 
         # Step 6: Get the minimum TTC value and its source
         if ttc_values:
