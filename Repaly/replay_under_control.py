@@ -28,7 +28,7 @@ def main():
     argparser = argparse.ArgumentParser(description=__doc__)
     argparser.add_argument('--host', metavar='H', default='127.0.0.1',
                            help='IP of the host server (default: 127.0.0.1)')
-    argparser.add_argument('-p', '--port', metavar='P', default=5000, type=int,
+    argparser.add_argument('-p', '--port', metavar='P', default=4000, type=int,
                            help='TCP port to listen to (default: 2000)')
     argparser.add_argument('-s', '--start', metavar='S', default=5.0, type=float,
                            help='starting time (default: 5.0)')

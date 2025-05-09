@@ -10,6 +10,7 @@ import glob
 import os
 import re
 import sys
+import shutil
 
 try:
     sys.path.append(glob.glob('../../carla/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
@@ -35,7 +36,7 @@ def main():
     argparser.add_argument(
         '-p', '--port',
         metavar='P',
-        default=5000,
+        default=4000,
         type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(
@@ -53,8 +54,8 @@ def main():
     argparser.add_argument(
         '-f', '--recorder-filename',
         metavar='F',
-        default="test1.log",
-        help='recorder filename (test1.log)')
+        default="2025-04-22-19-58-17.log",
+        help='recorder filename')
     argparser.add_argument(
         '-c', '--camera',
         metavar='C',
@@ -74,32 +75,43 @@ def main():
     args = argparser.parse_args()
 
     try:
-
         client = carla.Client(args.host, args.port)
         client.set_timeout(60.0)
+        log_name = args.recorder_filename
+        src_log_path = os.path.abspath("../data/"+log_name)
+        dest_dir = os.path.expanduser("~/carla_data")
+        dest_log_path = os.path.join(dest_dir, log_name)
 
-        # set the time factor for the replayer
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+
+        if os.path.exists(dest_log_path):
+            os.remove(dest_log_path)
+        shutil.copy(src_log_path, dest_log_path)
+        print(f"[INFO] Copyed log file to {dest_log_path}")
+
         client.set_replayer_time_factor(args.time_factor)
 
-        # set to ignore the hero vehicles or not
-        # client.set_replayer_ignore_hero(args.ignore_hero)
-        # client.set_replayer_ignore_hero(True)
-        actors_info = client.show_recorder_file_info("test1.log", True)
+        actors_info = client.show_recorder_file_info(log_name, True)
         hero_id = None
-        jump = 0
-        check = 0
+
+
         for line in actors_info.split("\n"):
             if "vehicle." in line:
-                if jump < check:
-                    jump += 1
-                    continue
                 parts = line.split()
                 print(parts)
                 hero_id = int(re.findall(r'\d+', parts[1])[0])
                 break
-        print(client.replay_file(args.recorder_filename, args.start, args.duration, hero_id))
+
+        if hero_id is None:
+            hero_id = 0
+            print("[WARN] No hero vehicle found, using follow_id = 0.")
+
+        print(client.replay_file(log_name, args.start, args.duration, hero_id))
+
     finally:
         pass
+
 
 
 if __name__ == '__main__':

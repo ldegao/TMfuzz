@@ -118,62 +118,94 @@ class SpeedPlanner:
     def plan_speed_profile_astar(self):
         N_t = math.ceil(self.T / self.dt) + 1
         N_s = math.ceil(self.s_total / self.ds) + 1
-        print(f"[A*] Grid size: N_t = {N_t}, N_s = {N_s}")
-
         times = np.linspace(0, self.T, N_t)
         s_vals = np.linspace(0, self.s_total, N_s)
         obs_penalty = self.compute_obstacle_penalty(times, s_vals)
 
-        visited = np.full((N_t, N_s), False)
-        came_from = [[(-1, -1) for _ in range(N_s)] for _ in range(N_t)]  # fixed
-        cost = np.full((N_t, N_s), np.inf)
+        max_attempts = 10
+        base_max_speed = self.s_total / (self.T * 0.5)
+        base_ds_range = 3
 
-        heap = []
-        cost[0, 0] = 0
-        heapq.heappush(heap, (self.heuristic(0, 0, self.T, self.s_total), 0, 0, 0))  # (f, g, t_idx, s_idx)
+        for attempt in range(max_attempts + 1):
+            print(f"[A*] Attempt {attempt + 1}...")
+            visited = np.full((N_t, N_s), False)
+            came_from = [[(-1, -1) for _ in range(N_s)] for _ in range(N_t)]
+            cost = np.full((N_t, N_s), np.inf)
 
-        while heap:
-            f, g, t_idx, s_idx = heapq.heappop(heap)
-            if visited[t_idx, s_idx]:
-                continue
-            visited[t_idx, s_idx] = True
+            heap = []
+            cost[0, 0] = 0
+            heapq.heappush(heap, (self.heuristic(0, 0, self.T, self.s_total), 0, 0, 0))
 
-            if t_idx == N_t - 1 and s_idx == N_s - 1:
-                break
+            if attempt < max_attempts:
+                max_speed = base_max_speed * (1 + 0.5 * attempt)  # ????50%
+                ds_limit = base_ds_range + attempt  # ????
+                optimized = True
+            else:
+                print("[A*] Fallback to Standard A* Mode.")
+                optimized = False
 
-            # Expand neighbors (next time step, step forward in space)
-            for ds_step in [0, 1, 2]:  # 0: hold, 1: slow, 2: faster
-                s_next_idx = s_idx + ds_step
-                t_next_idx = t_idx + 1
-                if t_next_idx >= N_t or s_next_idx >= N_s:
+            while heap:
+                f, g, t_idx, s_idx = heapq.heappop(heap)
+                if visited[t_idx, s_idx]:
                     continue
+                visited[t_idx, s_idx] = True
 
-                if obs_penalty[t_next_idx, s_next_idx] >= self.penalty_factor:
-                    continue  # Blocked by obstacle
+                if optimized:
+                    if s_idx >= N_s - 1 and t_idx >= N_t - 2:
+                        break
+                    ds_range = range(1, ds_limit)
+                else:
+                    if t_idx == N_t - 1 and s_idx == N_s - 1:
+                        break
+                    ds_range = range(1, N_s - s_idx)
 
-                s_now = s_vals[s_idx]
-                s_next = s_vals[s_next_idx]
-                speed = (s_next - s_now) / self.dt
-                v_desired = self.s_total / self.T
-                accel = speed / self.dt
-                transition_cost = ((speed - v_desired) ** 2 + self.lambda_acc * accel ** 2) * self.dt
-                new_g = g + transition_cost + obs_penalty[t_next_idx, s_next_idx]
-                h = self.heuristic(times[t_next_idx], s_vals[s_next_idx], self.T, self.s_total)
-                if new_g < cost[t_next_idx, s_next_idx]:
-                    cost[t_next_idx, s_next_idx] = new_g
-                    came_from[t_next_idx][s_next_idx] = (t_idx, s_idx)  # fixed
-                    heapq.heappush(heap, (new_g + h, new_g, t_next_idx, s_next_idx))
+                for ds_step in ds_range:
+                    s_next_idx = s_idx + ds_step
+                    t_next_idx = t_idx + 1
+                    if t_next_idx >= N_t or s_next_idx >= N_s:
+                        continue
 
-        # Reconstruct path
-        if not visited[N_t - 1, N_s - 1]:
-            print("[A*] Failed to find feasible path.")
+                    if obs_penalty[t_next_idx, s_next_idx] >= self.penalty_factor:
+                        continue
+
+                    s_now = s_vals[s_idx]
+                    s_next = s_vals[s_next_idx]
+                    speed = (s_next - s_now) / self.dt
+
+                    if optimized:
+                        if speed < 0 or speed > max_speed:
+                            continue
+                        accel = speed / self.dt
+                        transition_cost = self.lambda_acc * accel ** 2 * self.dt
+                    else:
+                        transition_cost = 1
+
+                    new_g = g + transition_cost + obs_penalty[t_next_idx, s_next_idx]
+                    h = self.heuristic(times[t_next_idx], s_vals[s_next_idx], self.T, self.s_total)
+
+                    if new_g < cost[t_next_idx, s_next_idx]:
+                        cost[t_next_idx, s_next_idx] = new_g
+                        came_from[t_next_idx][s_next_idx] = (t_idx, s_idx)
+                        heapq.heappush(heap, (new_g + h, new_g, t_next_idx, s_next_idx))
+
+            if optimized:
+                goal_candidates = [(t_idx, s_idx) for t_idx in range(N_t - 3, N_t) for s_idx in range(N_s - 3, N_s) if
+                                   visited[t_idx, s_idx]]
+                if goal_candidates:
+                    t_idx, s_idx = min(goal_candidates, key=lambda x: cost[x[0], x[1]])
+                    break
+            else:
+                if visited[N_t - 1, N_s - 1]:
+                    t_idx, s_idx = N_t - 1, N_s - 1
+                    break
+        else:
+            print("[A*] Failed after all attempts.")
             return None, obs_penalty
 
         path = []
-        t_idx, s_idx = N_t - 1, N_s - 1
         while t_idx >= 0 and s_idx >= 0:
             path.append((times[t_idx], s_vals[s_idx]))
-            t_idx, s_idx = came_from[t_idx][s_idx]  # fixed
+            t_idx, s_idx = came_from[t_idx][s_idx]
             if t_idx == -1 or s_idx == -1:
                 break
 
@@ -230,7 +262,7 @@ def run_speed_planner(trajectory, trajectory_velocity, obstacles, ego, dt=0.2, d
     dp_profile, _ = sp.plan_speed_profile_astar()
     if dp_profile is None:
         print("[RESULT] No feasible trajectory found.")
-        return None, None, None, None, None, None
+        return sp, times, trajectory_velocity, None, None, None
 
     # velocity profile from dp_profile
     s_vals_new = [pt[1] for pt in dp_profile]
@@ -245,9 +277,15 @@ def run_speed_planner(trajectory, trajectory_velocity, obstacles, ego, dt=0.2, d
 
 
 def plot_velocity_comparison(times, v_vals_hero, smoothed_t, v_vals_sp):
+    if smoothed_t is None or v_vals_sp is None:
+        print("[WARN] No replanned velocity available, skipping replanned curve.")
+
     plt.figure(figsize=(10, 6))
     plt.plot(times, v_vals_hero, 'b-', label='Original Velocity (HeroPlanner)')
-    plt.plot(smoothed_t, v_vals_sp, 'g--', label='Replanned Velocity (SpeedPlanner)')
+
+    if smoothed_t is not None and v_vals_sp is not None:
+        plt.plot(smoothed_t, v_vals_sp, 'g--', label='Replanned Velocity (SpeedPlanner)')
+
     plt.xlabel("Time (s)")
     plt.ylabel("Speed (m/s)")
     plt.title("Speed-Time (ST) Comparison")
@@ -260,22 +298,36 @@ def plot_velocity_comparison(times, v_vals_hero, smoothed_t, v_vals_sp):
 def plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity):
     plt.figure(figsize=(10, 6))
 
-    for i, (t0, t1, s_start, s_end) in enumerate(sp.st_regions):
-        plt.fill_between([t0, t1], s_start, s_end, color='red', alpha=0.3,
-                         label='Obstacle' if i == 0 else "")
+    # Check if sp and its st_regions are valid
+    if sp is not None and sp.st_regions is not None:
+        for i, (t0, t1, s_start, s_end) in enumerate(sp.st_regions):
+            plt.fill_between([t0, t1], s_start, s_end, color='red', alpha=0.3,
+                             label='Obstacle' if i == 0 else "")
+    else:
+        print("[WARN] No ST regions available to plot obstacles.")
 
-    dp_profile_t = [pt[0] for pt in dp_profile]
-    dp_profile_s = [pt[1] for pt in dp_profile]
-    plt.plot(dp_profile_t, dp_profile_s, 'b--', label='DP Profile')
-    plt.plot(smoothed_t, dp_profile_s, 'g-', label='Smoothed Profile')
+    # Plot DP Profile if available
+    if dp_profile is not None:
+        dp_profile_t = [pt[0] for pt in dp_profile]
+        dp_profile_s = [pt[1] for pt in dp_profile]
+        plt.plot(dp_profile_t, dp_profile_s, 'b--', label='DP Profile')
 
-    s_hero = 0.0
-    hero_st = [(0.0, 0.0)]
-    for i in range(1, len(trajectory_velocity)):
-        s_hero += trajectory_velocity[i] * 0.025
-        hero_st.append((i * 0.025, s_hero))
-    hero_t, hero_s = zip(*hero_st)
-    plt.plot(hero_t, hero_s, 'm-.', label='Original ST (HeroPlanner)')
+        if smoothed_t is not None:
+            plt.plot(smoothed_t, dp_profile_s, 'g-', label='Smoothed Profile')
+    else:
+        print("[WARN] No DP profile available to plot.")
+
+    # Plot HeroPlanner original ST curve
+    if trajectory_velocity is not None and len(trajectory_velocity) > 0:
+        s_hero = 0.0
+        hero_st = [(0.0, 0.0)]
+        for i in range(1, len(trajectory_velocity)):
+            s_hero += trajectory_velocity[i] * 0.025
+            hero_st.append((i * 0.025, s_hero))
+        hero_t, hero_s = zip(*hero_st)
+        plt.plot(hero_t, hero_s, 'm-.', label='Original ST (HeroPlanner)')
+    else:
+        print("[WARN] No trajectory velocity data to plot HeroPlanner ST curve.")
 
     plt.xlabel("Time (s)")
     plt.ylabel("Path Position (s)")
@@ -287,10 +339,10 @@ def plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity):
 
 
 def main():
-    client = carla.Client('localhost', 5000)
+    client = carla.Client('localhost', 4000)
     client.set_timeout(10.0)
-    recorder_path = "/home/carla/.config/Epic/CarlaUE4/Saved/test1.log"
-    frame_id = 25
+    recorder_path = "2025-04-22-19-58-17.log"
+    frame_id = 200
 
     planner = HeroPlanner(client, recorder_path, frame_id)
     apf, trajectory, trajectory_velocity = planner.plan()
@@ -298,13 +350,13 @@ def main():
     sp, times, v_vals_hero, smoothed_t, v_vals_sp, dp_profile = run_speed_planner(
         trajectory, trajectory_velocity, apf.obstacles, ego=apf.ego,
     )
+    plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity)
+
 
     if dp_profile is None:
         return
 
     plot_velocity_comparison(times, v_vals_hero, smoothed_t, v_vals_sp)
-    plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity)
-
 
 if __name__ == '__main__':
     main()

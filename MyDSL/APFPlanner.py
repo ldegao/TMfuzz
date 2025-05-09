@@ -22,7 +22,7 @@ class APFPlanner:
         self.T = self.L / self.V
 
         self.ETA_ATT_NORM = 0.02  # Reduced for realism
-        self.ETA_REP_OB_NORM = 1
+        self.ETA_REP_OB_NORM = 2
         self.ETA_REP_EDGE_NORM = 0.1
         self.D0_NORM = 3.0
         self.STEP_LENGTH_NORM = 0.1
@@ -153,13 +153,25 @@ class APFPlanner:
             # --- Determine danger mode ---
             t_safe = 1.6
             danger_mode = False
+            # print(f"[DEBUG] current_position (local): {current_position}")
+            current_global_pos = local_to_global(current_position, self.road_origin, self.lane_angle)
+            # print(f"[DEBUG] current_position (global): {current_global_pos}")
+
             for obs in self.obstacles:
-                obs_vec = np.array([obs.x - current_position[0], obs.y - current_position[1]])
+                obs_local_pos = np.array([obs.x, obs.y])
+                obs_vec = obs_local_pos - current_position
                 dist = np.linalg.norm(obs_vec)
+
+                obs_global_pos = local_to_global(obs_local_pos, self.road_origin, self.lane_angle)
+                # print(f"[DEBUG] Obstacle at (local): {obs_local_pos}, (global): {obs_global_pos}, distance: {dist:.2f}")
+
                 if dist < self.d0:
+                    # print(f"[DEBUG] -> Obstacle too close! dist={dist:.2f}")
                     if hasattr(obs, 'compute_ttc'):
                         ttc = obs.compute_ttc(self.ego)
+                        # print(f"[DEBUG] -> TTC = {ttc:.2f}")
                         if 0 < ttc < t_safe:
+                            # print(f"[DEBUG] -> Danger! TTC={ttc:.2f} < t_safe={t_safe}")
                             danger_mode = True
                             break
 
@@ -173,7 +185,6 @@ class APFPlanner:
                     # print(f"[TTC] Road edge TTC = {ttc_edge:.2f}")
                     danger_mode = True
 
-
             # --- Radial Repulsive Force Only if danger ---
             F_rep = np.zeros(2)
             if danger_mode:
@@ -182,7 +193,7 @@ class APFPlanner:
                     delta = local_pos - obs_local
                     dist = np.linalg.norm(delta)
                     if 0 < dist < self.d0:
-                        repulsion = smooth_clipped_repulsion(delta, dist, self.d0, self.eta_rep_ob, repulsion_max=20.0)
+                        repulsion = smooth_clipped_repulsion(delta, dist, self.d0, self.eta_rep_ob, repulsion_max=1000.0)
                         F_rep += repulsion
 
             # --- Violation Force Only if danger ---
@@ -230,13 +241,19 @@ class APFPlanner:
             # print(f"Step {i}: Pos {current_position}, Vel {current_velocity},")
             # print(
             #     f"         F_att {F_att_global}, F_rep {F_rep_global}, F_vio {F_vio_global}, Total {F_total_global}, Acc {acc_local}")
-
+            if i == 30:
+                k = 1
+            # update  ego pos , velocity and obs pos
             self.ego.x, self.ego.y = current_position
+            self.ego.vx, self.ego.vy = current_velocity
+            norm = np.linalg.norm(current_velocity)
+            if norm > 1e-4:
+                self.ego.hx, self.ego.hy = current_velocity / norm
 
             for obs in self.obstacles:
                 prev_pos = np.array([obs.x, obs.y])
                 new_pos = prev_pos + np.array([obs.vx, obs.vy]) * dt
-                obs.update(new_pos, prev_pos, dt=dt)
+                obs.x, obs.y = new_pos
 
         trajectory.append(self.goal[:2])
         self.trajectory = np.array(trajectory)

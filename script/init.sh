@@ -18,7 +18,7 @@ fi
 # Check if the Docker container doesn't exist
 if [[ ! "$(docker ps -a --filter name=$docker_name --format '{{.Names}}')" ]]; then
   echo "Docker container $docker_name doesn't exist. Running run_carla.sh..."
-  "./run_carla.sh"
+  "./screen_run_carla.sh"
 fi
 
 # Remove files in fuzzerdata_dir

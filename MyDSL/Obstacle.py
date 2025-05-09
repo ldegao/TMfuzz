@@ -24,18 +24,18 @@ class Obstacle:
         self.length = length
         self.width = width
 
-    def update(self, position, prev_position, dt=1.0):
-        if dt <= 0:
-            dt = 1e-3  # avoid division by zero
-        try:
-            self.vx = (position[0] - prev_position[0]) / dt
-            self.vy = (position[1] - prev_position[1]) / dt
-            if not np.isfinite(self.vx) or not np.isfinite(self.vy):
-                raise ValueError("Velocity invalid")
-        except:
-            self.vx, self.vy = 0.0, 0.0
-        self.x, self.y = position
-        return self.x, self.y, self.vx, self.vy
+    # def update(self, position, prev_position, dt=1.0):
+    #     if dt <= 0:
+    #         dt = 1e-3  # avoid division by zero
+    #     try:
+    #         self.vx = (position[0] - prev_position[0]) / dt
+    #         self.vy = (position[1] - prev_position[1]) / dt
+    #         if not np.isfinite(self.vx) or not np.isfinite(self.vy):
+    #             raise ValueError("Velocity invalid")
+    #     except:
+    #         self.vx, self.vy = 0.0, 0.0
+    #     self.x, self.y = position
+    #     return self.x, self.y, self.vx, self.vy
 
     def compute_ttc(self, other):
         """

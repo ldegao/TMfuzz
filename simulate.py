@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import fcntl
 import glob
 import json
@@ -84,6 +85,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     state.DSLScene = None
     player_loc = None
     time_start = time.time()
+    recorder_name = "{}.log".format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
+
     npc_now = []
     agents_now = []
     sensors = []
@@ -108,6 +111,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     all_frame = 0
     try:
 
+        client.start_recorder(recorder_name, True)
         # initialize the simulation and the ego vehicle
 
         add_car_frame, blueprint_library, clock, player_bp, town_map, vehicle_bp_library = simulate_initialize(client,
@@ -247,6 +251,8 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
+                # set spector
+                set_spectator(world, player)
                 sampling_rate = 5
 
                 control_npc(agents_now, speed_limit)
@@ -260,7 +266,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
 
                 # record DSL
                 if state.num_frames % (c.FRAME_RATE // sampling_rate) == 0:
-                    record_DSL_data(state, world,town_map, player, c.FRAME_RATE, sampling_rate)
+                    record_DSL_data(state, world, town_map, player, c.FRAME_RATE, sampling_rate)
 
                 # record track of every npc_vehicle
                 if break_flag:
@@ -297,6 +303,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         print("   (line #{0}) {1}".format(exc_tb.tb_lineno, exc_type))
         retval = -1
     finally:
+        try:
+            client.stop_recorder()
+            carla_dir = os.path.expanduser("~/carla_data")
+            src_path = os.path.join(carla_dir, recorder_name)
+            dst_path = os.path.join(conf.out_dir, recorder_name)
+            print("[info] moving {} to {}".format(src_path, dst_path))
+            shutil.move(src_path, dst_path)
+        except Exception as e:
+            print("[-] stop_recorder error:")
+            traceback.print_exc()
+
         signal.alarm(0)
         settings = world.get_settings()
         settings.synchronous_mode = False
@@ -1271,6 +1288,7 @@ def simulate_initialize(client, conf, weather_dict, world):
     walker_bp = blueprint_library.find("walker.pedestrian.0001")  # 0001~0014
     walker_controller_bp = blueprint_library.find('controller.ai.walker')
     player_bp = blueprint_library.filter('nissan')[0]
+    player_bp.set_attribute('role_name', 'hero')
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 1.0 / c.FRAME_RATE  # FPS
@@ -1479,7 +1497,18 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
 def check_vehicle(proc):
     while True:
         output_state = non_blocking_read(proc.stdout)
-        if "VehicleReady" in output_state:
+        if "vehicleready" in output_state.lower().strip():
             break
         time.sleep(1)
         print("[*] Waiting for Autoware vehicle Ready" + "\r", end="")
+
+
+def set_spectator(world, player):
+    player_transform = player.get_transform()
+    # lsh: set carla camera
+    spectator = world.get_spectator()
+    spectator_transform = carla.Transform(
+        player_transform.transform(carla.Location(x=-5, z=2.5)),
+        player_transform.rotation
+    )
+    spectator.set_transform(spectator_transform)

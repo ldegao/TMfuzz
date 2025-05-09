@@ -1,10 +1,15 @@
 import glob
 import math
 import os
+import random
 import re
 import sys
+import time
+from collections import defaultdict
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.transforms import Affine2D
 import numpy as np
 
 from APFPlanner import APFPlanner, local_to_global
@@ -25,6 +30,7 @@ class HeroPlanner:
         """
         Initializes the HeroPlanner with CARLA client, recorder path, hero vehicle ID, and frame ID.
         """
+        self.model_size_map = {}
         self.client = client
         self.world = self.client.get_world()
         self.carla_map = self.world.get_map()
@@ -34,6 +40,23 @@ class HeroPlanner:
         self.car_data = parse_car_data(self.recorder_info)
         self.hero_id = next((vid for vid, vdata in self.car_data.items() if vdata.get('role_name') == 'hero'), None)
         self.ego_data, self.surrounding_vehicles = self.parse_frame_data(self.recorder_info, frame_id)
+        self.load_map_from_recorder_info()
+
+    def load_map_from_recorder_info(self):
+        """
+        Extracts map name from recorder_info and loads the corresponding CARLA world.
+        """
+        map_name = None
+
+        match = re.search(r"Map\s*:\s*(\S+)", self.recorder_info)
+        if match:
+            map_name = match.group(1)
+
+        if map_name:
+            print(f"[INFO] Loading map: {map_name}")
+            self.world = self.client.load_world(map_name)
+        else:
+            print("[WARN] Map name not found in recorder_info.")
 
     def plan(self):
         ego_location = carla.Location(x=self.ego_data.x, y=self.ego_data.y, z=0.5)
@@ -90,7 +113,7 @@ class HeroPlanner:
         trajectory, trajectory_velocity = apf_planner.plan()
         return apf_planner, trajectory, trajectory_velocity
 
-    def parse_frame_data(self, recorder_info, frame_id, default_length=4.5, default_width=2.0):
+    def parse_frame_data(self, recorder_info, frame_id):
         frame_pattern = rf"Positions:.*?Frame {frame_id}.*?Dynamic actors.*?Frame"
         frame_match = re.search(frame_pattern, recorder_info, re.DOTALL)
         frame_str = frame_match.group(0) if frame_match else ''
@@ -116,13 +139,61 @@ class HeroPlanner:
                     'angular_velocity': tuple(map(float, match[4:7]))
                 })
 
+        destroyed_ids = set(map(int, re.findall(r"\bDestroy\s+(\d+)", recorder_info)))
+        print(f"[INFO] Destroyed IDs: {destroyed_ids}")
+
         ego_data = None
         surrounding_vehicles = []
 
         for vid, vdata in static_data.items():
+            if vid in destroyed_ids:
+                print(f"[INFO] Vehicle {vid} was destroyed, skipping.")
+                continue
             yaw_rad = math.radians(vdata['rotation'][2])
             hx, hy = math.cos(yaw_rad), math.sin(yaw_rad)
 
+            vehicle_model = self.car_data[vid]['vehicle_model'] if vid in self.car_data else None
+
+            if vehicle_model in self.model_size_map:
+                length, width = self.model_size_map[vehicle_model]
+                print(
+                    f"[INFO] Vehicle model {vehicle_model} found in cache: length = {length:.2f}, width = {width:.2f}")
+            else:
+                length, width = 4.5, 2.0
+                if vehicle_model:
+                    MAX_ATTEMPTS = 10
+                    SPAWN_SLEEP = 0.1
+
+                    bp = self.world.get_blueprint_library().find(vehicle_model)
+                    spawn_points = self.world.get_map().get_spawn_points()
+
+                    temp_actor = None
+                    for attempt in range(MAX_ATTEMPTS):
+                        spawn_point = random.choice(spawn_points)
+                        time.sleep(SPAWN_SLEEP)
+                        temp_actor = self.world.try_spawn_actor(bp, spawn_point)
+                        if temp_actor:
+                            print(f"[INFO] Successfully spawned {vehicle_model} at attempt {attempt + 1}")
+                            break
+                        else:
+                            print(
+                                f"[RETRY] Failed to spawn {vehicle_model}, retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
+
+                    if temp_actor:
+                        time.sleep(0.2)
+                        extent = temp_actor.bounding_box.extent
+                        length = extent.x * 2
+                        width = extent.y * 2
+                        self.model_size_map[vehicle_model] = (length, width)
+                        print(
+                            f"[INFO] Measured vehicle model {vehicle_model}: length = {length:.2f}, width = {width:.2f}")
+
+                        time.sleep(0.1)
+                        temp_actor.destroy()
+                        time.sleep(0.1)
+                    else:
+                        print(
+                            f"[WARN] Failed to spawn actor for model {vehicle_model} after {MAX_ATTEMPTS} attempts, using default size.")
             obs = Obstacle(
                 x=vdata['location'][0] / 100,
                 y=vdata['location'][1] / 100,
@@ -130,8 +201,8 @@ class HeroPlanner:
                 vy=vdata['linear_velocity'][1] if 'linear_velocity' in vdata else 0.0,
                 hx=hx,
                 hy=hy,
-                length=default_length,
-                width=default_width
+                length=length,
+                width=width
             )
 
             if vid == self.hero_id:
@@ -180,82 +251,109 @@ def parse_car_data(recorder_info):
 
     return car_data
 
+def draw_lane_edges_continuous(carla_map, center_point, radius=50.0, resolution=1.0, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 8))
 
-def draw_lane_lines(planner, road_length=80):
-    for i in range(planner.num_lanes - 1):
-        line_type = planner.lane_line_types[i]
-        y_offset = (-planner.lane_width * planner.num_lanes / 2) + (i + 1) * planner.lane_width
+    center_x, center_y = center_point
+    waypoints = carla_map.generate_waypoints(resolution)
 
-        local_start = np.array([0, y_offset])
-        local_end = np.array([road_length, y_offset])
+    from collections import defaultdict
+    lane_edge_left = defaultdict(list)
+    lane_edge_right = defaultdict(list)
+    lane_change_map = {}
 
-        global_start = local_to_global(local_start, planner.road_origin, planner.lane_angle)
-        global_end = local_to_global(local_end, planner.road_origin, planner.lane_angle)
+    for wp in waypoints:
+        x = wp.transform.location.x
+        y = wp.transform.location.y
+        if (x - center_x) ** 2 + (y - center_y) ** 2 > radius ** 2:
+            continue
 
-        linestyle = '-' if line_type == 0 else '--'
-        plt.plot(
-            [global_start[0], global_end[0]],
-            [global_start[1], global_end[1]],
-            color='black', linestyle=linestyle, linewidth=1.5
-        )
+        yaw = np.deg2rad(wp.transform.rotation.yaw)
+        dx = np.cos(yaw)
+        dy = np.sin(yaw)
+        half_w = wp.lane_width / 2.0
 
-    # Draw left and right road boundaries (always solid)
-    for side in [0, planner.num_lanes]:
-        y_offset = (-planner.lane_width * planner.num_lanes / 2) + side * planner.lane_width
-        local_start = np.array([0, y_offset])
-        local_end = np.array([road_length, y_offset])
-        global_start = local_to_global(local_start, planner.road_origin, planner.lane_angle)
-        global_end = local_to_global(local_end, planner.road_origin, planner.lane_angle)
-        plt.plot(
-            [global_start[0], global_end[0]],
-            [global_start[1], global_end[1]],
-            color='black', linestyle='-', linewidth=2
-        )
+        left_x = x - dy * half_w
+        left_y = y + dx * half_w
+        right_x = x + dy * half_w
+        right_y = y - dx * half_w
+
+        lane_id = (wp.road_id, wp.lane_id)
+        lane_edge_left[lane_id].append((left_x, left_y))
+        lane_edge_right[lane_id].append((right_x, right_y))
+
+        if lane_id not in lane_change_map:
+            lane_change_map[lane_id] = wp.lane_change
+
+    def get_color_for_lane_change(lane_change):
+        if lane_change == carla.LaneChange.NONE:
+            return 'black'
+        elif lane_change == carla.LaneChange.Left:
+            return 'blue'
+        elif lane_change == carla.LaneChange.Right:
+            return 'green'
+        elif lane_change == carla.LaneChange.Both:
+            return 'orange'
+        else:
+            return 'gray'
+
+    for lane_id, points in lane_edge_left.items():
+        if len(points) < 2:
+            continue
+        points = sorted(points, key=lambda p: p[1])
+        xs, ys = zip(*points)
+        color = get_color_for_lane_change(lane_change_map.get(lane_id, carla.LaneChange.NONE))
+        ax.plot(xs, ys, color=color, linewidth=1)
+
+    for lane_id, points in lane_edge_right.items():
+        if len(points) < 2:
+            continue
+        points = sorted(points, key=lambda p: p[1])
+        xs, ys = zip(*points)
+        color = get_color_for_lane_change(lane_change_map.get(lane_id, carla.LaneChange.NONE))
+        ax.plot(xs, ys, color=color, linewidth=1)
+
+    return ax
 
 
 if __name__ == '__main__':
-
-    client = carla.Client('localhost', 5000)
+    client = carla.Client('localhost', 4000)
     client.set_timeout(10.0)
 
-    recorder_path = "/home/carla/.config/Epic/CarlaUE4/Saved/test1.log"
-    frame_id = 25
+    recorder_path = "2025-04-22-19-58-17.log"
+    frame_id = 560
 
     planner = HeroPlanner(client, recorder_path, frame_id)
-    apf, trajectory, trajectory_velocity = planner.plan()  # This returns the trajectory and plots internally
-
-    # Plot trajectory
+    apf, trajectory, trajectory_velocity = planner.plan()
     trajectory = np.array(trajectory)
-    plt.plot(trajectory[:, 0], trajectory[:, 1], '-o', label='Ego Trajectory', markersize=1)
 
-    # Plot lane centers
-    for idx, lane_center in enumerate(apf.lane_centers):
-        plt.plot(lane_center[0], lane_center[1], 'x', markersize=8, label=f'Lane Center {idx}')
+    fig, ax = plt.subplots(figsize=(10, 10))
 
-    # Plot obstacles
+    center_point = tuple(trajectory[len(trajectory) // 2])
+    draw_lane_edges_continuous(planner.carla_map, center_point, radius=30, ax=ax)
+
+    ax.plot(trajectory[:, 0], trajectory[:, 1], '-o', label='Ego Trajectory', markersize=1)
+
     for obs in apf.obstacles:
         angle_deg = np.degrees(np.arctan2(obs.hy, obs.hx))
-        obs_rect = patches.Rectangle(
-            (obs.x - obs.length / 2, obs.y - obs.width / 2),
+        rect = patches.Rectangle(
+            (-obs.length / 2, -obs.width / 2),
             obs.length, obs.width,
-            angle=float(angle_deg),
-            color='r', alpha=0.5
+            linewidth=1, edgecolor='r', facecolor='r', alpha=0.5
         )
-        plt.gca().add_patch(obs_rect)
+        transform = Affine2D().rotate_deg(angle_deg).translate(obs.x, obs.y) + ax.transData
+        rect.set_transform(transform)
+        ax.add_patch(rect)
 
-    # Plot goal point
     goal = apf.goal
-    plt.plot(goal[0], goal[1], marker='*', color='red', markersize=5, label='Goal')
+    ax.plot(goal[0], goal[1], marker='*', color='red', markersize=5, label='Goal')
 
-    # Plot lane lines
+    ax.set_title("Ego Trajectory in Scenario")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.axis('equal')
+    ax.legend()
+    ax.grid(True)
 
-    draw_lane_lines(apf)
-
-    # Finalize plot
-    plt.title("Ego Trajectory in Scenario")
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.axis('equal')
-    plt.legend()
-    plt.grid(True)
     plt.show()

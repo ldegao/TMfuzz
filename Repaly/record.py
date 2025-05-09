@@ -21,7 +21,7 @@ import logging
 def main():
     argparser = argparse.ArgumentParser(description=__doc__)
     argparser.add_argument('--host', metavar='H', default='127.0.0.1', help='IP of the host server (default: 127.0.0.1)')
-    argparser.add_argument('-p', '--port', metavar='P', default=5000, type=int, help='TCP port to listen to (default: 5000)')
+    argparser.add_argument('-p', '--port', metavar='P', default=4000, type=int, help='TCP port to listen to (default: 5000)')
     argparser.add_argument('-n', '--number-of-vehicles', metavar='N', default=10, type=int, help='number of vehicles (default: 10)')
     argparser.add_argument('-d', '--delay', metavar='D', default=2.0, type=float, help='delay in seconds between spawns (default: 2.0)')
     argparser.add_argument('--safe', action='store_true', help='avoid spawning vehicles prone to accidents')
@@ -150,6 +150,9 @@ def main():
             while True:
                 world.tick()
                 follow_hero()
+    except RuntimeError as e:
+        logging.error(e)
+        print("Error: %s" % e)
 
     finally:
         print('\nDestroying %d actors' % len(actor_list + actor_ids))
