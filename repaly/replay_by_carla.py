@@ -107,6 +107,9 @@ def main():
             hero_id = 0
             print("[WARN] No hero vehicle found, using follow_id = 0.")
 
+        # client.set_replayer_ignore_hero(args.ignore_hero)
+        # For test
+        client.set_replayer_ignore_hero(True)
         print(client.replay_file(log_name, args.start, args.duration, hero_id))
 
     finally:

@@ -14,7 +14,7 @@ except ModuleNotFoundError as e:
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
 
-from MyDSL.TTC import TTC, TTC_with_zone
+from myDSL.TTC import TTC, TTC_with_zone
 
 
 def record_DSL_data(state, world, town_map, player, FRAME_RATE, sampling_rate):

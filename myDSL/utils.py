@@ -4,6 +4,8 @@ import os
 import pdb
 import traceback
 
+import numpy as np
+
 import config
 
 config.set_carla_api_path()
@@ -14,6 +16,7 @@ except ModuleNotFoundError as e:
     proj_root = config.get_proj_root()
     print("    Try `cd {}/carla && make PythonAPI' if not.".format(proj_root))
     exit(-1)
+
 
 def save_json_to_file(json_data, output_dir, generation_id, scenario_id):
     """
@@ -54,7 +57,6 @@ def save_json_to_file(json_data, output_dir, generation_id, scenario_id):
         print(f"Error during file operations: {e}")
         traceback.print_exc()
         return None  # ?????????? None
-
 
 
 def make_unit_vector(velocity):
@@ -119,6 +121,7 @@ def initialize_vehicle_from_json(json_data, actor):
     # # Debug log for adjusted velocity
     # print(f"[DEBUG] Vehicle velocity adjusted: Speed {current_speed:.2f} | Direction {adjusted_velocity}")
 
+
 def find_timestamp(
         file_path: str,
         key_to_check: str = "TTCToNPCs",
@@ -180,7 +183,7 @@ def find_timestamp(
                 if find_first_first:  # Return the first frame of the cluster
                     return data[cluster_start_index]["timestamp"]
                 else:  # Return the last frame of the cluster
-                    return data[i-1]["timestamp"]
+                    return data[i - 1]["timestamp"]
                 in_cluster = False  # Reset for the next cluster
 
     # Handle case where the cluster ends at the end of the list
@@ -415,3 +418,6 @@ def get_dangerous_frame(file_path: str, dangerous_frame: int, find_first: bool =
 
     # If no matching frame is found, return None
     return None
+
+
+

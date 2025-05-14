@@ -23,8 +23,8 @@ import networkx as nx
 import numpy as np
 import pygame
 
-from MyDSL.record_info import DSL2Parser, record_DSL_data
-from MyDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
+from myDSL.record_info import DSL2Parser, record_DSL_data
+from myDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
 from npc import NPC
 import config
 import constants as c

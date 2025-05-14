@@ -1,11 +1,20 @@
 import math
+import sys
+if __name__ == "__main__" and __package__ is None:
+    import os
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    __package__ = "myDSL"
 import numpy as np
 import matplotlib.pyplot as plt
 import cvxpy as cp
 import heapq
-from MyDSL.RecordDealer import HeroPlanner
+from myDSL.RecordDealer import HeroPlanner
 import matplotlib.patches as patches
-import carla
+import importlib
+if "carla" not in sys.modules:
+    carla = importlib.import_module("carla")
+else:
+    carla = sys.modules["carla"]
 
 
 class SpeedPlanner:
@@ -38,30 +47,31 @@ class SpeedPlanner:
         half_length = obstacle.length / 2.0
         return (s_center - half_length, s_center + half_length)
 
-    def compute_obstacle_st(self, obstacle, ego, t_safe=0.5):
+    def compute_obstacle_st(self, obstacle):
         """
-        Compute the time-steps at which the obstacle intersects with the ego vehicle's lane.
-        Parameters:
-            obstacle: The obstacle object to check.
-            ego: The ego vehicle object.
-            t_safe: The time threshold for considering collision (e.g., 0.5 seconds).
-        Returns:
-            st_regions: List of time ranges during which the obstacle occupies the lane.
+        Compute the time-steps where obstacle is too close to trajectory.
         """
         st_regions = []
         for t in np.arange(0, self.T, self.dt):
-            # Check if the obstacle occupies the lane at the current time t
-            if obstacle.is_obstacle_in_lane(ego, t_safe):
-                # If the obstacle occupies the lane at time t, calculate its position
-                obs_x = obstacle.x + obstacle.vx * t
-                obs_y = obstacle.y + obstacle.vy * t
-                # Project the obstacle's position onto the trajectory
-                s_center, _ = self.project_to_trajectory(obs_x, obs_y)
-                # Compute the s_range of the obstacle at this time step
+            obs_x = obstacle.x + obstacle.vx * t
+            obs_y = obstacle.y + obstacle.vy * t
+
+            s_center, min_distance = self.project_to_trajectory(obs_x, obs_y)
+
+            obstacle_radius = min(obstacle.length, obstacle.width) / 2
+            ego_radius = min(self.ego.length, self.ego.width) / 2
+            # threshold_distance = obstacle_radius + ego_radius
+            threshold_distance = obstacle_radius + ego_radius / 2
+
+            if min_distance < threshold_distance:
                 s_range = self.compute_s_range(obstacle, s_center)
-                # Add the time interval during which the obstacle occupies the lane
                 st_regions.append((t, t + self.dt, s_range[0], s_range[1]))
 
+        #     # Debug
+        #     print(
+        #         f"[DEBUG] t={t:.2f}, obs=({obs_x:.2f},{obs_y:.2f}), min_dist={min_distance:.2f}, threshold={threshold_distance:.2f}")
+        #
+        # print(f"[DEBUG] Found {len(st_regions)} st regions for this obstacle.")
         return st_regions
 
     def compute_all_obstacle_st(self):
@@ -75,7 +85,7 @@ class SpeedPlanner:
         all_regions = []
         for obs in self.obstacles:
             # Call compute_obstacle_st for each obstacle
-            regions = self.compute_obstacle_st(obs, self.ego)
+            regions = self.compute_obstacle_st(obs)
             all_regions.extend(regions)
         return all_regions
 
@@ -137,8 +147,8 @@ class SpeedPlanner:
             heapq.heappush(heap, (self.heuristic(0, 0, self.T, self.s_total), 0, 0, 0))
 
             if attempt < max_attempts:
-                max_speed = base_max_speed * (1 + 0.5 * attempt)  # ????50%
-                ds_limit = base_ds_range + attempt  # ????
+                max_speed = base_max_speed * (1 + 0.5 * attempt)
+                ds_limit = base_ds_range + attempt
                 optimized = True
             else:
                 print("[A*] Fallback to Standard A* Mode.")
@@ -242,6 +252,28 @@ def compute_time_and_s(trajectory, velocity, dt=0.025):
 
 def run_speed_planner(trajectory, trajectory_velocity, obstacles, ego, dt=0.2, ds=0.1, lambda_acc=0.2, sigma=0.1,
                       penalty_factor=1000):
+    """
+       Run speed planner to generate optimal velocity profile along given trajectory.
+
+       Args:
+           trajectory (list[list[float]]): List of (x, y) path points.
+           trajectory_velocity (list[float]): Initial velocity at each trajectory point.
+           obstacles (list[Obstacle]): List of obstacle objects in the environment.
+           ego (dict): Ego vehicle data or configuration.
+           dt (float): Time step for ST graph discretization.
+           ds (float): Path step for ST graph discretization.
+           lambda_acc (float): Acceleration penalty weight.
+           sigma (float): Smoothness penalty weight.
+           penalty_factor (float): Obstacle collision penalty weight.
+
+       Returns:
+           sp (SpeedPlanner): SpeedPlanner object for reference.
+           times (list[float]): Original trajectory time stamps.
+           trajectory_velocity (list[float]): Original trajectory velocity profile.
+           smoothed_t (list[float]): Optimized time points from dynamic programming.
+           v_vals_sp (list[float]): Optimized velocity values at each smoothed time point.
+           dp_profile (list[tuple[float, float]]): Optimized (time, s) path from dynamic programming.
+   """
     times, s_vals, trajectory_velocity = compute_time_and_s(trajectory, trajectory_velocity)
     print(f"[INFO] Trajectory length: {len(trajectory)}")
     print(f"[INFO] Total time: {times[-1]}, total path length: {s_vals[-1]}")
@@ -338,25 +370,26 @@ def plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity):
     plt.show()
 
 
+
 def main():
     client = carla.Client('localhost', 4000)
     client.set_timeout(10.0)
     recorder_path = "2025-04-22-19-58-17.log"
-    frame_id = 200
+    frame_id = 580
 
     planner = HeroPlanner(client, recorder_path, frame_id)
     apf, trajectory, trajectory_velocity = planner.plan()
 
     sp, times, v_vals_hero, smoothed_t, v_vals_sp, dp_profile = run_speed_planner(
-        trajectory, trajectory_velocity, apf.obstacles, ego=apf.ego,
+        trajectory, trajectory_velocity, planner.surrounding_vehicles, ego=planner.ego_data,
     )
     plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity)
-
 
     if dp_profile is None:
         return
 
     plot_velocity_comparison(times, v_vals_hero, smoothed_t, v_vals_sp)
+
 
 if __name__ == '__main__':
     main()

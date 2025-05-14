@@ -1,8 +1,12 @@
 import pandas as pd
 import numpy as np
 from shapely.geometry import Polygon
-
-from MyDSL.TTC import TTC
+if __name__ == "__main__" and __package__ is None:
+    import sys
+    import os
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    __package__ = "myDSL"
+from myDSL.TTC import TTC
 
 
 class Obstacle:
@@ -24,6 +28,20 @@ class Obstacle:
         self.length = length
         self.width = width
 
+    def copy(self):
+        """
+        Create a deep copy of the obstacle object.
+        """
+        return Obstacle(
+            x=self.x,
+            y=self.y,
+            vx=self.vx,
+            vy=self.vy,
+            hx=self.hx,
+            hy=self.hy,
+            length=self.length,
+            width=self.width
+        )
     # def update(self, position, prev_position, dt=1.0):
     #     if dt <= 0:
     #         dt = 1e-3  # avoid division by zero
@@ -58,23 +76,6 @@ class Obstacle:
         ttc_value = TTC(sample, toreturn='values')
         return float(ttc_value[0])
 
-    def is_obstacle_in_lane(self, ego, t_safe=1.6):
-        """
-        Check if the obstacle will occupy the lane within a given time window (based on TTC).
-        Parameters:
-            ego: The ego vehicle object.
-            t_safe: The time threshold for considering collision (e.g., 1.6 seconds).
-        Returns:
-            bool: True if the obstacle is occupying the lane, False otherwise.
-        """
-        # Calculate TTC between obstacle and ego vehicle
-        ttc = self.compute_ttc(ego)
-
-        # If TTC is less than safe threshold, it means the obstacle is in the lane
-        if ttc < t_safe:
-            return True
-        else:
-            return False
     def compute_trajectory_overlap_area(self, other, time_interval, time_step=0.1):
         """
         Compute the total overlap area between the trajectories of this obstacle and another over a time interval.

@@ -1,17 +1,23 @@
+if __name__ == "__main__" and __package__ is None:
+    import sys
+    import os
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    __package__ = "myDSL"
 import random
+from math import sqrt
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import cvxpy as cp
-from Obstacle import Obstacle
+from myDSL.Obstacle import Obstacle
 
 
 class APFPlanner:
-    def __init__(self, start, goal, obstacles, ego_speed=10, safe_width=1.8):
+    def __init__(self, start, goal, surrounding_vehicles, ego_speed=10, safe_width=1.8):
         self.start = np.array(start)
         self.goal = np.array(goal)
-        self.obstacles = obstacles
+        self.obstacles = [obs.copy() for obs in surrounding_vehicles]
         self.ego_speed = ego_speed
         self.safe_width = safe_width
         self.lane_angle = None
@@ -43,6 +49,7 @@ class APFPlanner:
 
         self.violation_exponent = self.VIOLATION_EXPONENT
 
+        self.MAX_ACC = 3.0
         self.mass = 0.1 * (self.V ** 2)
         self.max_speed = self.V
 
@@ -124,7 +131,6 @@ class APFPlanner:
 
         lane_angle, road_origin = self.lane_angle, self.road_origin
         M = self.mass
-        max_force = 30.0
 
         for i in range(self.num_iter):
             if np.linalg.norm(current_position - self.goal[:2]) < 1:
@@ -176,7 +182,7 @@ class APFPlanner:
                             break
 
             # --- Road edge TTC ---
-            road_half_width = self.num_lanes * self.lane_width / 2.0 - 1
+            road_half_width = self.num_lanes * self.lane_width / 2.0
             y = local_pos[1]
             vy = local_velocity[1]
             if abs(y) >= road_half_width - 0.5 and vy * y > 0:
@@ -184,16 +190,37 @@ class APFPlanner:
                 if ttc_edge < t_safe:
                     # print(f"[TTC] Road edge TTC = {ttc_edge:.2f}")
                     danger_mode = True
-
+            #
+            # # --- Radial Repulsive Force Only if danger ---
+            # F_rep = np.zeros(2)
+            # if danger_mode:
+            #     for obs in self.obstacles:
+            #         obs_local = global_to_local([obs.x, obs.y], road_origin, lane_angle)
+            #         delta = local_pos - obs_local
+            #         dist = np.linalg.norm(delta)
+            #         if 0 < dist < self.d0:
+            #             repulsion = smooth_clipped_repulsion(delta, dist, self.d0, self.eta_rep_ob, repulsion_max=1000.0)
+            #             F_rep += repulsion
             # --- Radial Repulsive Force Only if danger ---
             F_rep = np.zeros(2)
             if danger_mode:
                 for obs in self.obstacles:
                     obs_local = global_to_local([obs.x, obs.y], road_origin, lane_angle)
                     delta = local_pos - obs_local
-                    dist = np.linalg.norm(delta)
-                    if 0 < dist < self.d0:
-                        repulsion = smooth_clipped_repulsion(delta, dist, self.d0, self.eta_rep_ob, repulsion_max=1000.0)
+
+                    dist = distance_to_rectangle_edge(
+                        local_pos,
+                        obs_local,
+                        (obs.hx, obs.hy),
+                        obs.length,
+                        obs.width
+                    )
+
+                    edge_dist = dist - sqrt(obs.length ** 2 + obs.width ** 2) / 2
+
+                    if dist < self.d0:
+                        repulsion = smooth_clipped_repulsion(delta, edge_dist, self.d0, self.eta_rep_ob,
+                                                             repulsion_max=1000.0)
                         F_rep += repulsion
 
             # --- Violation Force Only if danger ---
@@ -209,6 +236,7 @@ class APFPlanner:
             # --- Combine All Forces (local frame) ---
             F_total = F_att + F_rep + F_vio
             acc_local = F_total / M
+            acc_local = np.clip(acc_local, -self.MAX_ACC, self.MAX_ACC)
 
             # --- Velocity Integration ---
             local_velocity += acc_local * dt
@@ -238,11 +266,10 @@ class APFPlanner:
             F_vio_global = local_to_global(F_vio, [0, 0], lane_angle)
             F_total_global = local_to_global(F_total, [0, 0], lane_angle)
 
+
             # print(f"Step {i}: Pos {current_position}, Vel {current_velocity},")
             # print(
             #     f"         F_att {F_att_global}, F_rep {F_rep_global}, F_vio {F_vio_global}, Total {F_total_global}, Acc {acc_local}")
-            if i == 30:
-                k = 1
             # update  ego pos , velocity and obs pos
             self.ego.x, self.ego.y = current_position
             self.ego.vx, self.ego.vy = current_velocity
@@ -488,7 +515,7 @@ def create_regular_obstacles(lane_centers, lane_angle=0.0):
     return obstacles
 
 
-def smooth_clipped_repulsion(delta_vec, dist, d0, eta, repulsion_max=20.0):
+def smooth_clipped_repulsion(delta_vec, dist, d0, eta, repulsion_max):
     """
     Smooth and bounded repulsive force.
     """
@@ -551,7 +578,7 @@ def local_to_global(local_position, origin, lane_angle):
 
 def test_scenario(start, goal, lane_angle, road_origin, scenario_name):
     planner = APFPlanner(
-        start=start, goal=goal, obstacles=[],
+        start=start, goal=goal, surrounding_vehicles=[],
         ego_speed=ego_speed, safe_width=safe_width
     )
 
@@ -638,6 +665,20 @@ def draw_lane_lines(planner, road_length=100):
     plt.plot([right_start[0], right_end[0]], [right_start[1], right_end[1]],
              color='black', linewidth=2.0, linestyle='-')
 
+def distance_to_rectangle_edge(point, rect_center, rect_yaw, length, width):
+    cos_yaw = rect_yaw[0]
+    sin_yaw = rect_yaw[1]
+    dx = point[0] - rect_center[0]
+    dy = point[1] - rect_center[1]
+    local_x = dx * cos_yaw + dy * sin_yaw
+    local_y = -dx * sin_yaw + dy * cos_yaw
+
+    half_length = length / 2
+    half_width = width / 2
+
+    dx_edge = max(abs(local_x) - half_length, 0)
+    dy_edge = max(abs(local_y) - half_width, 0)
+    return np.hypot(dx_edge, dy_edge)
 
 if __name__ == "__main__":
     road_width = 15
