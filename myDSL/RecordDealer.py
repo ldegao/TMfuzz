@@ -388,8 +388,8 @@ if __name__ == '__main__':
     client = carla.Client('localhost', 4000)
     client.set_timeout(10.0)
 
-    recorder_path = "2025-04-22-19-58-17.log"
-    frame_id = 540
+    recorder_path = "2025-04-22-20-19-43.log"
+    frame_id = 1660
 
     planner = HeroPlanner(client, recorder_path, frame_id)
     apf, trajectory, trajectory_velocity = planner.plan()

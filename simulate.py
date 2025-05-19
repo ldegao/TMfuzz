@@ -872,30 +872,6 @@ def check_destination(npc_vehicles, npc_now, agents_now, autoware_stuck, conf, g
     return break_flag, retval, autoware_stuck, s_started
 
 
-def world_reload(npc_list, npc_vehicles, npc_walkers, npc_now, sensors, world):
-    try:
-        # if conf.agent_type == c.AUTOWARE:
-        #     cmd = f'/tmp/reload_autoware.sh {world.get_map().name.split("/")[-1]} > output.log 2>&1 &'
-        #     t = threading.Thread(target=run_cmd_in_container, args=(autoware_container, cmd))
-        #     t.daemon = True
-        #     t.start()
-        #     time.sleep(1)
-        #     check_autoware_status(world, 60)
-        for npc in npc_now:
-            npc.instance = None
-        for npc in npc_list:
-            npc.fresh = True
-        for s in sensors:
-            s.stop()
-            s.destroy()
-        for w in npc_walkers:
-            w.destroy()
-        for v in npc_vehicles:
-            v.destroy()
-
-        return True
-    except RuntimeError:
-        return False
 
 
 def check_and_remove_excess_images(pattern, max_frames):
