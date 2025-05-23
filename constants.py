@@ -111,6 +111,10 @@ ENTROPY = 2
 INSTABILITY = 3
 TRAJECTORY = 4
 
+# TTC threshold
+
+TTC_THRESHOLD = 1.0  # seconds
+
 
 # Misc
 DEVNULL = "2> /dev/null"

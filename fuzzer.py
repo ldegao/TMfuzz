@@ -302,7 +302,7 @@ def evaluation(ind: Scenario):
         stats = pstats.Stats(profiler)
         stats.strip_dirs()
         stats.sort_stats('cumulative')
-        stats.print_stats(50)
+        # stats.print_stats(50)
         # pdb.set_trace()
 
         if ret == -1:
@@ -487,7 +487,7 @@ def init_env():
         conf.check_dict["red"] = False
     signal.signal(signal.SIGALRM, handler)
     client = utils.connect(conf)
-    client.set_timeout(20)
+    client.set_timeout(100)
     client.load_world(town_map)
     world = client.get_world()
     town = world.get_map()
@@ -596,7 +596,7 @@ def main():
         # Creates and initializes a Scenario instance based on the metadata
         with concurrent.futures.ThreadPoolExecutor() as my_simulate:
             future = my_simulate.submit(create_test_scenario, conf, seed_dict)
-            test_scenario = future.result(timeout=15)
+            test_scenario = future.result(timeout=50)
         population.append(test_scenario)
         test_scenario.scenario_id = len(population)
     while True:

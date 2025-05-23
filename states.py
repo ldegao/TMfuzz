@@ -80,9 +80,13 @@ class ScenarioState:
         self.yaw_rate_list = []
         self.lat_speed_list = []
         self.lon_speed_list = []
-
+        self.ttc_frame_list = []
 
         self.min_dist = 99998
+
+        # replay state
+        self.important_frame_id = 0
+        self.test_result = "No result"
 
         self.autoware_cmd = ""
         self.autoware_universe_cmd = ""

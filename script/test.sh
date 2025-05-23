@@ -1,5 +1,5 @@
 #!/bin/bash
-cmd="./fuzzer.py  --sim-port 4000 -t $1 --density $2 --town $3 --no-red-check --debug"
+cmd="./fuzzer.py  --sim-port 4000 -t $1 --density $2 --town $3 --no-red-check --no-lane-check --debug"
 time=$4
 echo $1
 start_time=$(date +%s)  

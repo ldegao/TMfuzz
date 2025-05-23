@@ -10,6 +10,7 @@ declare -A dir_map=(
   ["../data/output/trace"]="trace"
   ["../data/output/time_record"]="time_record"
   ["../data/output/queue"]="queue"
+  ["../data/output/replay_pic"]="replay_pic"
 )
 
 mkdir -p "$save_dir"

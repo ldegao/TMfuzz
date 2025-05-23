@@ -23,14 +23,19 @@ import networkx as nx
 import numpy as np
 import pygame
 
+from myDSL.Obstacle import Obstacle
 from myDSL.record_info import DSL2Parser, record_DSL_data
 from myDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
 from npc import NPC
 import config
 import constants as c
+from repaly.ReplayTest import init_simulation, plan_trajectory, run_simulation
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
     set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler, update_vehicle_file, \
     write_json_cache_to_file, record_closest_cars
+
+# record import
+
 
 config.set_carla_api_path()
 try:
@@ -66,6 +71,133 @@ def record_min_distance(npc_vehicles, player_loc, state):
         state.min_dist = min_dist
         state.min_dist_frame = state.num_frames
         state.closest_car = closest_car
+
+
+def accurate_min_ttc(closest_cars_list, player_vehicle):
+    """
+    Accurately compute the minimum Time-To-Collision (TTC) between the ego vehicle and all surrounding vehicles.
+    Uses the Obstacle.compute_ttc() method which internally calls a high-precision TTC() function.
+
+    Parameters:
+        closest_cars_list (list): List of surrounding carla.Actor (vehicles)
+        player_vehicle (carla.Actor): The ego vehicle
+
+    Returns:
+        float: Minimum TTC value, or 999 if no valid TTC exists.
+    """
+    yaw_deg = player_vehicle.get_transform().rotation.yaw
+    yaw_rad = np.radians(yaw_deg)
+    ego_hx = np.cos(yaw_rad)
+    ego_hy = np.sin(yaw_rad)
+
+    player_obs = Obstacle(
+        x=player_vehicle.get_location().x,
+        y=player_vehicle.get_location().y,
+        vx=player_vehicle.get_velocity().x,
+        vy=player_vehicle.get_velocity().y,
+        hx=ego_hx,
+        hy=ego_hy,
+        length=4.5,
+        width=2.0
+    )
+
+    min_ttc = float('inf')
+    for npc in closest_cars_list:
+        if npc is None:
+            continue
+
+        yaw_deg_npc = npc.get_transform().rotation.yaw
+        yaw_rad_npc = np.radians(yaw_deg_npc)
+        npc_hx = np.cos(yaw_rad_npc)
+        npc_hy = np.sin(yaw_rad_npc)
+
+        npc_obs = Obstacle(
+            x=npc.get_location().x,
+            y=npc.get_location().y,
+            vx=npc.get_velocity().x,
+            vy=npc.get_velocity().y,
+            hx=npc_hx,
+            hy=npc_hy,
+            length=4.5,
+            width=2.0
+        )
+
+        try:
+            ttc = npc_obs.compute_ttc(player_obs)
+            if 0 < ttc < min_ttc:
+                min_ttc = ttc
+        except Exception as e:
+            print(f"[warn] TTC computation failed for one obstacle: {e}")
+            continue
+
+    return min_ttc if min_ttc < float('inf') else 999
+
+
+def get_dangerous_vehicles(closest_cars_list, player_vehicle, max_fast_ttc=5.0, max_distance=30.0):
+    candidates = []
+
+    player_loc = player_vehicle.get_location()
+    player_vel = player_vehicle.get_velocity()
+    player_rot = player_vehicle.get_transform().rotation
+
+    ego_pos = np.array([player_loc.x, player_loc.y])
+    v_ego = np.array([player_vel.x, player_vel.y])
+
+    ego_yaw = np.radians(player_rot.yaw)
+    ego_forward = np.array([np.cos(ego_yaw), np.sin(ego_yaw)])
+    ego_right = np.array([-ego_forward[1], ego_forward[0]])
+    ego_length = 4.5
+    ego_width = 2.0
+
+    for npc in closest_cars_list:
+        if npc is None:
+            continue
+
+        npc_loc = npc.get_location()
+        npc_vel = npc.get_velocity()
+        npc_rot = npc.get_transform().rotation
+
+        npc_pos = np.array([npc_loc.x, npc_loc.y])
+        rel_pos = npc_pos - ego_pos
+        dist = np.linalg.norm(rel_pos)
+
+        if dist < 1e-2 or dist > max_distance:
+            continue
+
+        dir_unit = rel_pos / dist
+        v_npc = np.array([npc_vel.x, npc_vel.y])
+        rel_vel = v_npc - v_ego
+
+        closing_speed = np.dot(rel_vel, dir_unit)
+
+        npc_yaw = np.radians(npc_rot.yaw)
+        npc_forward = np.array([np.cos(npc_yaw), np.sin(npc_yaw)])
+        npc_right = np.array([-npc_forward[1], npc_forward[0]])
+        npc_length = 4.5
+        npc_width = 2.0
+
+        ego_proj = (
+                abs(np.dot(ego_forward, dir_unit)) * ego_length / 2 +
+                abs(np.dot(ego_right, dir_unit)) * ego_width / 2
+        )
+        npc_proj = (
+                abs(np.dot(npc_forward, dir_unit)) * npc_length / 2 +
+                abs(np.dot(npc_right, dir_unit)) * npc_width / 2
+        )
+        safe_dist = ego_proj + npc_proj
+
+        if closing_speed < 0:
+            if dist <= safe_dist:
+                candidates.append(npc)
+            else:
+                ttc = (dist - safe_dist) / (-closing_speed)
+                if ttc <= max_fast_ttc:
+                    candidates.append(npc)
+        else:
+            if dist <= safe_dist + 0.5:
+                candidates.append(npc)
+
+    return candidates
 
 
 def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
@@ -230,6 +362,14 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                 record_min_distance(npc_vehicles, player_loc, state)
                 # record the closest cars and dangerous score every timestep
                 closest_cars_list = record_closest_cars(npc_vehicles, player_loc, state)
+                # calculate min_ttc of closest_cars_list
+                candidates = get_dangerous_vehicles(closest_cars_list, player)
+                min_ttc = accurate_min_ttc(candidates, player)
+
+                state.ttc_frame_list.append((min_ttc, state.num_frames))
+                # if min_ttc != 999:
+                #     print("min_ttc/frame: ", min_ttc, "/", state.num_frames)
+                # record the closest cars and dangerous score
                 json_cache = update_vehicle_file(state, closest_cars_list, player, npc_list, json_cache)
                 # mark useless vehicles for any frame
                 mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, player_road_id, exec_state.G,
@@ -305,6 +445,17 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     finally:
         try:
             client.stop_recorder()
+            # calculate important frame
+            state.important_frame_id = get_important_frame(state.ttc_frame_list)
+            print("[info] important frame: {}".format(state.important_frame_id))
+            # replay test
+            if state.collision_to is not None:
+                pic_save_dir = os.path.join(conf.out_dir, "replay_pic")
+                os.makedirs(pic_save_dir, exist_ok=True)
+                pic_name = "gid:{}_sid:{}.png".format(state.generation_id, state.scenario_id)
+                pic_save_path = os.path.join(pic_save_dir, pic_name)
+                state.test_result = replay_test(state.important_frame_id, recorder_name, pic_save_path)
+                print("[info] test result: {}".format(state.test_result))
             carla_dir = os.path.expanduser("~/carla_data")
             src_path = os.path.join(carla_dir, recorder_name)
             dst_path = os.path.join(conf.out_dir, recorder_name)
@@ -326,11 +477,15 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             valid_time = valid_frames / FPS
         else:
             valid_time = 0
+        logging.info("[info] simulation time: %s", all_time)
         logging.info("crashed:%s", state.crashed)
         logging.info("nearby_car:%s", len(nearby_dict))
         logging.info("valid_time/time: %s/%s", valid_time, all_time)
         logging.info("distance:%s", state.distance)
         logging.info("FPS:%s", FPS)
+        logging.info("important_frame_id:%s", state.important_frame_id)
+        logging.info("test_result:%s", state.test_result)
+
         state.end = True
 
         # save npc json
@@ -782,12 +937,12 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
     state.speed.append(speed)
     state.speed_lim.append(speed_limit)
     state.distance += speed / 3.6 / c.FRAME_RATE
-    if conf.debug:
-        print("[debug] (%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
-            sp.location.x, sp.location.y, player_loc.x,
-            player_loc.y, goal_loc.x, goal_loc.y,
-            player_loc.distance(goal_loc),
-            speed, speed_limit), end="")
+    # if conf.debug:
+    #     print("[debug] (%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
+    #         sp.location.x, sp.location.y, player_loc.x,
+    #         player_loc.y, goal_loc.x, goal_loc.y,
+    #         player_loc.distance(goal_loc),
+    #         speed, speed_limit), end="")
     if player.is_at_traffic_light():
         traffic_light = player.get_traffic_light()
         if traffic_light.get_state() == carla.TrafficLightState.Red:
@@ -870,8 +1025,6 @@ def check_destination(npc_vehicles, npc_now, agents_now, autoware_stuck, conf, g
         for index in delete_indices:
             delete_npc(agents_now[index][2], npc_vehicles, sensors, agents_now, npc_now)
     return break_flag, retval, autoware_stuck, s_started
-
-
 
 
 def check_and_remove_excess_images(pattern, max_frames):
@@ -1208,42 +1361,6 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
     return autoware_container, ego, player, max_steer_angle
 
 
-# def calculate_control(npc_vehicles, npc_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw):
-#     # record ego information
-#     control = player.get_control()
-#     state.cont_throttle.append(control.throttle)
-#     state.cont_brake.append(control.brake)
-#     state.cont_steer.append(control.steer)
-#     steer_angle = control.steer * max_steer_angle
-#     state.steer_angle_list.append(steer_angle)
-#     current_yaw = player_rot.yaw
-#     state.yaw_list.append(current_yaw)
-#     yaw_diff = current_yaw - yaw
-#     # Yaw range is -180 ~ 180. When vehicle's yaw is oscillating
-#     # b/w -179 and 179, yaw_diff can be messed up even if the
-#     # diff is very small. Assuming that it's unrealistic that
-#     # a vehicle turns more than 180 degrees in under 1/20 seconds,
-#     # just round the diff around 360.
-#     if yaw_diff > 180:
-#         yaw_diff = 360 - yaw_diff
-#     elif yaw_diff < -180:
-#         yaw_diff = 360 + yaw_diff
-#     yaw_rate = yaw_diff * c.FRAME_RATE
-#     state.yaw_rate_list.append(yaw_rate)
-#     yaw = current_yaw
-#     # uncomment below to follow along the player
-#     # set_camera(conf, player, spectator)
-#     # Get the lateral speed
-#     player_right_vec = player_rot.get_right_vector()
-#     lat_speed = abs(vel.x * player_right_vec.x + vel.y * player_right_vec.y)
-#     lat_speed *= 3.6  # m/s to km/h
-#     state.lat_speed_list.append(lat_speed)
-#     player_fwd_vec = player_rot.get_forward_vector()
-#     lon_speed = abs(vel.x * player_fwd_vec.x + vel.y * player_fwd_vec.y)
-#     lon_speed *= 3.6
-#     state.lon_speed_list.append(lon_speed)
-
-
 def simulate_initialize(client, conf, weather_dict, world):
     client.set_timeout(10.0)
     if conf.no_traffic_lights:
@@ -1470,13 +1587,25 @@ def check_topo(player_waypoint=None, waypoint=None, G=None):
         return True
 
 
+# def check_vehicle(proc):
+#     while True:
+#         output_state = non_blocking_read(proc.stdout)
+#         if "vehicleready" in output_state.lower().strip():
+#             break
+#         print("output_state:", output_state)
+#         time.sleep(1)
+#         print("[*] Waiting for Autoware vehicle Ready" + "\r", end="")
 def check_vehicle(proc):
+    buffer = ""
     while True:
         output_state = non_blocking_read(proc.stdout)
-        if "vehicleready" in output_state.lower().strip():
-            break
+        if output_state:
+            # print("output_state:", repr(output_state))
+            buffer += output_state.lower()
+            if "vehicle" in buffer and "ready" in buffer:
+                break
+        print("[*] Waiting for Autoware vehicle Ready\r", end="")
         time.sleep(1)
-        print("[*] Waiting for Autoware vehicle Ready" + "\r", end="")
 
 
 def set_spectator(world, player):
@@ -1488,3 +1617,46 @@ def set_spectator(world, player):
         player_transform.rotation
     )
     spectator.set_transform(spectator_transform)
+
+
+# test by replay
+def replay_test(frame_id, recorder_path, pic_save_path):
+    sim = init_simulation(recorder_path, frame_id)
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["recorder_path"], sim["frame_id"], pic_save_path)
+    sim["trajectory"] = trajectory
+    sim["v_vals_hero"] = v_vals_hero
+    result = run_simulation(sim)
+    return result
+
+
+def get_important_frame(ttc_data):
+    """
+    Return the starting frame of the most critical TTC drop period
+    where TTC stays below a threshold.
+    """
+    threshold = c.TTC_THRESHOLD
+
+    best_segment_start = None
+    best_min_ttc = float('inf')
+
+    current_segment = []
+
+    for ttc, frame in ttc_data:
+        if ttc < threshold:
+            current_segment.append((ttc, frame))
+        else:
+            if current_segment:
+                # Evaluate the current segment
+                segment_min_ttc, segment_start = min(current_segment, key=lambda x: x[0])
+                if segment_min_ttc < best_min_ttc:
+                    best_min_ttc = segment_min_ttc
+                    best_segment_start = current_segment[0][1]  # start frame
+                current_segment = []
+
+    # Check the last segment if loop ends while still in segment
+    if current_segment:
+        segment_min_ttc, segment_start = min(current_segment, key=lambda x: x[0])
+        if segment_min_ttc < best_min_ttc:
+            best_segment_start = current_segment[0][1]
+
+    return best_segment_start  # may be None if no danger period found

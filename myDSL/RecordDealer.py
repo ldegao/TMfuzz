@@ -1,6 +1,7 @@
 if __name__ == "__main__" and __package__ is None:
     import sys
     import os
+
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     __package__ = "myDSL"
 import glob
@@ -43,7 +44,11 @@ class HeroPlanner:
         self.recorder_info = self.client.show_recorder_file_info(recorder_path, True)
         self.frame_id = frame_id
         self.car_data = parse_car_data(self.recorder_info)
-        self.hero_id = next((vid for vid, vdata in self.car_data.items() if vdata.get('role_name') == 'hero'), None)
+        # self.hero_id = next((vid for vid, vdata in self.car_data.items() if vdata.get('role_name') == 'hero'), None)
+        self.hero_id = next((
+            vid for vid, vdata in self.car_data.items()
+            if vdata.get('role_name') in ('hero', 'ego_vehicle')
+        ), None)
         self.ego_data, self.surrounding_vehicles = self.parse_frame_data(frame_id)
         self.load_map_from_recorder_info()
 
@@ -105,7 +110,6 @@ class HeroPlanner:
 
         if distance_to_goal < 5.0:
             goal_waypoint = goal_waypoint.next(5.0)[0]
-
 
         goal = (goal_waypoint.transform.location.x,
                 goal_waypoint.transform.location.y)
@@ -317,6 +321,7 @@ def parse_car_data(recorder_info):
 
     return car_data
 
+
 def draw_lane_edges_continuous(carla_map, center_point, radius=50.0, resolution=1.0, ax=None):
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 8))
@@ -383,18 +388,19 @@ def draw_lane_edges_continuous(carla_map, center_point, radius=50.0, resolution=
     return ax
 
 
+def plot_trajectory_with_obstacles(trajectory, planner, apf, frame_id, save_path=None, max_obstacle_distance=25):
+    """
+    Plot the ego vehicle trajectory, surrounding obstacles (filtered by distance), and goal.
+    Optionally save the figure to a file.
 
-if __name__ == '__main__':
-    client = carla.Client('localhost', 4000)
-    client.set_timeout(10.0)
-
-    recorder_path = "2025-04-22-20-19-43.log"
-    frame_id = 1660
-
-    planner = HeroPlanner(client, recorder_path, frame_id)
-    apf, trajectory, trajectory_velocity = planner.plan()
-    trajectory = np.array(trajectory)
-
+    Parameters:
+        trajectory (np.ndarray): N x 2 array of trajectory points.
+        planner: Contains carla_map, ego_data, surrounding_vehicles.
+        apf: Contains ego (end), goal.
+        frame_id (int): Frame number for labeling.
+        save_path (str or None): If given, save the image to this path.
+        max_obstacle_distance (float): Only obstacles closer than this to trajectory will be plotted.
+    """
     fig, ax = plt.subplots(figsize=(10, 10))
 
     center_point = tuple(trajectory[len(trajectory) // 2])
@@ -402,7 +408,13 @@ if __name__ == '__main__':
 
     ax.plot(trajectory[:, 0], trajectory[:, 1], '-o', label='Ego Trajectory', markersize=1)
 
+    # Draw surrounding vehicles close to trajectory
     for obs in planner.surrounding_vehicles:
+        obs_point = np.array([obs.x, obs.y])
+        dist_to_traj = np.min(np.linalg.norm(trajectory - obs_point, axis=1))
+        if dist_to_traj > max_obstacle_distance:
+            continue  # skip too far obstacles
+
         print(f"[INFO] Obstacle: {obs.x}, {obs.y}, {obs.vx}, {obs.vy}, {obs.hx}, {obs.hy}")
         angle_deg = np.degrees(np.arctan2(obs.hy, obs.hx))
         rect = patches.Rectangle(
@@ -414,6 +426,7 @@ if __name__ == '__main__':
         rect.set_transform(transform)
         ax.add_patch(rect)
 
+    # Draw ego start
     ego = planner.ego_data
     print(f"[INFO] Ego Vehicle: {ego.x}, {ego.y}, {ego.vx}, {ego.vy}, {ego.hx}, {ego.hy}")
     angle_deg = np.degrees(np.arctan2(ego.hy, ego.hx))
@@ -427,6 +440,7 @@ if __name__ == '__main__':
     rect.set_transform(transform)
     ax.add_patch(rect)
 
+    # Draw ego end
     ego = apf.ego
     angle_deg = np.degrees(np.arctan2(ego.hy, ego.hx))
     rect = patches.Rectangle(
@@ -439,14 +453,44 @@ if __name__ == '__main__':
     rect.set_transform(transform)
     ax.add_patch(rect)
 
+    # Draw goal
     goal = apf.goal
     ax.plot(goal[0], goal[1], marker='*', color='red', markersize=5, label='Goal')
 
-    ax.set_title("Ego Trajectory in Scenario in frame " + str(frame_id))
+    ax.set_title(f"Ego Trajectory in Scenario in frame {frame_id}")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.axis('equal')
     ax.legend()
     ax.grid(True)
 
-    plt.show()
+    if save_path:
+        dir_path = os.path.dirname(save_path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+        print(f"[INFO] Figure saved to {save_path}")
+    else:
+        plt.show()
+
+
+if __name__ == '__main__':
+    client = carla.Client('localhost', 4000)
+    client.set_timeout(10.0)
+
+    # recorder_path = "2025-04-22-20-19-43.log"
+    recorder_path = "2025-05-23-05-51-38.log"
+    frame_id = 130
+    planner = HeroPlanner(client, recorder_path, frame_id)
+    apf, trajectory, trajectory_velocity = planner.plan()
+    trajectory = np.array(trajectory)
+
+    plot_trajectory_with_obstacles(
+        trajectory=trajectory,
+        planner=planner,
+        apf=apf,
+        frame_id=frame_id,
+        save_path="test.png",
+    )
+

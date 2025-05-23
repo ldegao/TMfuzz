@@ -1,7 +1,6 @@
 import glob
 import os
 import sys
-import math
 import re
 import time
 
@@ -16,7 +15,7 @@ try:
 except IndexError:
     pass
 
-from myDSL.RecordDealer import HeroPlanner
+from myDSL.RecordDealer import HeroPlanner, plot_trajectory_with_obstacles
 from myDSL.SpeedPlanner import run_speed_planner
 
 import math
@@ -169,10 +168,17 @@ def init_simulation(recorder_path: str, frame_id: int):
     }
 
 
-def plan_trajectory(client, recorder_path, frame_id):
+def plan_trajectory(client, recorder_path, frame_id, pic_save_path=None):
     planner = HeroPlanner(client, recorder_path, frame_id)
     apf, trajectory, trajectory_velocity = planner.plan()
-
+    if pic_save_path:
+        plot_trajectory_with_obstacles(
+            trajectory=trajectory,
+            planner=planner,
+            apf=apf,
+            frame_id=540,
+            save_path=pic_save_path,
+        )
     sp, times, v_vals_hero, smoothed_t, v_vals_sp, dp_profile = run_speed_planner(
         trajectory, trajectory_velocity,
         planner.surrounding_vehicles,
