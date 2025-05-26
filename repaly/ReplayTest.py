@@ -176,7 +176,7 @@ def plan_trajectory(client, recorder_path, frame_id, pic_save_path=None):
             trajectory=trajectory,
             planner=planner,
             apf=apf,
-            frame_id=540,
+            frame_id=frame_id,
             save_path=pic_save_path,
         )
     sp, times, v_vals_hero, smoothed_t, v_vals_sp, dp_profile = run_speed_planner(

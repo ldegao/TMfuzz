@@ -23,6 +23,7 @@ import networkx as nx
 import numpy as np
 import pygame
 
+from myDSL.ImportantFinder import ImportantFinder, compute_all_ttc, parse_data
 from myDSL.Obstacle import Obstacle
 from myDSL.record_info import DSL2Parser, record_DSL_data
 from myDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
@@ -71,133 +72,6 @@ def record_min_distance(npc_vehicles, player_loc, state):
         state.min_dist = min_dist
         state.min_dist_frame = state.num_frames
         state.closest_car = closest_car
-
-
-def accurate_min_ttc(closest_cars_list, player_vehicle):
-    """
-    Accurately compute the minimum Time-To-Collision (TTC) between the ego vehicle and all surrounding vehicles.
-    Uses the Obstacle.compute_ttc() method which internally calls a high-precision TTC() function.
-
-    Parameters:
-        closest_cars_list (list): List of surrounding carla.Actor (vehicles)
-        player_vehicle (carla.Actor): The ego vehicle
-
-    Returns:
-        float: Minimum TTC value, or 999 if no valid TTC exists.
-    """
-    yaw_deg = player_vehicle.get_transform().rotation.yaw
-    yaw_rad = np.radians(yaw_deg)
-    ego_hx = np.cos(yaw_rad)
-    ego_hy = np.sin(yaw_rad)
-
-    player_obs = Obstacle(
-        x=player_vehicle.get_location().x,
-        y=player_vehicle.get_location().y,
-        vx=player_vehicle.get_velocity().x,
-        vy=player_vehicle.get_velocity().y,
-        hx=ego_hx,
-        hy=ego_hy,
-        length=4.5,
-        width=2.0
-    )
-
-    min_ttc = float('inf')
-    for npc in closest_cars_list:
-        if npc is None:
-            continue
-
-        yaw_deg_npc = npc.get_transform().rotation.yaw
-        yaw_rad_npc = np.radians(yaw_deg_npc)
-        npc_hx = np.cos(yaw_rad_npc)
-        npc_hy = np.sin(yaw_rad_npc)
-
-        npc_obs = Obstacle(
-            x=npc.get_location().x,
-            y=npc.get_location().y,
-            vx=npc.get_velocity().x,
-            vy=npc.get_velocity().y,
-            hx=npc_hx,
-            hy=npc_hy,
-            length=4.5,
-            width=2.0
-        )
-
-        try:
-            ttc = npc_obs.compute_ttc(player_obs)
-            if 0 < ttc < min_ttc:
-                min_ttc = ttc
-        except Exception as e:
-            print(f"[warn] TTC computation failed for one obstacle: {e}")
-            continue
-
-    return min_ttc if min_ttc < float('inf') else 999
-
-
-def get_dangerous_vehicles(closest_cars_list, player_vehicle, max_fast_ttc=5.0, max_distance=30.0):
-    candidates = []
-
-    player_loc = player_vehicle.get_location()
-    player_vel = player_vehicle.get_velocity()
-    player_rot = player_vehicle.get_transform().rotation
-
-    ego_pos = np.array([player_loc.x, player_loc.y])
-    v_ego = np.array([player_vel.x, player_vel.y])
-
-    ego_yaw = np.radians(player_rot.yaw)
-    ego_forward = np.array([np.cos(ego_yaw), np.sin(ego_yaw)])
-    ego_right = np.array([-ego_forward[1], ego_forward[0]])
-    ego_length = 4.5
-    ego_width = 2.0
-
-    for npc in closest_cars_list:
-        if npc is None:
-            continue
-
-        npc_loc = npc.get_location()
-        npc_vel = npc.get_velocity()
-        npc_rot = npc.get_transform().rotation
-
-        npc_pos = np.array([npc_loc.x, npc_loc.y])
-        rel_pos = npc_pos - ego_pos
-        dist = np.linalg.norm(rel_pos)
-
-        if dist < 1e-2 or dist > max_distance:
-            continue
-
-        dir_unit = rel_pos / dist
-        v_npc = np.array([npc_vel.x, npc_vel.y])
-        rel_vel = v_npc - v_ego
-
-        closing_speed = np.dot(rel_vel, dir_unit)
-
-        npc_yaw = np.radians(npc_rot.yaw)
-        npc_forward = np.array([np.cos(npc_yaw), np.sin(npc_yaw)])
-        npc_right = np.array([-npc_forward[1], npc_forward[0]])
-        npc_length = 4.5
-        npc_width = 2.0
-
-        ego_proj = (
-                abs(np.dot(ego_forward, dir_unit)) * ego_length / 2 +
-                abs(np.dot(ego_right, dir_unit)) * ego_width / 2
-        )
-        npc_proj = (
-                abs(np.dot(npc_forward, dir_unit)) * npc_length / 2 +
-                abs(np.dot(npc_right, dir_unit)) * npc_width / 2
-        )
-        safe_dist = ego_proj + npc_proj
-
-        if closing_speed < 0:
-            if dist <= safe_dist:
-                candidates.append(npc)
-            else:
-                ttc = (dist - safe_dist) / (-closing_speed)
-                if ttc <= max_fast_ttc:
-                    candidates.append(npc)
-        else:
-            if dist <= safe_dist + 0.5:
-                candidates.append(npc)
-
-    return candidates
 
 
 def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
@@ -362,11 +236,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                 record_min_distance(npc_vehicles, player_loc, state)
                 # record the closest cars and dangerous score every timestep
                 closest_cars_list = record_closest_cars(npc_vehicles, player_loc, state)
-                # calculate min_ttc of closest_cars_list
-                candidates = get_dangerous_vehicles(closest_cars_list, player)
-                min_ttc = accurate_min_ttc(candidates, player)
 
-                state.ttc_frame_list.append((min_ttc, state.num_frames))
                 # if min_ttc != 999:
                 #     print("min_ttc/frame: ", min_ttc, "/", state.num_frames)
                 # record the closest cars and dangerous score
@@ -445,11 +315,32 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     finally:
         try:
             client.stop_recorder()
-            # calculate important frame
-            state.important_frame_id = get_important_frame(state.ttc_frame_list)
-            print("[info] important frame: {}".format(state.important_frame_id))
+            time.sleep(1)
             # replay test
             if state.collision_to is not None:
+                # collision to static
+                type_id = state.collision_to
+                if type_id.startswith("vehicle.") or type_id.startswith("walker.pedestrian."):
+
+                    frame_id_ttc = ImportantFinder(client, recorder_name, mode=1)
+                else:
+                    static_actor = state.collision_to
+                    location = static_actor.get_location()
+                    rotation = static_actor.get_transform().rotation
+                    extent = static_actor.bounding_box.extent
+                    static_obs = Obstacle(
+                        x=location.x / 100.0,
+                        y=location.y / 100.0,
+                        vx=0.0,
+                        vy=0.0,
+                        hx=math.cos(math.radians(rotation.yaw)),
+                        hy=math.sin(math.radians(rotation.yaw)),
+                        length=extent.x * 2,
+                        width=extent.y * 2
+                    )
+                    frame_id_ttc = ImportantFinder(client, recorder_name, mode=2, static_obs=static_obs)
+                state.important_frame_id = frame_id_ttc[0]
+                print("important ttc: {}".format(frame_id_ttc[1]))
                 pic_save_dir = os.path.join(conf.out_dir, "replay_pic")
                 os.makedirs(pic_save_dir, exist_ok=True)
                 pic_name = "gid:{}_sid:{}.png".format(state.generation_id, state.scenario_id)
@@ -1627,36 +1518,3 @@ def replay_test(frame_id, recorder_path, pic_save_path):
     sim["v_vals_hero"] = v_vals_hero
     result = run_simulation(sim)
     return result
-
-
-def get_important_frame(ttc_data):
-    """
-    Return the starting frame of the most critical TTC drop period
-    where TTC stays below a threshold.
-    """
-    threshold = c.TTC_THRESHOLD
-
-    best_segment_start = None
-    best_min_ttc = float('inf')
-
-    current_segment = []
-
-    for ttc, frame in ttc_data:
-        if ttc < threshold:
-            current_segment.append((ttc, frame))
-        else:
-            if current_segment:
-                # Evaluate the current segment
-                segment_min_ttc, segment_start = min(current_segment, key=lambda x: x[0])
-                if segment_min_ttc < best_min_ttc:
-                    best_min_ttc = segment_min_ttc
-                    best_segment_start = current_segment[0][1]  # start frame
-                current_segment = []
-
-    # Check the last segment if loop ends while still in segment
-    if current_segment:
-        segment_min_ttc, segment_start = min(current_segment, key=lambda x: x[0])
-        if segment_min_ttc < best_min_ttc:
-            best_segment_start = current_segment[0][1]
-
-    return best_segment_start  # may be None if no danger period found

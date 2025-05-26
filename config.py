@@ -14,15 +14,6 @@ def get_proj_root():
 
 
 def set_carla_api_path():
-    # proj_root = get_proj_root()
-    #
-    # dist_path = os.path.join(proj_root, "carla/PythonAPI/carla/dist")
-    # glob_path = os.path.join(dist_path, "carla-*%d.%d-%s.egg" % (
-    #     sys.version_info.major,
-    #     sys.version_info.minor,
-    #     "win-amd64" if os.name == "nt" else "linux-x86_64"
-    # ))
-
     try:
         # api_path = glob.glob(glob_path)[0]carla-0.9.13-py3.6-linux-x86_64.egg
         api_path = "./carla/PythonAPI/carla-0.9.13-py3.6-linux-x86_64.egg"
