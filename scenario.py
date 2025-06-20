@@ -194,33 +194,12 @@ class Scenario:
 
     def save_video(self, error, log_filename):
         try:
-            # if self.conf.agent_type == c.AUTOWARE:
-            #     if error:
-            #         # print("copying bag & video files")
-            #         shutil.copyfile(
-            #             os.path.join(self.conf.queue_dir, log_filename),
-            #             os.path.join(self.conf.error_dir, log_filename)
-            #         )
-            #         # shutil.copyfile(
-            #         #     f"/tmp/fuzzerdata/{c.USERNAME}/bagfile.lz4.bag",
-            #         #     os.path.join(self.conf.rosbag_dir, log_filename.replace(".json", ".bag"))
-            #         # )
-            #
-            #     shutil.copyfile(
-            #         f"/tmp/fuzzerdata/{c.USERNAME}/front.mp4",
-            #         os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-front.mp4"))
-            #     )
-            #     shutil.copyfile(
-            #         f"/tmp/fuzzerdata/{c.USERNAME}/top.mp4",
-            #         os.path.join(self.conf.cam_dir, log_filename.replace(".json", "-top.mp4"))
-            #     )
-            # elif self.conf.agent_type == c.BEHAVIOR:
-            if True:
-                if error:
-                    shutil.copyfile(
-                        os.path.join(self.conf.queue_dir, log_filename),
-                        os.path.join(self.conf.error_dir, log_filename)
-                    )
+            # temp change: dont save video if not bug
+            if error:
+                shutil.copyfile(
+                    os.path.join(self.conf.queue_dir, log_filename),
+                    os.path.join(self.conf.error_dir, log_filename)
+                )
                 shutil.copyfile(
                     f"/tmp/fuzzerdata/{self.username}/front.mp4",
                     os.path.join(
@@ -236,9 +215,20 @@ class Scenario:
                         log_filename.replace(".json", "-top.mp4")
                     )
                 )
-            print("save video done")
+                if os.path.exists(f"/tmp/fuzzerdata/{self.username}/top-replay.mp4"):
+                    print("save top replay video")
+                    shutil.copyfile(
+                        f"/tmp/fuzzerdata/{self.username}/top-replay.mp4",
+                        os.path.join(
+                            self.conf.cam_dir,
+                            log_filename.replace(".json", "-top-replay.mp4")
+                        )
+                    )
+                print("save video done")
+            else:
+                print("Dont need to save video ")
         except FileNotFoundError:
-            print("FileNotFoundError")
+            print("[DEBUG] Func save_video FileNotFoundError")
             os._exit(0)
 
     def save_trace_point(self, trace_graph_points, param, log_filename):

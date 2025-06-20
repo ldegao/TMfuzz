@@ -11,16 +11,14 @@ import random
 import re
 import sys
 import time
-from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.transforms import Affine2D
 import numpy as np
 
-from myDSL.APFPlanner import APFPlanner, local_to_global
+from myDSL.APFPlanner import APFPlanner
 from myDSL.Obstacle import Obstacle
-
 try:
     sys.path.append(glob.glob('../../carla/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
@@ -50,6 +48,8 @@ class HeroPlanner:
             if vdata.get('role_name') in ('hero', 'ego_vehicle')
         ), None)
         self.ego_data, self.surrounding_vehicles = self.parse_frame_data(frame_id)
+        # todo: temp change too far result to true
+        self.not_same_road = False
         self.load_map_from_recorder_info()
 
     def load_map_from_recorder_info(self):
@@ -88,15 +88,15 @@ class HeroPlanner:
                     next_wp.lane_id != ego_waypoint.lane_id):
                 break
             current_waypoint = next_wp
+        collision_location = extract_collision_target_location(self.recorder_info)
+        goal_waypoint = self.carla_map.get_waypoint(
+            collision_location, project_to_road=True, lane_type=carla.LaneType.Driving)
+        # goal_waypoint = get_lane_end_waypoint(self.carla_map, collision_location)
 
-        goal_waypoint = lane_waypoints[-1]
-        distance_to_goal = ego_waypoint.transform.location.distance(
-            goal_waypoint.transform.location)
         candidate_wp = goal_waypoint
         print(f"[INFO] goal location before: {goal_waypoint.transform.location}")
         while 1:
             candidate_loc = candidate_wp.transform.location
-
             obstacle_too_close = False
             for obs in self.surrounding_vehicles:
                 obs_loc = carla.Location(x=obs.x, y=obs.y, z=0.5)
@@ -107,15 +107,17 @@ class HeroPlanner:
                 goal_waypoint = candidate_wp
                 break
             candidate_wp = candidate_wp.next(5.0)[0]
-
+        distance_to_goal = ego_location.distance(goal_waypoint.transform.location)
         if distance_to_goal < 5.0:
             goal_waypoint = goal_waypoint.next(5.0)[0]
-
         goal = (goal_waypoint.transform.location.x,
                 goal_waypoint.transform.location.y)
 
-        print(f"[INFO] goal location: {goal}")
+        if goal_waypoint.road_id != ego_waypoint.road_id:
+            self.not_same_road = True
+            print("[WARN] Goal waypoint is on a different road than the ego vehicle.")
 
+        print(f"[INFO] goal location: {goal}")
         road_waypoints = self.carla_map.generate_waypoints(1.0)
         current_road_id = ego_waypoint.road_id
         lanes_in_road = [wp for wp in road_waypoints if wp.road_id == current_road_id]
@@ -475,6 +477,95 @@ def plot_trajectory_with_obstacles(trajectory, planner, apf, frame_id, save_path
         plt.show()
 
 
+def extract_collision_target_location(recorder_info: str) -> carla.Location:
+    frame_id, target_vid, _ = extract_collision_frame_and_type(recorder_info)
+
+    frame_block_pattern = rf"Frame\s+{frame_id}\s+at\s+[\d\.]+\s+seconds(.*?)State traffic lights:"
+    frame_block_match = re.search(frame_block_pattern, recorder_info, re.DOTALL)
+    if not frame_block_match:
+        raise ValueError(f"No frame block found for frame {frame_id}")
+
+    frame_block = frame_block_match.group(1)
+
+    loc_pattern = rf"Id:\s*{target_vid}\s*Location:\s*\(([^)]+)\)"
+    loc_match = re.search(loc_pattern, frame_block)
+    if not loc_match:
+        raise ValueError(f"Location for vehicle {target_vid} not found at frame {frame_id}")
+
+    x, y, z = map(float, loc_match.group(1).split(","))
+    return carla.Location(x=x/100, y=y/100, z=z/100)
+
+
+def get_lane_end_waypoint(carla_map, location: carla.Location) -> carla.Waypoint:
+    wp = carla_map.get_waypoint(location, project_to_road=True, lane_type=carla.LaneType.Driving)
+    if wp is None:
+        raise ValueError("No waypoint found at given location")
+
+    current_wp = wp
+    while True:
+        next_wps = current_wp.next(current_wp.lane_width)
+        if not next_wps:
+            break
+        next_wp = next_wps[0]
+        if next_wp.road_id != wp.road_id or next_wp.lane_id != wp.lane_id:
+            break
+        current_wp = next_wp
+
+    return current_wp
+
+
+def extract_collision_frame_and_type(recorder_info):
+    ego_info = extract_ego_vid_and_type(recorder_info)
+    if ego_info is None:
+        raise ValueError("No ego_vehicle or hero found in Create blocks")
+    ego_vid, ego_type = ego_info
+    frame_id, collision_vid = extract_collision_frame_and_ids(recorder_info, ego_vid)
+
+    create_match = re.search(rf"Create\s+{collision_vid}:\s*([^\s]+)", recorder_info)
+    if not create_match:
+        raise ValueError(f"Create entry not found for actor {collision_vid}")
+    type_id = create_match.group(1)
+
+    return frame_id, collision_vid, type_id
+
+
+def extract_ego_vid_and_type(recorder_info):
+    """
+    Extract ego vehicle id and type from the recorder info.
+    Returns:
+        (ego_vid: int, type_id: str) if found, else None
+    """
+    create_blocks = re.findall(r"(Create\s+\d+:.*?)(?=(?:Create\s+\d+:)|\Z)", recorder_info, re.DOTALL)
+
+    for block in create_blocks:
+        id_match = re.search(r"Create\s+(\d+):\s*([^\s]+)", block)
+        role_match = re.search(r"role_name\s*=\s*(\w+)", block)
+        if id_match and role_match:
+            vid_str, type_id = id_match.groups()
+            role = role_match.group(1).lower()
+            if role in {"ego_vehicle", "hero"}:
+                return int(vid_str), type_id
+
+    return None  # no ego found
+
+
+def extract_collision_frame_and_ids(recorder_info, ego_vid):
+    frame_blocks = re.findall(r"(Frame\s+(\d+)\s+at\s+[\d\.]+\s+seconds.*?)(?=Frame\s+\d+\s+at|\Z)", recorder_info,
+                              re.DOTALL)
+
+    for full_block, frame_id_str in frame_blocks:
+        collision_match = re.search(r"Collision\s+id\s+\d+\s+between\s+(\d+)(?:\s+\(.*?\))?\s+with\s+(\d+)", full_block)
+        # collision_match = re.search(r"Collision\s+id\s+\d+\s+between\s+(\d+)\s+with\s+(\d+)", full_block)
+        if collision_match:
+            id1, id2 = map(int, collision_match.groups())
+            ego_id = int(ego_vid)
+            if ego_id in (id1, id2):
+                collision_vid = id2 if id1 == ego_id else id1
+                return int(frame_id_str), collision_vid
+
+    raise ValueError("No collision involving ego_vid found")
+
+
 if __name__ == '__main__':
     client = carla.Client('localhost', 4000)
     client.set_timeout(10.0)
@@ -493,4 +584,3 @@ if __name__ == '__main__':
         frame_id=frame_id,
         save_path="test.png",
     )
-

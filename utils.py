@@ -325,7 +325,8 @@ def _on_collision(event, state):
             print("COLLISION:", event.other_actor.type_id)
             # do not count collision while spawning ego vehicle (hard drop)
             state.crashed = True
-            state.collision_to = event.other_actor.id
+            state.collision_to = event.other_actor
+            state.collision_to_actor = event.other_actor
             state.min_dist = 0
             state.min_dist_frame = state.num_frames
 
@@ -398,6 +399,8 @@ def check_autoware_status(world, timeout):
             if output == b"":
                 continue
             output = int(output.strip())
+            # print("[*] Autoware nodes found: {}".format(output))
+            # print("[*] WAIT_AUTOWARE_NUM_NODES:", c.WAIT_AUTOWARE_NUM_NODES)
             if output >= c.WAIT_AUTOWARE_NUM_NODES:
                 print("Autoware nodes are ready.")
                 break

@@ -52,11 +52,11 @@ def save_json_to_file(json_data, output_dir, generation_id, scenario_id):
             print(f"Error saving scene to '{output_file}': {e}")
             traceback.print_exc()
 
-        return output_file  # ? ????
+        return output_file
     except Exception as e:
         print(f"Error during file operations: {e}")
         traceback.print_exc()
-        return None  # ?????????? None
+        return None
 
 
 def make_unit_vector(velocity):

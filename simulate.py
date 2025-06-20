@@ -23,14 +23,14 @@ import networkx as nx
 import numpy as np
 import pygame
 
-from myDSL.ImportantFinder import ImportantFinder, compute_all_ttc, parse_data
-from myDSL.Obstacle import Obstacle
+# from myDSL.ImportantFinder import ImportantFinder, compute_all_ttc, parse_data
+# from myDSL.Obstacle import Obstacle
 from myDSL.record_info import DSL2Parser, record_DSL_data
 from myDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_timestamp
 from npc import NPC
 import config
 import constants as c
-from repaly.ReplayTest import init_simulation, plan_trajectory, run_simulation
+# from repaly.ReplayTest import init_simulation, plan_trajectory, run_simulation
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
     set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler, update_vehicle_file, \
     write_json_cache_to_file, record_closest_cars
@@ -89,6 +89,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     state.min_dist = 99999
     state.min_dist_frame = -1
     state.DSLScene = None
+    player = None
     player_loc = None
     time_start = time.time()
     recorder_name = "{}.log".format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
@@ -313,48 +314,19 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         print("   (line #{0}) {1}".format(exc_tb.tb_lineno, exc_type))
         retval = -1
     finally:
-        try:
-            client.stop_recorder()
-            time.sleep(1)
-            # replay test
-            if state.collision_to is not None:
-                # collision to static
-                type_id = state.collision_to
-                if type_id.startswith("vehicle.") or type_id.startswith("walker.pedestrian."):
-
-                    frame_id_ttc = ImportantFinder(client, recorder_name, mode=1)
-                else:
-                    static_actor = state.collision_to
-                    location = static_actor.get_location()
-                    rotation = static_actor.get_transform().rotation
-                    extent = static_actor.bounding_box.extent
-                    static_obs = Obstacle(
-                        x=location.x / 100.0,
-                        y=location.y / 100.0,
-                        vx=0.0,
-                        vy=0.0,
-                        hx=math.cos(math.radians(rotation.yaw)),
-                        hy=math.sin(math.radians(rotation.yaw)),
-                        length=extent.x * 2,
-                        width=extent.y * 2
-                    )
-                    frame_id_ttc = ImportantFinder(client, recorder_name, mode=2, static_obs=static_obs)
-                state.important_frame_id = frame_id_ttc[0]
-                print("important ttc: {}".format(frame_id_ttc[1]))
-                pic_save_dir = os.path.join(conf.out_dir, "replay_pic")
-                os.makedirs(pic_save_dir, exist_ok=True)
-                pic_name = "gid:{}_sid:{}.png".format(state.generation_id, state.scenario_id)
-                pic_save_path = os.path.join(pic_save_dir, pic_name)
-                state.test_result = replay_test(state.important_frame_id, recorder_name, pic_save_path)
-                print("[info] test result: {}".format(state.test_result))
-            carla_dir = os.path.expanduser("~/carla_data")
-            src_path = os.path.join(carla_dir, recorder_name)
-            dst_path = os.path.join(conf.out_dir, recorder_name)
-            print("[info] moving {} to {}".format(src_path, dst_path))
-            shutil.move(src_path, dst_path)
-        except Exception as e:
-            print("[-] stop_recorder error:")
-            traceback.print_exc()
+        if exec_state.proc_state:
+            exec_state.proc_state.terminate()
+            exec_state.proc_state.wait()
+            exec_state.proc_state.stdout.close()
+            exec_state.proc_state.stderr.close()
+        client.stop_recorder()
+        time.sleep(1)
+        # handle_collision_and_replay(client, conf, player, recorder_name, state)
+        carla_dir = os.path.expanduser("~/carla_data")
+        src_path = os.path.join(carla_dir, recorder_name)
+        dst_path = os.path.join(conf.out_dir, recorder_name)
+        print("[info] moving {} to {}".format(src_path, dst_path))
+        shutil.move(src_path, dst_path)
 
         signal.alarm(0)
         settings = world.get_settings()
@@ -369,13 +341,14 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         else:
             valid_time = 0
         logging.info("[info] simulation time: %s", all_time)
+        logging.info("gid: %s sid: %s", state.generation_id, state.scenario_id)
         logging.info("crashed:%s", state.crashed)
-        logging.info("nearby_car:%s", len(nearby_dict))
-        logging.info("valid_time/time: %s/%s", valid_time, all_time)
-        logging.info("distance:%s", state.distance)
-        logging.info("FPS:%s", FPS)
-        logging.info("important_frame_id:%s", state.important_frame_id)
-        logging.info("test_result:%s", state.test_result)
+        # logging.info("nearby_car:%s", len(nearby_dict))
+        # logging.info("valid_time/time: %s/%s", valid_time, all_time)
+        # logging.info("distance:%s", state.distance)
+        # logging.info("FPS:%s", FPS)
+        # logging.info("important_frame_id:%s", state.important_frame_id)
+        # logging.info("test_result:%s", state.test_result)
 
         state.end = True
 
@@ -407,17 +380,11 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         with open(dangerous_frame_file, 'w') as f:
             json.dump(data, f, indent=4)
 
-        if exec_state.proc_state:
-            exec_state.proc_state.terminate()
-            exec_state.proc_state.wait()
-            exec_state.proc_state.stdout.close()
-            exec_state.proc_state.stderr.close()
 
+
+        save_video(carla_error, state)
         # save video in output_dir
-        if conf.agent_type == c.BEHAVIOR:
-            save_behavior_video(carla_error, state)
-        elif conf.agent_type == c.AUTOWARE:
-            save_behavior_video(carla_error, state)
+        if conf.agent_type == c.AUTOWARE:
             os.system("rosnode kill /recorder_video_front")
             time.sleep(1)
             os.system("rosnode kill /recorder_video_top")
@@ -464,6 +431,76 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         return retval, npc_list, state
 
 
+# def handle_collision_and_replay(client, conf, player, recorder_name, state):
+#     try:
+#         # replay test
+#         if state.collision_to is not None:
+#             # collision to static
+#             type_id = state.collision_to.type_id.lower()
+#             print("[info] collision to: {}".format(state.collision_to.type_id))
+#             if type_id.startswith("vehicle.") or type_id.startswith("walker.pedestrian."):
+#                 frame_id_ttc = ImportantFinder(client, recorder_name, mode=1)
+#                 print("important vehicle frame id: {}".format(frame_id_ttc[0]))
+#             else:
+#                 static_actor = state.collision_to
+#                 extent = static_actor.bounding_box.extent
+#                 # location = static_actor.get_location() rotation = static_actor.get_transform().rotation
+#
+#                 # We cannot get the position and posture of the collision
+#                 # obstacle for the time being, so we calculate the vertical position and posture of the obstacle
+#                 # through the position and posture of the ego at the time of collision.
+#
+#                 ego_transform = player.get_transform()
+#                 ego_location = ego_transform.location
+#                 ego_rotation = ego_transform.rotation
+#                 ego_extent = player.bounding_box.extent
+#                 obs_length = extent.x * 2
+#                 obs_width = extent.y * 2
+#
+#                 ego_x = ego_location.x
+#                 ego_y = ego_location.y
+#                 ego_yaw_deg = ego_rotation.yaw
+#                 ego_yaw_rad = math.radians(ego_yaw_deg)
+#                 ego_length = ego_extent.x * 2
+#                 distance = (ego_length + obs_length) / 2.0
+#                 obs_x = ego_x - distance * math.cos(ego_yaw_rad)
+#                 obs_y = ego_y - distance * math.sin(ego_yaw_rad)
+#
+#                 obs_yaw_rad = ego_yaw_rad + math.pi
+#                 hx = math.cos(obs_yaw_rad)
+#                 hy = math.sin(obs_yaw_rad)
+#
+#                 static_obs = Obstacle(
+#                     x=obs_x,
+#                     y=obs_y,
+#                     vx=0.0,
+#                     vy=0.0,
+#                     hx=hx,
+#                     hy=hy,
+#                     length=obs_length,
+#                     width=obs_width
+#                 )
+#                 print("[info] collision to static obstacle: {}".format(static_obs.to_dict()))
+#                 frame_id_ttc = ImportantFinder(client, recorder_name, mode=4, static_obs=static_obs)
+#                 print("important static frame id: {}".format(frame_id_ttc[0]))
+#             state.important_frame_id = frame_id_ttc[0]
+#             print("important ttc: {}".format(frame_id_ttc[1]))
+#             pic_save_dir = os.path.join(conf.out_dir, "replay_pic")
+#             os.makedirs(pic_save_dir, exist_ok=True)
+#             pic_name = "gid:{}_sid:{}.png".format(state.generation_id, state.scenario_id)
+#             pic_save_path = os.path.join(pic_save_dir, pic_name)
+#             state.test_result = replay_test(state.important_frame_id, recorder_name, pic_save_path)
+#             print("[info] test result: {}".format(state.test_result))
+#         carla_dir = os.path.expanduser("~/carla_data")
+#         src_path = os.path.join(carla_dir, recorder_name)
+#         dst_path = os.path.join(conf.out_dir, recorder_name)
+#         print("[info] moving {} to {}".format(src_path, dst_path))
+#         shutil.move(src_path, dst_path)
+#     except Exception as e:
+#         print("[-] stop_recorder error:")
+#         traceback.print_exc()
+
+
 def record_trace(npc_vehicles, exec_state, player, player_loc, state, town_map, trace_dict, trace_graph,
                  trace_graph_important):
     nearby_dict = {}
@@ -479,7 +516,7 @@ def record_trace(npc_vehicles, exec_state, player, player_loc, state, town_map, 
         return [], []
     for npc_vehicle in npc_vehicles:
         if state.crashed:
-            if state.collision_to == npc_vehicle.id:
+            if state.collision_to == npc_vehicle:
                 continue
         waypoint = town_map.get_waypoint(npc_vehicle.get_location(), project_to_road=True,
                                          lane_type=carla.libcarla.LaneType.Driving)
@@ -494,8 +531,8 @@ def record_trace(npc_vehicles, exec_state, player, player_loc, state, town_map, 
     trace_graph_important.append(trace_dict[player.id])
     if state.crashed:
         # if collied to a car
-        if trace_dict.keys().__contains__(state.collision_to):
-            trace_graph_important.append(trace_dict[state.collision_to])
+        if trace_dict.keys().__contains__(state.collision_to.id):
+            trace_graph_important.append(trace_dict[state.collision_to.id])
     else:
         # todo:better
         # if state.closest_car:
@@ -940,61 +977,52 @@ def save_jpg_for_gpt(interval):
     print("done")
 
 
-def save_behavior_video(carla_error, state):
-    # # remove jpg files
-    max_frames = c.FRAME_RATE * c.VIDEO_TIME
-    if state.crashed and not state.laneinvaded:
-        print(f"Saving front camera video for last {c.VIDEO_TIME} second", end=" ")
-        check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/front-*.jpg", max_frames)
-    else:
-        print(f"Saving the whole front camera video", end=" ")
-    vid_filename = f"/tmp/fuzzerdata/{username}/front.mp4"
-    if os.path.exists(vid_filename):
-        os.remove(vid_filename)
-    cmd_cat = f"cat /tmp/fuzzerdata/{username}/front-*.jpg"
-    cmd_ffmpeg = " ".join([
-        "ffmpeg",
-        "-f image2pipe",
-        f"-r {c.FRAME_RATE}",
-        "-vcodec mjpeg",
-        "-i -",
-        "-vcodec libx264",
-        "-crf 5",
-        vid_filename
-    ])
-    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-    if not carla_error:
-        os.system(cmd)
-    else:
-        print("error:dont save any video")
-    cmd = f"rm -f /tmp/fuzzerdata/{username}/front-*.jpg"
-    os.system(cmd)
-    if state.crashed and not state.laneinvaded:
-        print(f"Saving top camera video for last {c.VIDEO_TIME}", end=" ")
-        check_and_remove_excess_images(f"/tmp/fuzzerdata/{username}/top-*.jpg", max_frames)
-    else:
-        print(f"Saving the whole top camera video", end=" ")
-    vid_filename = f"/tmp/fuzzerdata/{username}/top.mp4"
-    if os.path.exists(vid_filename):
-        os.remove(vid_filename)
-    cmd_cat = f"cat /tmp/fuzzerdata/{username}/top-*.jpg"
-    cmd_ffmpeg = " ".join([
-        "ffmpeg",
-        "-f image2pipe",
-        f"-r {c.FRAME_RATE}",
-        "-vcodec mjpeg",
-        "-i -",
-        "-vcodec libx264",
-        "-crf 15",
-        vid_filename
-    ])
-    cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
-    if not carla_error:
-        os.system(cmd)
-    else:
-        print("error:dont save any video")
-    cmd = f"rm -f /tmp/fuzzerdata/{username}/top-*.jpg"
-    os.system(cmd)
+def save_video(carla_error, state):
+    """
+    Save camera videos (front, top) based on crash state.
+    If crashed and not lane-invaded, normally keep only the last N seconds (currently disabled).
+    Otherwise, save the whole video from all .jpg frames.
+
+    Parameters:
+        carla_error (bool): If Carla crashed, skip saving.
+        state: State object containing crash/lane invasion status.
+    """
+    camera_names = ("front", "top")
+    for cam in camera_names:
+        jpg_pattern = f"/tmp/fuzzerdata/{username}/{cam}-*.jpg"
+        mp4_path = f"/tmp/fuzzerdata/{username}/{cam}.mp4"
+        # Disabled: truncate to last N seconds if crashed but not lane-invaded
+        # max_frames = c.FRAME_RATE * c.VIDEO_TIME
+        # if state.crashed and not state.laneinvaded:
+        #     print(f"Saving {cam} camera video for last {c.VIDEO_TIME} seconds", end=" ")
+        #     check_and_remove_excess_images(jpg_pattern, max_frames)
+        # else:
+        #     print(f"Saving the whole {cam} camera video", end=" ")
+        # if not (check_error(state)):
+        if False:
+            print(f"Do not save video this time", end=" ")
+        else:
+            print(f"Saving the whole {cam} camera video", end=" ")
+            if os.path.exists(mp4_path):
+                os.remove(mp4_path)
+            cmd_cat = f"cat {jpg_pattern}"
+            cmd_ffmpeg = " ".join([
+                "ffmpeg",
+                "-f image2pipe",
+                f"-r {c.FRAME_RATE}",
+                "-vcodec mjpeg",
+                "-i -",
+                "-vcodec libx264",
+                "-crf 5" if cam == "front" else "-crf 15",
+                mp4_path
+            ])
+            full_cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+            if not carla_error:
+                os.system(full_cmd)
+            else:
+                print("error: don't save any video")
+        # Cleanup temp frames
+        os.system(f"rm -f {jpg_pattern}")
 
 
 def autoware_goal_publish(goal_loc, goal_rot, state, world):
@@ -1155,7 +1183,11 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
             print("[*] Waiting for Autoware agent " + "." * i + "\r", end="")
             vehicles = world.get_actors().filter("*vehicle.*")
             for vehicle in vehicles:
+                # print("vehicle:", vehicle.id, vehicle.attributes)
                 if vehicle.attributes["role_name"] == "ego_vehicle":
+                    print("    [*] found Autoware agent [{}] at {}".format(
+                        vehicle.id, vehicle.get_location()))
+                    print("sp.location:", sp.location)
                     if vehicle.get_location().distance(sp.location) < 1:
                         player = vehicle
                         autoware_agent_found = True
@@ -1511,10 +1543,4 @@ def set_spectator(world, player):
 
 
 # test by replay
-def replay_test(frame_id, recorder_path, pic_save_path):
-    sim = init_simulation(recorder_path, frame_id)
-    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["recorder_path"], sim["frame_id"], pic_save_path)
-    sim["trajectory"] = trajectory
-    sim["v_vals_hero"] = v_vals_hero
-    result = run_simulation(sim)
-    return result
+

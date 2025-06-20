@@ -54,6 +54,7 @@ class ScenarioState:
         # error states
         self.crashed = False
         self.collision_to = None
+        self.collision_to_actor = None
         self.stuck = False
         self.stuck_duration = 0
         self.laneinvaded = False
@@ -85,7 +86,7 @@ class ScenarioState:
         self.min_dist = 99998
 
         # replay state
-        self.important_frame_id = 0
+        self.important_frame_id = -1
         self.test_result = "No result"
 
         self.autoware_cmd = ""

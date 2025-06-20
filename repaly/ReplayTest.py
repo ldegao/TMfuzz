@@ -1,289 +1,159 @@
 import glob
+import json
 import os
+import shutil
+import socket
+import subprocess
 import sys
-import re
 import time
-
-import numpy as np
-from scipy.interpolate import interp1d
-
-try:
-    sys.path.append(glob.glob('../../carla/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
-        sys.version_info.major,
-        sys.version_info.minor,
-        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
-except IndexError:
-    pass
-
-from myDSL.RecordDealer import HeroPlanner, plot_trajectory_with_obstacles
-from myDSL.SpeedPlanner import run_speed_planner
-
-import math
-import carla
+import traceback
+from datetime import datetime
 
 
-def set_vehicle_pose_and_speed(vehicle, trajectory, target_speed, carla_map, frame_idx, debug=False):
-    target_speed = float(np.asarray(target_speed).flatten()[0])
+def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla_data/"):
+    os.makedirs(out_dir, exist_ok=True)
+    log_file_path = os.path.join(out_dir, f"replay_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+    log_file = open(log_file_path, "a", buffering=1)
+    summary = None
 
-    if frame_idx + 1 < len(trajectory):
-        dx = trajectory[frame_idx + 1][0] - trajectory[frame_idx][0]
-        dy = trajectory[frame_idx + 1][1] - trajectory[frame_idx][1]
-    else:
-        dx = trajectory[frame_idx][0] - trajectory[frame_idx - 1][0]
-        dy = trajectory[frame_idx][1] - trajectory[frame_idx - 1][1]
-    yaw = math.degrees(math.atan2(dy, dx)) if dx or dy else vehicle.get_transform().rotation.yaw
+    def log(msg):
+        print(msg)
+        log_file.write(msg + "\n")
 
-    waypoint = carla_map.get_waypoint(
-        carla.Location(trajectory[frame_idx][0], trajectory[frame_idx][1], 0.0),
-        project_to_road=True, lane_type=carla.LaneType.Driving
-    )
-    z_ground = waypoint.transform.location.z
-    pitch = waypoint.transform.rotation.pitch
-    roll = waypoint.transform.rotation.roll
+    total_logs = 0
+    with_collision = 0
+    successful_replay = 0
+    no_collision = 0
+    errors_by_type = {}
+    for dirpath, _, filenames in os.walk(root_dir):
+        for fname in filenames:
+            if fname.endswith(".log"):
+                total_logs += 1
+                src_path = os.path.join(dirpath, fname)
+                dst_path = os.path.join(test_dir, fname)
+                shutil.copyfile(src_path, dst_path)
 
-    transform = carla.Transform(
-        carla.Location(x=trajectory[frame_idx][0], y=trajectory[frame_idx][1], z=z_ground + 0.05),
-        carla.Rotation(yaw=yaw, pitch=pitch, roll=roll)
-    )
-    vehicle.set_transform(transform)
-    if debug:
-        print(
-            f"[POSE] Set transform=({trajectory[frame_idx][0]:.2f}, {trajectory[frame_idx][0]:.2f}, {z_ground:.2f}) m, yaw={yaw:.2f} degrees")
+                try:
+                    if not wait_for_carla_ready(timeout=15, interval=2):
+                        restart_carla(log)
 
-    vx = float(target_speed * math.cos(math.radians(yaw)))
-    vy = float(target_speed * math.sin(math.radians(yaw)))
-    velocity = carla.Vector3D(vx, vy, 0.0)
-    vehicle.set_target_velocity(velocity)
-    if debug:
-        print(f"[VEL ] Set velocity=({vx:.2f}, {vy:.2f}) m/s")
+                    run_script = os.path.join(os.path.dirname(__file__), "replay.py")
+                    result_path = os.path.join(out_dir, "replay_result.json")
 
+                    if os.path.exists(result_path):
+                        os.remove(result_path)
 
-def update_spectator(world, hero_vehicle):
-    spectator = world.get_spectator()
-    hero_transform = hero_vehicle.get_transform()
+                    proc = subprocess.run(
+                        ["python3", run_script, fname, out_dir],
+                        stdout=None,
+                        stderr=None,
+                        timeout=300
+                    )
 
-    distance_behind = 8.0
-    height = 3.0
-    angle_rad = math.radians(hero_transform.rotation.yaw)
+                    if proc.returncode != 0:
+                        log(f"[ERROR] Subprocess failed for {fname}, code={proc.returncode}")
+                        result = {
+                            "replay_result": False,
+                            "error_type": f"Subprocess error {proc.returncode}"
+                        }
+                    elif not os.path.exists(result_path):
+                        log(f"[ERROR] No result.json produced by subprocess for {fname}")
+                        result = {
+                            "replay_result": False,
+                            "error_type": "No result file"
+                        }
+                    else:
+                        try:
+                            with open(result_path, "r") as f:
+                                result = json.load(f)
+                        except Exception as e:
+                            result = {
+                                "replay_result": False,
+                                "error_type": f"Invalid JSON file: {str(e)}"
+                            }
 
-    offset_x = -distance_behind * math.cos(angle_rad)
-    offset_y = -distance_behind * math.sin(angle_rad)
+                    if result["replay_result"]:
+                        with_collision += 1
+                    else:
+                        no_collision += 1
 
-    camera_location = carla.Location(
-        x=hero_transform.location.x + offset_x,
-        y=hero_transform.location.y + offset_y,
-        z=hero_transform.location.z + height
-    )
+                    if result.get("error_type"):
+                        err = result["error_type"].strip().split('\n')[0]
+                        errors_by_type[err] = errors_by_type.get(err, 0) + 1
+                    else:
+                        successful_replay += 1
 
-    spectator_transform = carla.Transform(
-        camera_location,
-        carla.Rotation(
-            pitch=-10.0,
-            yaw=hero_transform.rotation.yaw,
-            roll=0.0
-        )
-    )
+                except Exception as e:
+                    msg = f"Unhandled error: {str(e)}"
+                    errors_by_type[msg] = errors_by_type.get(msg, 0) + 1
+                    traceback.print_exc(file=sys.stdout)
+                    log(f"[EXCEPTION] {fname} - {msg}")
+                finally:
+                    if os.path.exists(dst_path):
+                        os.remove(dst_path)
 
-    spectator.set_transform(spectator_transform)
+                rate_before = f"{successful_replay / total_logs * 100:.2f}%" if total_logs else "N/A"
+                rate_still = f"{with_collision / successful_replay * 100:.2f}%" if successful_replay else "N/A"
+                summary = (
+                    f"\n=== Progress Update ===\n"
+                    f"Processed logs: {total_logs}\n"
+                    f"With collision: {with_collision}\n"
+                    f"Without collision: {no_collision}\n"
+                    f"Collision before: {successful_replay}\n"
+                    f"Collision before rate: {rate_before}\n"
+                    f"Collision still rate: {rate_still}\n"
+                    f"=== Error Breakdown ===\n"
+                )
+                for err_type, count in errors_by_type.items():
+                    summary += f"- {err_type}: {count}\n"
 
+                log(summary)
 
-def cut_trajectory_and_speed(trajectory, speed_profile, frame_count, debug=False):
-    trajectory = np.array(trajectory)
-    speed_profile = np.array(speed_profile)
-    min_len = min(len(trajectory), len(speed_profile), frame_count)
-    cut_trajectory = trajectory[:min_len]
-    cut_speed = speed_profile[:min_len]
-    if debug:
-        print(f"[INFO] Trajectory and speed cut to {min_len} frames for Carla replay.")
-    return cut_trajectory, cut_speed
-
-
-def interpolate_trajectory_and_speed(trajectory, dp_profile, frame_count):
-    trajectory = np.array(trajectory)
-    x = trajectory[:, 0]
-    y = trajectory[:, 1]
-
-    s_vals = [0.0]
-    for i in range(1, len(trajectory)):
-        dx = x[i] - x[i - 1]
-        dy = y[i] - y[i - 1]
-        s_vals.append(s_vals[-1] + np.hypot(dx, dy))
-    s_vals = np.array(s_vals)
-
-    s_target = np.linspace(0, s_vals[-1], frame_count)
-    x_interp = interp1d(s_vals, x, kind='linear')(s_target)
-    y_interp = interp1d(s_vals, y, kind='linear')(s_target)
-    interpolated_trajectory = np.stack([x_interp, y_interp], axis=1)
-
-    dp_times = [pt[0] for pt in dp_profile]
-    dp_s = [pt[1] for pt in dp_profile]
-    v_vals_sp = [0.0]
-    for i in range(1, len(dp_profile)):
-        ds = dp_s[i] - dp_s[i - 1]
-        dt = dp_times[i] - dp_times[i - 1]
-        v_vals_sp.append(ds / (dt + 1e-6))
-    v_vals_sp = np.array(v_vals_sp)
-
-    v_interp = interp1d(dp_s, v_vals_sp, kind='linear', fill_value="extrapolate")(s_target)
-
-    return interpolated_trajectory, v_interp
+    log("\n=== Final Summary ===\n" + summary)
+    log_file.close()
 
 
-def world_reload(client, debug=False):
-    world = client.get_world()
-    actors = world.get_actors()
-    for actor in actors:
-        if not actor.is_alive:
-            continue
-        type_id = actor.type_id.lower()
-        if 'vehicle.' in type_id or 'walker.pedestrian.' in type_id:
-            try:
-                actor.destroy()
-            except Exception as e:
-                if debug:
-                    print(f"[WARN] Failed to destroy {type_id}: {e}")
+def restart_carla(log_fn):
+    """Stop and restart Carla server."""
+    stop_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/stop_carla.sh")
+    start_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/screen_run_carla.sh")
+
+    subprocess.call(["bash", stop_script])
+    log_fn("[INFO] Called stop_carla.sh")
+    time.sleep(2)
+
+    subprocess.Popen(["bash", start_script])
+    time.sleep(30)
+    log_fn("[INFO] Called screen_run_carla.sh")
 
 
-def init_simulation(recorder_path: str, frame_id: int):
-    client = carla.Client('localhost', 4000)
-    client.set_timeout(10.0)
-    world = client.get_world()
-
-    info = client.show_recorder_file_info(recorder_path, True)
-    match_frames = re.search(r'Frames:\s+(\d+)', info)
-    match_duration = re.search(r'Duration:\s+([0-9.]+)', info)
-    frames = int(match_frames.group(1))
-    duration = float(match_duration.group(1))
-    fps = frames / duration if duration > 0 else 20.0
-    fixed_delta_seconds = 1.0 / fps
-
-    return {
-        "client": client,
-        "world": world,
-        "fps": fps,
-        "duration": duration,
-        "frame_id": frame_id,
-        "fixed_delta_seconds": fixed_delta_seconds,
-        "recorder_path": recorder_path,
-    }
+def wait_for_carla_ready(timeout=15, interval=2):
+    """Wait until Carla server is reachable via port 4000."""
+    waited = 0
+    while waited < timeout:
+        if is_port_open("localhost", 4000):
+            print(f"[INFO] Carla port 4000 is now open after waiting {waited} seconds.")
+            return True
+        time.sleep(interval)
+        waited += interval
+        print(f"[INFO] Waiting for Carla to open port 4000... ({waited}/{timeout}s)")
+    print(f"[ERROR] Carla port 4000 not open after {timeout} seconds.")
+    return False
 
 
-def plan_trajectory(client, recorder_path, frame_id, pic_save_path=None):
-    planner = HeroPlanner(client, recorder_path, frame_id)
-    apf, trajectory, trajectory_velocity = planner.plan()
-    if pic_save_path:
-        plot_trajectory_with_obstacles(
-            trajectory=trajectory,
-            planner=planner,
-            apf=apf,
-            frame_id=frame_id,
-            save_path=pic_save_path,
-        )
-    sp, times, v_vals_hero, smoothed_t, v_vals_sp, dp_profile = run_speed_planner(
-        trajectory, trajectory_velocity,
-        planner.surrounding_vehicles,
-        ego=planner.ego_data
-    )
-
-    if v_vals_hero is None:
-        raise RuntimeError("[ERROR] Speed planning failed.")
-
-    return trajectory, v_vals_hero
-
-
-def run_simulation(sim, debug=False):
-    client = sim["client"]
-    world = sim["world"]
-    trajectory = sim["trajectory"]
-    v_vals_hero = sim["v_vals_hero"]
-    fixed_delta_seconds = sim["fixed_delta_seconds"]
-    frame_id = sim["frame_id"]
-    duration = sim["duration"]
-    recorder_path = sim["recorder_path"]
-
-    frame_count = int((duration - frame_id * fixed_delta_seconds) / fixed_delta_seconds)
-    time_start = frame_id * fixed_delta_seconds
-
-    world_reload(client, debug)
-    time.sleep(1)
-    carla_map = world.get_map()
-    blueprint_library = world.get_blueprint_library()
-    vehicle_bp = blueprint_library.filter('vehicle.tesla.model3')[0]
-    start_x, start_y = trajectory[0]
-    next_x, next_y = trajectory[2]
-    yaw_deg = math.degrees(math.atan2(next_y - start_x, next_x - start_x))
-
-    waypoint = carla_map.get_waypoint(
-        carla.Location(x=start_x, y=start_y, z=0.0),
-        project_to_road=True, lane_type=carla.LaneType.Driving
-    )
-    spawn_point = carla.Transform(
-        carla.Location(x=start_x, y=start_y, z=waypoint.transform.location.z + 0.5),
-        carla.Rotation(yaw=yaw_deg)
-    )
-
-    hero_vehicle = world.spawn_actor(vehicle_bp, spawn_point)
-    hero_vehicle.set_autopilot(False)
-    hero_vehicle.set_simulate_physics()
-
-    settings = world.get_settings()
-    settings.synchronous_mode = True
-    settings.fixed_delta_seconds = fixed_delta_seconds
-    world.apply_settings(settings)
-    client.set_replayer_ignore_hero(True)
-
-    client.replay_file(recorder_path, time_start - 5 * fixed_delta_seconds,
-                       duration - time_start + 5 * fixed_delta_seconds, 0)
-
-    for _ in range(5):
-        world.tick()
-        time.sleep(fixed_delta_seconds)
-        hero_vehicle.set_transform(spawn_point)
-        update_spectator(world, hero_vehicle)
-
-    collision_bp = blueprint_library.find('sensor.other.collision')
-    collision_transform = carla.Transform(carla.Location(x=0, y=0, z=1.0))
-    collision_sensor = world.spawn_actor(collision_bp, collision_transform, attach_to=hero_vehicle)
-
-    collision_result = {"frame": None, "other_actor": None}
-
-    def on_collision(event):
-        type_id = event.other_actor.type_id.lower()
-        if type_id.startswith("vehicle.") or type_id.startswith("walker.pedestrian."):
-            if event.frame <= frame_id + frame_count:
-                if debug:
-                    print(f"[COLLISION] Ego collided with {type_id} at frame {event.frame}.")
-                collision_result["frame"] = event.frame
-                collision_result["other_actor"] = type_id
-
-    collision_sensor.listen(on_collision)
-
-    try:
-        for i in range(len(trajectory)):
-            v_target = v_vals_hero[i]
-            set_vehicle_pose_and_speed(hero_vehicle, trajectory, v_target, carla_map, i, debug)
-            update_spectator(world, hero_vehicle)
-            time.sleep(fixed_delta_seconds)
-            world.tick()
-    finally:
-        settings.synchronous_mode = False
-        world.apply_settings(settings)
-        if collision_sensor:
-            collision_sensor.stop()
-            collision_sensor.destroy()
-        if debug:
-            print("[INFO] Finished replay. Synchronous mode disabled.")
-
-    return collision_result["other_actor"]
+def is_port_open(host: str, port: int) -> bool:
+    """Check if a port is open (used to verify Carla server readiness)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(2.0)
+        try:
+            sock.connect((host, port))
+            return True
+        except:
+            return False
 
 
 if __name__ == '__main__':
-    recorder_path = "2025-04-22-20-19-43.log"
-    frame_id = 1600
-
-    sim = init_simulation(recorder_path, frame_id)
-    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["recorder_path"], sim["frame_id"])
-    sim["trajectory"] = trajectory
-    sim["v_vals_hero"] = v_vals_hero
-    result = run_simulation(sim, debug=True)
-    print(f"[RESULT] Collision with: {result if result else 'None'}")
+    # root_dir = "/home/linshenghao/drivefuzz/TM-fuzzer/data/save/20250605203343/logs/"
+    root_dir = "/home/linshenghao/drivefuzz/save_autoware_6_20/"
+    out_dir = "/home/linshenghao/drivefuzz/save_autoware_6_20/result"
+    test_all_logs_in_folder(root_dir, out_dir)

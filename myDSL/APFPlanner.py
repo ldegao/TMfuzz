@@ -28,7 +28,7 @@ class APFPlanner:
         self.T = self.L / self.V
 
         self.ETA_ATT_NORM = 0.02  # Reduced for realism
-        self.ETA_REP_OB_NORM = 2
+        self.ETA_REP_OB_NORM = 5 # represent obstacles
         self.ETA_REP_EDGE_NORM = 0.1
         self.D0_NORM = 3.0
         self.STEP_LENGTH_NORM = 0.1

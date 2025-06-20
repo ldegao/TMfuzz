@@ -159,7 +159,7 @@ def parse_data(recorder_info, model_size_map, world):
                 width=width
             )
             role_name = car_data.get(vid, {}).get('role_name', '')
-            if role_name == 'ego_vehicle':
+            if role_name == 'hero' or role_name == 'ego_vehicle':
                 frame_obstacles['ego'] = obs
             else:
                 frame_obstacles[f'obs_{obs_count}'] = obs
@@ -194,6 +194,7 @@ def compute_ttc_series(all_frame_data, ego_selector, obs_selector):
             ttcs = [t for t in ttcs if t >= 0]
             if ttcs:
                 ttc_results.append((frame_id, min(ttcs)))
+                # print(f"[INFO] Frame {frame_id}: TTC = {min(ttcs)}")
         except Exception as e:
             print(f"[WARN] TTC failed at frame {frame_id}: {e}")
             continue
@@ -227,7 +228,6 @@ def get_important_frame(ttc_results, mode, x, t, fixed_delta_seconds):
             1 - First frame with TTC < x
             2 - Last TTC before crash (TTC == -1), going back t seconds
             3 - The first TTC in a continuous segment before crash where TTC < x
-            4 - Like mode 3 but for static_obs (no TTC == -1 crash), just apply continuous TTC<x detection
         x: Threshold TTC value (float)
         t: Time before crash in seconds (for mode 2 and 3)
         fixed_delta_seconds: Time per frame
@@ -268,19 +268,6 @@ def get_important_frame(ttc_results, mode, x, t, fixed_delta_seconds):
                     break
             return segment[0] if segment else ttc_results[0]
 
-    if mode == 4:
-        # Static obstacle mode: apply continuous TTC < x detection (like mode 3), no crash assumption
-        segment = []
-        for frame_id, ttc in ttc_results:
-            if 0 < ttc < x:
-                if not segment or segment[-1][0] + 1 == frame_id:
-                    segment.append((frame_id, ttc))
-                else:
-                    segment = [(frame_id, ttc)]
-            elif segment:
-                break
-        return segment[0] if segment else ttc_results[0]
-
     return None
 
 
@@ -314,14 +301,17 @@ def ImportantFinder(client, recorder_path, mode=1, x=2.0, t=3.0, static_obs=None
     model_size_map = {}
     world = client.get_world()
     all_frame_data = parse_data(recorder_info, model_size_map, world)
+    sorted_keys = sorted(all_frame_data.keys())
+    last_keys = sorted_keys[-200:]
+    frame_data = {k: all_frame_data[k] for k in last_keys}
 
     if mode == 4 and static_obs is not None:
-        ttc_results = compute_ttc_with_obs(all_frame_data, static_obs)
+        ttc_results = compute_ttc_with_obs(frame_data, static_obs)
         important_frame = get_important_frame(
-            ttc_results, mode=4, x=x, t=t, fixed_delta_seconds=fixed_delta_seconds
+            ttc_results, mode=2, x=x, t=t, fixed_delta_seconds=fixed_delta_seconds
         )
     else:
-        ttc_results = compute_all_ttc(all_frame_data)
+        ttc_results = compute_all_ttc(frame_data)
         important_frame = get_important_frame(
             ttc_results, mode=mode, x=x, t=t, fixed_delta_seconds=fixed_delta_seconds
         )
@@ -372,7 +362,7 @@ if __name__ == "__main__":
     static_obs = actor_to_obstacle(static_actor)
 
     # Run TTC-based important frame search
-    recorder_path = "2025-05-23-05-51-38.log"
+    recorder_path = "2025-04-22-19-58-17.log"
     important_frame = ImportantFinder(
         client,
         recorder_path,

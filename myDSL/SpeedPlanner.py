@@ -1,3 +1,4 @@
+import concurrent.futures
 import math
 import sys
 if __name__ == "__main__" and __package__ is None:
@@ -289,9 +290,15 @@ def run_speed_planner(trajectory, trajectory_velocity, obstacles, ego, dt=0.2, d
         penalty_factor=penalty_factor,
         ego=ego  # Passing ego here; should be assigned accordingly
     )
-
+    TIMEOUT = 5  # seconds
     print("[INFO] Running A* algorithm...")
-    dp_profile, _ = sp.plan_speed_profile_astar()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(sp.plan_speed_profile_astar)
+        try:
+            dp_profile, _ = future.result(timeout=TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            print(f"[TIMEOUT] A* speed planning exceeded {TIMEOUT}s.")
+            dp_profile = None
     if dp_profile is None:
         print("[RESULT] No feasible trajectory found.")
         return sp, times, trajectory_velocity, None, None, None
@@ -348,7 +355,6 @@ def plot_st_graph(sp, dp_profile, smoothed_t, trajectory_velocity):
             plt.plot(smoothed_t, dp_profile_s, 'g-', label='Smoothed Profile')
     else:
         print("[WARN] No DP profile available to plot.")
-
     # Plot HeroPlanner original ST curve
     if trajectory_velocity is not None and len(trajectory_velocity) > 0:
         s_hero = 0.0
