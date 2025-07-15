@@ -30,13 +30,11 @@ from myDSL.utils import initialize_vehicle_from_json, save_json_to_file, find_ti
 from npc import NPC
 import config
 import constants as c
-# from repaly.ReplayTest import init_simulation, plan_trajectory, run_simulation
+import DSL as sd
+
 from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_between_vectors, \
     set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler, update_vehicle_file, \
     write_json_cache_to_file, record_closest_cars
-
-# record import
-
 
 config.set_carla_api_path()
 try:
@@ -121,10 +119,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         client.start_recorder(recorder_name, True)
         # initialize the simulation and the ego vehicle
 
-        add_car_frame, blueprint_library, clock, player_bp, town_map, vehicle_bp_library = simulate_initialize(client,
-                                                                                                               conf,
-                                                                                                               weather_dict,
-                                                                                                               world)
+        add_car_frame, blueprint_library, clock, player_bp, town_map, vehicle_bp_library = simulate_initialize(client, conf, weather_dict, state, world)
         autoware_container, ego, player, max_steer_angle = ego_initialize(
             agents_now, exec_state,
             blueprint_library, conf,
@@ -155,6 +150,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             s_started = False
             # actual monitoring of the driving simulation begins here
             print("START DRIVING: {} {}".format(first_frame_id, first_sim_time))
+
+            # diavio: carAccidentsReport:init
+            sd.init_global(state, client)
+
             # mark goal position
             if conf.debug:
                 world.debug.draw_box(
@@ -221,7 +220,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                 state.elapsed_time = cur_sim_time - first_sim_time
 
                 frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel = get_player_info(
-                    cur_frame_id, goal_loc, player, sp, state, town_map, conf)
+                    cur_frame_id, player, state, town_map, world)
 
                 # drive-fuzz's thing, not sure if we need it yaw = sp.rotation.yaw calculate_control(npc_vehicles,
                 # npc_walkers, max_steer_angle, player, player_loc, player_rot, state, vel, yaw)
@@ -262,6 +261,10 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
                                                                            player_loc, player_road_id,
                                                                            sensors, state, town_map, vehicle_bp_library,
                                                                            world, wp, exec_state.G)
+                # diavio: update npc state
+                for npc in npc_now:
+                    npc.update_state(state)
+
                 # set spector
                 set_spectator(world, player)
                 sampling_rate = 5
@@ -321,7 +324,7 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
             exec_state.proc_state.stderr.close()
         client.stop_recorder()
         time.sleep(1)
-        # handle_collision_and_replay(client, conf, player, recorder_name, state)
+        # handle_collision_and_replay(client, conf, player, recorder_name, state
         carla_dir = os.path.expanduser("~/carla_data")
         src_path = os.path.join(carla_dir, recorder_name)
         dst_path = os.path.join(conf.out_dir, recorder_name)
@@ -379,8 +382,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         # Save the updated data back to the file
         with open(dangerous_frame_file, 'w') as f:
             json.dump(data, f, indent=4)
-
-
 
         save_video(carla_error, state)
         # save video in output_dir
@@ -742,6 +743,14 @@ def add_new_car(npc_list, npc_vehicles, npc_now, add_car_frame, agents_now, auto
                 else:
                     continue
             if npc_vehicle is not None:
+                # 将新车辆添加到VehicleDict中
+                import DSL as sd
+                if hasattr(sd, '_vehicleDict') and sd._vehicleDict is not None:
+                    # 获取当前车辆数量作为新车辆的索引
+                    current_vehicle_count = len(sd._vehicleDict.get_uid_dict()) + 1
+                    vehicle_name = f'Vehicle{current_vehicle_count}'
+                    sd._vehicleDict.uid_dict[npc_vehicle.id] = {'name': vehicle_name, 'identity': 'NPC'}
+                
                 spawn_npc(new_npc, npc_vehicle, npc_vehicles, npc_now, agents_now, conf,
                           max_wheels_for_non_motorized, road_direction, sensors, state, world, wp)
                 npc_list.append(new_npc)
@@ -771,6 +780,15 @@ def add_old_npc(npc_list, npc_vehicles, npc_now, agents_now, conf, found_frame, 
                 break
             npc_vehicle = world.try_spawn_actor(npc.npc_bp, npc.spawn_point)
             if npc_vehicle is not None:
+                # 将恢复的车辆添加到VehicleDict中
+                import DSL as sd
+                if hasattr(sd, '_vehicleDict') and sd._vehicleDict is not None:
+                    # 检查车辆是否已经在VehicleDict中
+                    if npc_vehicle.id not in sd._vehicleDict.uid_dict:
+                        current_vehicle_count = len(sd._vehicleDict.get_uid_dict()) + 1
+                        vehicle_name = f'Vehicle{current_vehicle_count}'
+                        sd._vehicleDict.uid_dict[npc_vehicle.id] = {'name': vehicle_name, 'identity': 'NPC'}
+                
                 npc_spawn_rotation = npc.spawn_point.rotation
                 roll_degrees = npc_spawn_rotation.yaw
                 roll = math.radians(roll_degrees)
@@ -843,7 +861,7 @@ def mark_useless_npc(npc_now, conf, player_lane_id, player_loc, player_rot, play
             mark_npc(npc, 5 * c.FRAME_RATE)
 
 
-def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=None):
+def get_player_info(cur_frame_id, player, state, town_map, world):
     # Get player info
     frame_speed_lim_changed = 0
     player_transform = player.get_transform()
@@ -855,6 +873,7 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
     player_road_id = player_waypoint.road_id
     vel = player.get_velocity()
     speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+    angular_velocity = player.get_angular_velocity()
     speed_limit = player.get_speed_limit()
     try:
         last_speed_limit = state.speed_lim[-1]
@@ -862,15 +881,27 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
         last_speed_limit = 0
     if speed_limit != last_speed_limit:
         frame_speed_lim_changed = cur_frame_id
+        
+    # diavio record
+    state.distance += speed / 3.6 / c.FRAME_RATE
+    
+    # 如果这是第一次设置ego_id，重新初始化VehicleDict
+    if state.ego_id is None:
+        state.ego_id = player.id
+        import DSL as sd
+        if hasattr(sd, '_vehicleDict') and sd._vehicleDict is not None:
+            sd._vehicleDict.set_uid_dict(state.ego_id, state.npc_id)
+    else:
+        state.ego_id = player.id
+    
     state.speed.append(speed)
     state.speed_lim.append(speed_limit)
-    state.distance += speed / 3.6 / c.FRAME_RATE
-    # if conf.debug:
-    #     print("[debug] (%.2f,%.2f)>(%.2f,%.2f)>(%.2f,%.2f) %.2f m left, %.2f/%d km/h   \r" % (
-    #         sp.location.x, sp.location.y, player_loc.x,
-    #         player_loc.y, goal_loc.x, goal_loc.y,
-    #         player_loc.distance(goal_loc),
-    #         speed, speed_limit), end="")
+    state.angular_velocity.append(angular_velocity)
+    state.transforms.append(player_transform)
+
+    # 只打印目前拥有的信息，不做变量假设
+    print("[debug] (%.2f,%.2f) %.2f/%d km/h   \r" % (
+        player_loc.x, player_loc.y, speed, speed_limit), end="")
     if player.is_at_traffic_light():
         traffic_light = player.get_traffic_light()
         if traffic_light.get_state() == carla.TrafficLightState.Red:
@@ -891,6 +922,8 @@ def get_player_info(cur_frame_id, goal_loc, player, sp, state, town_map, conf=No
                     stopped_at_red = True
             if not stopped_at_red:
                 state.red_violation = True
+                # 记录红灯违规的帧索引
+                state.red_violation_record.add(state.num_frames)
     return frame_speed_lim_changed, player_lane_id, player_loc, player_road_id, player_rot, speed, speed_limit, vel
 
 
@@ -977,33 +1010,29 @@ def save_jpg_for_gpt(interval):
     print("done")
 
 
-def save_video(carla_error, state):
+def save_video(carla_error, state, out_dir=None, out_prefix=None):
     """
     Save camera videos (front, top) based on crash state.
-    If crashed and not lane-invaded, normally keep only the last N seconds (currently disabled).
-    Otherwise, save the whole video from all .jpg frames.
-
-    Parameters:
-        carla_error (bool): If Carla crashed, skip saving.
-        state: State object containing crash/lane invasion status.
+    out_dir: 目标输出目录（如 cam_dir）
+    out_prefix: 文件名前缀（如 timestamp）
     """
+    import shutil
     camera_names = ("front", "top")
+    username = os.getenv("USER")
+    print(f"[save_video] username={username}, out_dir={out_dir}, out_prefix={out_prefix}")
     for cam in camera_names:
         jpg_pattern = f"/tmp/fuzzerdata/{username}/{cam}-*.jpg"
         mp4_path = f"/tmp/fuzzerdata/{username}/{cam}.mp4"
+        print(f"[save_video] Processing camera: {cam}")
+        print(f"[save_video] jpg_pattern: {jpg_pattern}")
+        print(f"[save_video] mp4_path: {mp4_path}")
         # Disabled: truncate to last N seconds if crashed but not lane-invaded
-        # max_frames = c.FRAME_RATE * c.VIDEO_TIME
-        # if state.crashed and not state.laneinvaded:
-        #     print(f"Saving {cam} camera video for last {c.VIDEO_TIME} seconds", end=" ")
-        #     check_and_remove_excess_images(jpg_pattern, max_frames)
-        # else:
-        #     print(f"Saving the whole {cam} camera video", end=" ")
-        # if not (check_error(state)):
         if False:
             print(f"Do not save video this time", end=" ")
         else:
             print(f"Saving the whole {cam} camera video", end=" ")
             if os.path.exists(mp4_path):
+                print(f"[save_video] Removing old mp4: {mp4_path}")
                 os.remove(mp4_path)
             cmd_cat = f"cat {jpg_pattern}"
             cmd_ffmpeg = " ".join([
@@ -1017,12 +1046,26 @@ def save_video(carla_error, state):
                 mp4_path
             ])
             full_cmd = f"{cmd_cat} | {cmd_ffmpeg} {c.DEVNULL}"
+            print(f"[save_video] ffmpeg command: {full_cmd}")
             if not carla_error:
-                os.system(full_cmd)
+                ret = os.system(full_cmd)
+                print(f"[save_video] ffmpeg return code: {ret}")
             else:
                 print("error: don't save any video")
         # Cleanup temp frames
+        print(f"[save_video] Removing jpg frames: {jpg_pattern}")
         os.system(f"rm -f {jpg_pattern}")
+
+        # 新增：如果 out_dir 和 out_prefix 指定，则拷贝到目标目录并重命名
+        if out_dir and out_prefix:
+            target_name = f"{out_prefix}_{cam}.mp4"
+            target_path = os.path.join(out_dir, target_name)
+            print(f"[save_video] Will copy to: {target_path}")
+            if os.path.exists(mp4_path):
+                shutil.copyfile(mp4_path, target_path)
+                print(f"[save_video] [info] Saved {mp4_path} to {target_path}")
+            else:
+                print(f"[save_video] [warn] {mp4_path} not found, video not saved!")
 
 
 def autoware_goal_publish(goal_loc, goal_rot, state, world):
@@ -1041,7 +1084,7 @@ def autoware_goal_publish(goal_loc, goal_rot, state, world):
     goal_msg = "'{" + goal_hdr + ", " + goal_pose + "}'"
     pub_cmd = "rostopic pub --once {} {} {} > /dev/null".format(pub_topic, msg_type, goal_msg)
     os.system(pub_cmd)
-    print("[carla] Goal published")
+    print("[carla] Goal published at")
     time.sleep(3)  # give some time (Autoware initialization is slow)
     state.autoware_goal = pub_cmd
     world.tick()
@@ -1284,7 +1327,9 @@ def ego_initialize(agents_now, exec_state, blueprint_library, conf, player_bp, s
     return autoware_container, ego, player, max_steer_angle
 
 
-def simulate_initialize(client, conf, weather_dict, world):
+def simulate_initialize(client, conf, weather_dict, state, world):
+    # diavio:
+    state.weather = weather_dict
     client.set_timeout(10.0)
     if conf.no_traffic_lights:
         # set all traffic lights to green
@@ -1345,6 +1390,7 @@ def spawn_npc(npc, npc_vehicle, npc_vehicles, npcs_now, agents_now, conf, max_wh
     npc_vehicle.set_target_velocity(
         npc.speed * road_direction)
     npc.set_instance(npc_vehicle)
+    npc.update_state(state)  # <--- 新增，确保刚spawn就有一条transform记录
     # # just add it for behavior
     # if conf.agent_type == c.BEHAVIOR:
     #     # don't add sensors for non_motorized vehicles
@@ -1541,6 +1587,4 @@ def set_spectator(world, player):
     )
     spectator.set_transform(spectator_transform)
 
-
 # test by replay
-

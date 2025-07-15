@@ -15,9 +15,9 @@ while true; do
     cd ..
     $cmd
     cd ./script
-    status=$(docker inspect -f '{{.State.Status}}' carla-$USER)
+    status=$(docker inspect -f '{{.State.Status}}' carla-TM-$USER)
     if [[ $status != "running" ]]; then
-	echo "carla-$USER is not in 'running' state. Restarting..."
+	echo "carla-TM-$USER is not in 'running' state. Restarting..."
     fi
 done
 #--no-lane-check  --no-traffic-light

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 fuzzerdata_dir="/tmp/fuzzerdata/$USER"
-docker_name="carla-$USER"
+docker_name="carla-TM-$USER"
 
 # Create fuzzerdata_dir if it doesn't exist
 if [[ ! -d "$fuzzerdata_dir" ]]; then
@@ -17,7 +17,7 @@ fi
 
 # Check if the Docker container doesn't exist
 if [[ ! "$(docker ps -a --filter name=$docker_name --format '{{.Names}}')" ]]; then
-  echo "Docker container $docker_name doesn't exist. Running run_carla.sh..."
+  echo "Docker container $docker_name doesn't exist. Running screen_run_carla.sh..."
   "./screen_run_carla.sh"
 fi
 

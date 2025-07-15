@@ -14,7 +14,7 @@ from myDSL.Obstacle import Obstacle
 from myDSL.RecordDealer import HeroPlanner, plot_trajectory_with_obstacles, extract_collision_frame_and_type
 from myDSL.SpeedPlanner import run_speed_planner
 
-VIDEO_DIR = "/home/linshenghao/drivefuzz/save_autoware_6_20/replay"
+VIDEO_DIR = "~/drivefuzz/save_autoware_6_20/replay"
 try:
     sys.path.append(glob.glob('../../carla/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,

@@ -16,6 +16,7 @@ from pygame.draw_py import Point
 import constants
 import constants as c
 import config
+import DSL as sd
 
 config.set_carla_api_path()
 
@@ -329,6 +330,22 @@ def _on_collision(event, state):
             state.collision_to_actor = event.other_actor
             state.min_dist = 0
             state.min_dist_frame = state.num_frames
+    # 确保碰撞涉及的车辆都在VehicleDict中
+    import DSL as sd
+    if hasattr(sd, '_vehicleDict') and sd._vehicleDict is not None:
+        # 检查并添加第一个车辆
+        if event.actor.id not in sd._vehicleDict.uid_dict:
+            current_vehicle_count = len(sd._vehicleDict.get_uid_dict()) + 1
+            vehicle_name = f'Vehicle{current_vehicle_count}'
+            sd._vehicleDict.uid_dict[event.actor.id] = {'name': vehicle_name, 'identity': 'UNKNOWN'}
+        
+        # 检查并添加第二个车辆
+        if event.other_actor.id not in sd._vehicleDict.uid_dict:
+            current_vehicle_count = len(sd._vehicleDict.get_uid_dict()) + 1
+            vehicle_name = f'Vehicle{current_vehicle_count}'
+            sd._vehicleDict.uid_dict[event.other_actor.id] = {'name': vehicle_name, 'identity': 'UNKNOWN'}
+    
+    sd.add_collision(event.actor.id, event.other_actor.id)
 
 
 def _on_invasion(event, state):

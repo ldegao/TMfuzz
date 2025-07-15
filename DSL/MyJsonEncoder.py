@@ -1,7 +1,7 @@
 from typing import Any
 import DSL as sd
 import json
-from states import State
+from states import ScenarioState
 
 import config
 config.set_carla_api_path()
@@ -25,7 +25,7 @@ class MyJsonEncoder(json.JSONEncoder):
             return o.get_dict()
         if isinstance(o, carla.Client):
             return None
-        if isinstance(o, State):
+        if isinstance(o, ScenarioState):
             return None
         if isinstance(o,sd.Obstacles):
             return o.get_dict()

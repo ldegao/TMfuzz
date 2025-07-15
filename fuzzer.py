@@ -446,18 +446,16 @@ def seed_initialize(town, town_map):
     yaw = sp.rotation.yaw
     roll = sp.rotation.roll
     # restrict destination to be within 200 meters
-    destination_flag = True
     wp, wp_x, wp_y, wp_z, wp_yaw = None, None, None, None, None
-    while destination_flag:
+    for _ in range(100):
         wp = random.choice(spawn_points)
         wp_x = wp.location.x
         wp_y = wp.location.y
         wp_z = wp.location.z
         wp_yaw = wp.rotation.yaw
-        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > c.MIN_DIST:
-            destination_flag = False
-        if math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2) > c.MAX_DIST:
-            destination_flag = True
+        dist = math.sqrt((sp_x - wp_x) ** 2 + (sp_y - wp_y) ** 2)
+        if c.MIN_DIST < dist < c.MAX_DIST:
+            break
     seed_dict = {
         "map": town_map,
         "sp_x": sp_x,

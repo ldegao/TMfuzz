@@ -10,7 +10,7 @@ import traceback
 from datetime import datetime
 
 
-def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla_data/"):
+def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
     os.makedirs(out_dir, exist_ok=True)
     log_file_path = os.path.join(out_dir, f"replay_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
     log_file = open(log_file_path, "a", buffering=1)
@@ -25,6 +25,7 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla
     successful_replay = 0
     no_collision = 0
     errors_by_type = {}
+    last_error = False
     for dirpath, _, filenames in os.walk(root_dir):
         for fname in filenames:
             if fname.endswith(".log"):
@@ -34,7 +35,7 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla
                 shutil.copyfile(src_path, dst_path)
 
                 try:
-                    if not wait_for_carla_ready(timeout=15, interval=2):
+                    if not wait_for_carla_ready(timeout=15, interval=2) or last_error:
                         restart_carla(log)
 
                     run_script = os.path.join(os.path.dirname(__file__), "replay.py")
@@ -56,6 +57,7 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla
                             "replay_result": False,
                             "error_type": f"Subprocess error {proc.returncode}"
                         }
+                        last_error = True
                     elif not os.path.exists(result_path):
                         log(f"[ERROR] No result.json produced by subprocess for {fname}")
                         result = {
@@ -82,12 +84,13 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="/home/linshenghao/carla
                         errors_by_type[err] = errors_by_type.get(err, 0) + 1
                     else:
                         successful_replay += 1
-
+                        last_error = False
                 except Exception as e:
                     msg = f"Unhandled error: {str(e)}"
                     errors_by_type[msg] = errors_by_type.get(msg, 0) + 1
                     traceback.print_exc(file=sys.stdout)
                     log(f"[EXCEPTION] {fname} - {msg}")
+                    last_error = True
                 finally:
                     if os.path.exists(dst_path):
                         os.remove(dst_path)
@@ -153,7 +156,7 @@ def is_port_open(host: str, port: int) -> bool:
 
 
 if __name__ == '__main__':
-    # root_dir = "/home/linshenghao/drivefuzz/TM-fuzzer/data/save/20250605203343/logs/"
-    root_dir = "/home/linshenghao/drivefuzz/save_autoware_6_20/"
-    out_dir = "/home/linshenghao/drivefuzz/save_autoware_6_20/result"
+    # root_dir = "~/drivefuzz/TM-fuzzer/data/save/20250605203343/logs/"
+    root_dir = "~/drivefuzz/save_autoware_6_20/"
+    out_dir = "~/drivefuzz/save_autoware_6_20/result"
     test_all_logs_in_folder(root_dir, out_dir)

@@ -156,6 +156,25 @@ class NPC:
             if new_vehicle.safe_check(npc):
                 print("split:", npc.npc_id, "to", npc.npc_id, npc_id)
                 return new_vehicle
+    def update_state(self, state):
+        # 1. 更新 npc_id 列表
+        if self.instance.id not in state.npc_id:
+            state.npc_id.append(self.instance.id)
+        # 2. 更新 npc_state 中对应的数据
+        npc_vehicle = self.instance
+        npc_transform = npc_vehicle.get_transform()
+        npc_vel = npc_vehicle.get_velocity()
+        npc_speed = 3.6 * math.sqrt(npc_vel.x ** 2 + npc_vel.y ** 2 + npc_vel.z ** 2)
+        npc_angular_velocity = npc_vehicle.get_angular_velocity()
+        npc_speed_limit = npc_vehicle.get_speed_limit()
+        # 使用 ScenarioState 的 set_npc_state 方法更新数据
+        state.set_npc_state(
+            self.instance.id,
+            npc_speed,
+            npc_transform,
+            npc_angular_velocity,
+            speed_lim=npc_speed_limit
+        )
 
     def npc_cross(self, adc2):
         pass

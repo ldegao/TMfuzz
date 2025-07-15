@@ -1,0 +1,78 @@
+{
+  "RoadNetWork": {
+    "RoadType": "One-way",
+    "LaneType": "4-lane",
+    "RoadShape": "straight",
+    "RoadSlope": "unmentioned",
+    "SpeedLimit": 90.0
+  },
+  "Environment": {
+    "RoadCondition": "unmentioned",
+    "Weather": [
+      "altitude"
+    ]
+  },
+  "accidents": [
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle8",
+        "MovingOnWhichWay": "east",
+        "LocationAfterCrash": -1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "east",
+          "VehicleAction": "go straight,acceleration",
+          "TravelSpeed": 28.278228489957126,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle8": {
+        "ImpactSide": "front side collided by Vehicle1",
+        "MovingOnWhichWay": "east",
+        "LocationAfterCrash": -1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "east",
+          "VehicleAction": "go straight,deceleration",
+          "TravelSpeed": 36.59979160962871,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "decelerate to avoid collision",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "front side collided by Vehicle3",
+        "MovingOnWhichWay": "east",
+        "LocationAfterCrash": -1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "east",
+          "VehicleAction": "go straight,acceleration",
+          "TravelSpeed": 34.09350941892585,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "no",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle3": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "east",
+        "LocationAfterCrash": -1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "east",
+          "VehicleAction": "turn right,deceleration",
+          "TravelSpeed": 28.284341365971727,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    }
+  ],
+  "Obstacles": "unmentioned"
+}

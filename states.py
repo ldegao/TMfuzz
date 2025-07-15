@@ -1,6 +1,6 @@
 """ Global States """
 import signal
-
+from collections import defaultdict
 
 class ExecState:
     def __init__(self):
@@ -28,6 +28,7 @@ class ScenarioState:
 
     def __init__(self):
         # exec states
+        self.ego_id = None
         self.client = None
         self.world = None
         self.G = None
@@ -66,6 +67,7 @@ class ScenarioState:
         self.on_red = False
         self.on_red_speed = []
         self.red_violation = False
+        self.red_violation_record = set()  # 记录红灯违规的帧索引
 
         # other error states, e.g., segfault
         self.other_error = False
@@ -94,7 +96,31 @@ class ScenarioState:
         self.autoware_goal = ""
         self.drawn_points = set()
 
+        # diavio
+        self.npc_id = list()
+        self.npc_state = defaultdict(lambda: ScenarioState())
+        self.speeding = False
+        self.angular_velocity = list()
+        self.transforms = []
+        self.speed = []
+        self.speed_lim = []
+
     def sig_handler(self, signum, frame):
-        print("[-] something happened: {}".format(signal.signum.name))
+        print("[-] something happened: {}".format(signal.Signals(signum).name))
         self.other = True
         self.signal = signum
+
+    def set_npc_state(self, id, speed, transform, angular_velocity, speed_lim=50):
+        self.npc_state[id].speed.append(speed)
+        self.npc_state[id].transforms.append(transform)
+        self.npc_state[id].speed_lim.append(speed_lim)
+        self.npc_state[id].angular_velocity.append(angular_velocity)
+
+    def get_npc_state(self, id):
+        return self.npc_state[id]
+
+    def get_state_by_id(self, id):
+        if id == self.ego_id:
+            return self
+        else:
+            return self.get_npc_state(id)

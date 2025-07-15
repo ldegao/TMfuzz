@@ -19,6 +19,9 @@ class AgainstRules(object):
     def check(self, index=None):
         if index == None:
             index = len(self.state.transforms)-1
+        # 确保index在有效范围内
+        if index < 0 or index >= len(self.state.transforms):
+            return self.rules
         self.check_illegal_lane_change(index)
         self.check_run_red_light(index)
         return self.rules

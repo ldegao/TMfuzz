@@ -10,6 +10,8 @@ def dump_report():
         return
     reportname = sd.datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     middle_path = os.path.join(sd.report_base_dir, reportname)
+    # 确保reports目录存在
+    os.makedirs(sd.report_base_dir, exist_ok=True)
     os.mkdir(middle_path)
     report_path = os.path.join(middle_path, 'report.json')
     identity_path = os.path.join(middle_path, 'identity.json')

@@ -1,0 +1,1848 @@
+{
+  "RoadNetWork": {
+    "RoadType": "One-way",
+    "LaneType": "10-lane",
+    "RoadShape": "straight",
+    "RoadSlope": "unmentioned",
+    "SpeedLimit": 30.0
+  },
+  "Environment": {
+    "RoadCondition": "unmentioned",
+    "Weather": [
+      "altitude"
+    ]
+  },
+  "accidents": [
+    {
+      "Vehicle1": {
+        "ImpactSide": "front side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "go straight,deceleration",
+          "TravelSpeed": 16.10175552934744,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "decelerate to avoid collision",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "parking",
+          "TravelSpeed": 0.0,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "front side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn right,deceleration",
+          "TravelSpeed": 7.706617815606972,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "turn right,decelerate to avoid collision",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 11.056847916717615,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "front side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn right,deceleration",
+          "TravelSpeed": 7.706617815606972,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "turn right,decelerate to avoid collision",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 11.056847916717615,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 7.764080202289808,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 8.031106610568848,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 7.764080202289808,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 8.031106610568848,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 7.767305995681187,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 8.031379913240785,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 7.767305995681187,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 8.031379913240785,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 7.767305995681187,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 8.031379913240785,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 7.804516698891749,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 8.031379913240785,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 7.804516698891749,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn right,acceleration",
+          "TravelSpeed": 8.031379913240785,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 7.804516698891749,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.784003775731395,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,acceleration",
+          "TravelSpeed": 7.804516698891749,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.784003775731395,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.784003775731395,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.784003775731395,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.784003775731395,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.296579076455752,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.296579076455752,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.296579076455752,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.296579076455752,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.416243114407633,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 7.296579076455752,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.956498483848335,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.766500668382102,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.956498483848335,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.766500668382102,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.956498483848335,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.766500668382102,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.956498483848335,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.766500668382102,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.956498483848335,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 6.766500668382102,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle24",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle24": {
+        "ImpactSide": "rear side collided by Vehicle1",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.693626058196048,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    },
+    {
+      "Vehicle1": {
+        "ImpactSide": "rear side collided by Vehicle3",
+        "MovingOnWhichWay": "south",
+        "LocationAfterCrash": 1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "yes",
+          "Direction": "south",
+          "VehicleAction": "turn left,deceleration",
+          "TravelSpeed": 5.652333068221207,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "unmentioned",
+          "AttemptedLaneCrossing": "no"
+        }
+      },
+      "Vehicle3": {
+        "ImpactSide": "front side collided by Vehicle1",
+        "MovingOnWhichWay": "north",
+        "LocationAfterCrash": -1,
+        "ObjectiveBehavior": {
+          "WhetherToBrake": "no",
+          "Direction": "north",
+          "VehicleAction": "parking",
+          "TravelSpeed": 0.0,
+          "is_against_rules": "unmentioned",
+          "AttemptedAvoidanceManeuvers": "no",
+          "AttemptedLaneCrossing": "no"
+        }
+      }
+    }
+  ],
+  "Obstacles": "unmentioned"
+}

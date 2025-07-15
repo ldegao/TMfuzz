@@ -9,12 +9,14 @@ import carla
 import cv2
 import numpy as np
 import deap.base
+import DSL as sd
 
 from npc import NPC
 from cluster import draw_picture, shift_scale_points_group
 from simulate import simulate
 import constants as c
 from states import ScenarioState
+from simulate import save_video
 
 colors = [
     (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
@@ -149,6 +151,8 @@ class Scenario:
             weather_dict=self.weather,
             npc_list=self.npc_list
         )
+        # carAccidentsReport: dump report
+        sd.dump_report(self.timestamp)
         if ret == -1:
             return -1
         if not self.conf.function.startswith("eval"):
@@ -159,7 +163,13 @@ class Scenario:
         error = self.check_error(self.state)
         # # reload scenario state
         # self.state = ScenarioState()
-        self.save_video(error, log_filename)
+        # 直接调用统一的save_video
+        save_video(
+            carla_error=False,  # 可根据实际情况传递
+            state=self.state,
+            out_dir=self.conf.cam_dir,
+            out_prefix=self.timestamp
+        )
         if self.state.trace_graph_important != []:
             self.save_trace(self.state.trace_graph_important, log_filename)
         if error:
@@ -191,45 +201,6 @@ class Scenario:
         self.state.red_violation = False
         self.state.other_error = False
         self.state.other_error_val = 0
-
-    def save_video(self, error, log_filename):
-        try:
-            # temp change: dont save video if not bug
-            if error:
-                shutil.copyfile(
-                    os.path.join(self.conf.queue_dir, log_filename),
-                    os.path.join(self.conf.error_dir, log_filename)
-                )
-                shutil.copyfile(
-                    f"/tmp/fuzzerdata/{self.username}/front.mp4",
-                    os.path.join(
-                        self.conf.cam_dir,
-                        log_filename.replace(".json", "-front.mp4")
-                    )
-                )
-
-                shutil.copyfile(
-                    f"/tmp/fuzzerdata/{self.username}/top.mp4",
-                    os.path.join(
-                        self.conf.cam_dir,
-                        log_filename.replace(".json", "-top.mp4")
-                    )
-                )
-                if os.path.exists(f"/tmp/fuzzerdata/{self.username}/top-replay.mp4"):
-                    print("save top replay video")
-                    shutil.copyfile(
-                        f"/tmp/fuzzerdata/{self.username}/top-replay.mp4",
-                        os.path.join(
-                            self.conf.cam_dir,
-                            log_filename.replace(".json", "-top-replay.mp4")
-                        )
-                    )
-                print("save video done")
-            else:
-                print("Dont need to save video ")
-        except FileNotFoundError:
-            print("[DEBUG] Func save_video FileNotFoundError")
-            os._exit(0)
 
     def save_trace_point(self, trace_graph_points, param, log_filename):
         output_filename = log_filename.replace(".json", ".txt")

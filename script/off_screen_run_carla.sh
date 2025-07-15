@@ -7,9 +7,9 @@ xhost +si:localuser:$USER
 
 VOLUMES="--volume=$XSOCK:$XSOCK:rw \
          --volume=$XAUTH:$XAUTH:rw \
-         --volume=/home/linshenghao/carla_data/:/home/carla/.config/Epic/CarlaUE4/Saved:rw"
+         --volume=:/home/carla/.config/Epic/CarlaUE4/Saved:rw"
 
-docker run --name="carla-$USER" \
+docker run --name="carla-TM-$USER" \
   -d --rm \
   -p 4000-4002:4000-4002 \
   $VOLUMES \

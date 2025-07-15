@@ -9,7 +9,7 @@ from DSL.VehicleDict import VehicleDict
 from DSL.ViolationDetector import Violation
 from DSL.ObstacleParser import Obstacles
 
-from states import State
+from states import ScenarioState
 
 import config
 
@@ -21,7 +21,7 @@ import numpy as np
 
 
 _report:AccidentReport = AccidentReport() 
-_state:State = State()
+_state:ScenarioState = ScenarioState()
 _client = None
 _isHit = False
 
@@ -43,6 +43,8 @@ def init_global(state, client):
     global _vehicleDict
     _vehicleDict = VehicleDict()
     _vehicleDict.set_uid_dict(_state.ego_id, _state.npc_id)
+    if _state.npc_id is None:
+        _state.npc_id = []
 
 def set_isHit(is_Hit:bool):
     global _isHit
@@ -58,13 +60,17 @@ def add_collision(my_id, other_id):
 
 def dump_report():
     is_Hit = _isHit
-    add_collision(_state.ego_id, _state.npc_id[0])
+    # 只有在有NPC的情况下才添加碰撞
+    if _state.npc_id and len(_state.npc_id) > 0:
+        add_collision(_state.ego_id, _state.npc_id[0])
     violation = Violation()
     is_violation = violation.check_violation()
     if is_Hit == False and is_violation == False:
         return
     reportname = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     middle_path = os.path.join(report_base_dir, reportname)
+    # 确保reports目录存在
+    os.makedirs(report_base_dir, exist_ok=True)
     os.mkdir(middle_path)
     report_path = os.path.join(middle_path, 'report.json')
     identity_path = os.path.join(middle_path, 'identity.json')

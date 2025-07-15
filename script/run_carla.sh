@@ -5,7 +5,7 @@ idle_gpu=0
 port=4000
 carla_cmd="./CarlaUE4.sh -RenderOffScreen -carla-rpc-port=$port -quality-level=Epic && /bin/bash"
 
-docker run --name="carla-$USER" \
+docker run --name="carla-TM-$USER" \
   -d \
   --gpus "device=$idle_gpu" \
   --net=host \

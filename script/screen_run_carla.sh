@@ -7,15 +7,15 @@ xhost +si:localuser:$USER
 
 VOLUMES="--volume=$XSOCK:$XSOCK:rw \
          --volume=$XAUTH:$XAUTH:rw \
-         --volume=/home/linshenghao/carla_data/:/home/carla/.config/Epic/CarlaUE4/Saved:rw"
+         --volume=/home/$USER/carla_data:/home/carla/.config/Epic/CarlaUE4/Saved:rw"
 
-docker run --name="carla-$USER" \
+docker run --name="carla-TM-$USER" \
   -d --rm \
   -p 4000-4002:4000-4002 \
   $VOLUMES \
   --privileged \
   --runtime=nvidia \
-  --gpus all \
+  --gpus 0 \
   -e DISPLAY=$DISPLAY \
   -e XAUTHORITY=$XAUTH \
   carlasim/carla:0.9.13 \
