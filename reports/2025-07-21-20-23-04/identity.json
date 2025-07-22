@@ -1,0 +1,58 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "4404": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "4408": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "4409": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "4410": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "4411": {
+    "name": "Vehicle6",
+    "identity": "NPC"
+  },
+  "4412": {
+    "name": "Vehicle7",
+    "identity": "NPC"
+  },
+  "4413": {
+    "name": "Vehicle8",
+    "identity": "NPC"
+  },
+  "4414": {
+    "name": "Vehicle9",
+    "identity": "NPC"
+  },
+  "4415": {
+    "name": "Vehicle10",
+    "identity": "NPC"
+  },
+  "4416": {
+    "name": "Vehicle11",
+    "identity": "NPC"
+  },
+  "4417": {
+    "name": "Vehicle12",
+    "identity": "NPC"
+  },
+  "4418": {
+    "name": "Vehicle13",
+    "identity": "NPC"
+  },
+  "4419": {
+    "name": "Vehicle14",
+    "identity": "NPC"
+  }
+}

@@ -1,0 +1,95 @@
+
+=== Progress Update ===
+Processed logs: 1
+With collision: 0
+Without collision: 1
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 1
+
+
+=== Progress Update ===
+Processed logs: 2
+With collision: 0
+Without collision: 2
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 1
+- No collision involving ego_vid found: 1
+
+
+=== Progress Update ===
+Processed logs: 3
+With collision: 0
+Without collision: 3
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 1
+- No collision involving ego_vid found: 2
+
+
+=== Progress Update ===
+Processed logs: 4
+With collision: 0
+Without collision: 4
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 2
+- No collision involving ego_vid found: 2
+
+
+=== Progress Update ===
+Processed logs: 5
+With collision: 0
+Without collision: 5
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 2
+- No collision involving ego_vid found: 3
+
+
+=== Progress Update ===
+Processed logs: 6
+With collision: 0
+Without collision: 6
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 3
+- No collision involving ego_vid found: 3
+
+
+=== Progress Update ===
+Processed logs: 7
+With collision: 0
+Without collision: 7
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 3
+- No collision involving ego_vid found: 4
+
+
+=== Progress Update ===
+Processed logs: 8
+With collision: 0
+Without collision: 8
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Replay failed: 3
+- No collision involving ego_vid found: 5
+

@@ -40,15 +40,21 @@ class VehicleReport(object):
         self.LocationAfterCrash = waypoint.lane_id
 
     def set_ImpactSide(self):
-        my_pos = sd.get_last_n_transforms(self.state, 1)[0]
-        other_pos = sd.get_last_n_transforms(sd.get_other_state(self.id),1)[0]
-        my_loc = my_pos.location
-        other_loc = other_pos.location
-        my_yaw = my_pos.rotation.yaw
-        x, y = my_loc.x - other_loc.x, my_loc.y - other_loc.y
-        crash_angle = sd.get_angle(x, y)
-        rotation = crash_angle - my_yaw
-        self.ImpactSide = '{} side collided by {}'.format(self.rotation2ImpactSide(rotation), sd._vehicleDict.name(sd.get_other_id(self.id)))
+        import datetime
+        try:
+            my_pos = sd.get_last_n_transforms(self.state, 1)[0]
+            other_pos = sd.get_last_n_transforms(sd.get_other_state(self.id),1)[0]
+            my_loc = my_pos.location
+            other_loc = other_pos.location
+            my_yaw = my_pos.rotation.yaw
+            x, y = my_loc.x - other_loc.x, my_loc.y - other_loc.y
+            crash_angle = sd.get_angle(x, y)
+            rotation = crash_angle - my_yaw
+            self.ImpactSide = '{} side collided by {}'.format(self.rotation2ImpactSide(rotation), sd._vehicleDict.name(sd.get_other_id(self.id)))
+        except IndexError as e:
+            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open('pdb_debug.log', 'a') as f:
+                f.write(f"[{now}] IndexError in set_ImpactSide: {e}, id={self.id}\n")
 
     def rotation2ImpactSide(self, rotation):
         angle = 10 

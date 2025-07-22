@@ -183,6 +183,7 @@ def ini_hyperparameters(conf, args):
     else:
         print(f"Using seed dir {conf.seed_dir}")
     conf.set_paths()
+    print(f"[debug][ini_hyperparameters] conf.cam_dir={conf.cam_dir}")
 
     with open(conf.meta_file, "w") as f:
         f.write(" ".join(sys.argv) + "\n")
@@ -303,7 +304,6 @@ def evaluation(ind: Scenario):
         stats.strip_dirs()
         stats.sort_stats('cumulative')
         # stats.print_stats(50)
-        # pdb.set_trace()
 
         if ret == -1:
             print("[-] Fatal error occurred during test")

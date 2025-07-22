@@ -1,0 +1,126 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "10668": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "10672": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "10673": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "10674": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "10675": {
+    "name": "Vehicle6",
+    "identity": "NPC"
+  },
+  "10676": {
+    "name": "Vehicle7",
+    "identity": "NPC"
+  },
+  "10677": {
+    "name": "Vehicle8",
+    "identity": "NPC"
+  },
+  "10678": {
+    "name": "Vehicle9",
+    "identity": "NPC"
+  },
+  "10679": {
+    "name": "Vehicle10",
+    "identity": "NPC"
+  },
+  "10680": {
+    "name": "Vehicle11",
+    "identity": "NPC"
+  },
+  "10681": {
+    "name": "Vehicle12",
+    "identity": "NPC"
+  },
+  "10682": {
+    "name": "Vehicle13",
+    "identity": "NPC"
+  },
+  "10683": {
+    "name": "Vehicle14",
+    "identity": "NPC"
+  },
+  "10684": {
+    "name": "Vehicle15",
+    "identity": "NPC"
+  },
+  "10685": {
+    "name": "Vehicle16",
+    "identity": "NPC"
+  },
+  "10686": {
+    "name": "Vehicle17",
+    "identity": "NPC"
+  },
+  "10687": {
+    "name": "Vehicle18",
+    "identity": "NPC"
+  },
+  "10688": {
+    "name": "Vehicle19",
+    "identity": "NPC"
+  },
+  "10689": {
+    "name": "Vehicle20",
+    "identity": "NPC"
+  },
+  "10690": {
+    "name": "Vehicle21",
+    "identity": "NPC"
+  },
+  "10691": {
+    "name": "Vehicle22",
+    "identity": "NPC"
+  },
+  "10692": {
+    "name": "Vehicle23",
+    "identity": "NPC"
+  },
+  "10693": {
+    "name": "Vehicle24",
+    "identity": "NPC"
+  },
+  "10694": {
+    "name": "Vehicle25",
+    "identity": "NPC"
+  },
+  "10695": {
+    "name": "Vehicle26",
+    "identity": "NPC"
+  },
+  "10696": {
+    "name": "Vehicle27",
+    "identity": "NPC"
+  },
+  "10697": {
+    "name": "Vehicle28",
+    "identity": "NPC"
+  },
+  "10698": {
+    "name": "Vehicle29",
+    "identity": "NPC"
+  },
+  "10699": {
+    "name": "Vehicle30",
+    "identity": "NPC"
+  },
+  "10700": {
+    "name": "Vehicle31",
+    "identity": "NPC"
+  }
+}

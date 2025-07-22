@@ -7,6 +7,7 @@ if __name__ == "__main__" and __package__ is None:
 import glob
 import math
 import os
+import pdb
 import random
 import re
 import sys
@@ -89,27 +90,7 @@ class HeroPlanner:
                 break
             current_waypoint = next_wp
         collision_location = extract_collision_target_location(self.recorder_info)
-        goal_waypoint = self.carla_map.get_waypoint(
-            collision_location, project_to_road=True, lane_type=carla.LaneType.Driving)
-        # goal_waypoint = get_lane_end_waypoint(self.carla_map, collision_location)
-
-        candidate_wp = goal_waypoint
-        print(f"[INFO] goal location before: {goal_waypoint.transform.location}")
-        while 1:
-            candidate_loc = candidate_wp.transform.location
-            obstacle_too_close = False
-            for obs in self.surrounding_vehicles:
-                obs_loc = carla.Location(x=obs.x, y=obs.y, z=0.5)
-                if candidate_loc.distance(obs_loc) < 5.0:
-                    obstacle_too_close = True
-                    break
-            if not obstacle_too_close:
-                goal_waypoint = candidate_wp
-                break
-            candidate_wp = candidate_wp.next(5.0)[0]
-        distance_to_goal = ego_location.distance(goal_waypoint.transform.location)
-        if distance_to_goal < 5.0:
-            goal_waypoint = goal_waypoint.next(5.0)[0]
+        goal_waypoint = self._find_optimal_goal(ego_location, collision_location)
         goal = (goal_waypoint.transform.location.x,
                 goal_waypoint.transform.location.y)
 
@@ -144,7 +125,47 @@ class HeroPlanner:
 
         start = (self.ego_data.x, self.ego_data.y)
         ego_speed = math.sqrt(self.ego_data.vx ** 2 + self.ego_data.vy ** 2)
-        apf_planner = APFPlanner(start, goal, self.surrounding_vehicles, ego_speed)
+
+        # === 新增：采样当前车道的中心线点和heading ===
+        ego_wp = ego_waypoint
+        road_id = ego_wp.road_id
+        lane_id = ego_wp.lane_id
+        all_wps = self.carla_map.generate_waypoints(1.0)
+        lane_wps = [wp for wp in all_wps if wp.road_id == road_id and wp.lane_id == lane_id]
+        lane_wps.sort(key=lambda wp: wp.s)
+        lane_start_wp = lane_wps[0]
+        centerline_points = []
+        centerline_headings = []
+        current_wp = lane_start_wp
+        max_points = 100
+        step = 2.0
+        for _ in range(max_points):
+            loc = current_wp.transform.location
+            centerline_points.append([loc.x, loc.y])
+            heading = math.radians(current_wp.transform.rotation.yaw)
+            centerline_headings.append(heading)
+            next_wps = current_wp.next(step)
+            if not next_wps:
+                break
+            next_wp = next_wps[0]
+            if next_wp.road_id != road_id or next_wp.lane_id != lane_id:
+                break
+            current_wp = next_wp
+        ego_xy = np.array([ego_wp.transform.location.x, ego_wp.transform.location.y])
+        dists = [np.linalg.norm(np.array(p) - ego_xy) for p in centerline_points]
+        ego_idx = int(np.argmin(dists))
+        N = 20
+        start_idx = max(0, ego_idx - N)
+        end_idx = min(len(centerline_points), ego_idx + N + 1)
+        centerline_points = centerline_points[start_idx:end_idx]
+        centerline_headings = centerline_headings[start_idx:end_idx]
+
+        # === 传递给APFPlanner ===
+        apf_planner = APFPlanner(
+            start, goal, self.surrounding_vehicles, ego_speed,
+            centerline_points=centerline_points,
+            centerline_headings=centerline_headings
+        )
 
         apf_planner.set_lane_info(
             road_width=road_width,
@@ -237,7 +258,7 @@ class HeroPlanner:
 
             vehicle_model = self.car_data[vid]['vehicle_model'] if vid in self.car_data else None
             if vehicle_model is None or not vehicle_model.startswith("vehicle."):
-                print(f"[INFO] Skipping non-vehicle actor {vid} with type {vehicle_model}")
+                # print(f"[INFO] Skipping non-vehicle actor {vid} with type {vehicle_model}")
                 continue
             if vehicle_model in self.model_size_map:
                 length, width = self.model_size_map[vehicle_model]
@@ -283,6 +304,159 @@ class HeroPlanner:
                 surrounding_vehicles.append(obs)
 
         return ego_data, surrounding_vehicles
+
+    def _find_optimal_goal(self, ego_location, collision_location):
+        """智能寻找最优终点"""
+        print(f"[GOAL-DEBUG] Collision location: {collision_location}")
+        
+        # 1. 将碰撞位置投影到道路
+        collision_waypoint = self.carla_map.get_waypoint(
+            collision_location, project_to_road=True, lane_type=carla.LaneType.Driving)
+        print(f"[GOAL-DEBUG] Collision waypoint: {collision_waypoint.transform.location}")
+        
+        # 2. 计算ego到碰撞点的距离，确定合理的搜索范围
+        collision_distance = ego_location.distance(collision_waypoint.transform.location)
+        print(f"[GOAL-DEBUG] Distance to collision: {collision_distance:.2f}m")
+        
+        # 3. 设定目标距离：在碰撞点前方一定距离处停车
+        if collision_distance > 30:  # 距离很远
+            target_distance_before_collision = 10.0  # 在碰撞点前10米停车
+        elif collision_distance > 15:  # 中等距离
+            target_distance_before_collision = 5.0   # 在碰撞点前5米停车
+        else:  # 距离较近
+            target_distance_before_collision = 3.0   # 在碰撞点前3米停车
+        
+        print(f"[GOAL-DEBUG] Target distance before collision: {target_distance_before_collision}m")
+        
+        # 4. 寻找候选终点
+        candidates = self._generate_goal_candidates(
+            ego_location, collision_waypoint, target_distance_before_collision
+        )
+        
+        # 5. 评估候选点并选择最优
+        best_goal = self._evaluate_candidates(candidates, ego_location)
+        
+        print(f"[GOAL-DEBUG] Selected goal: {best_goal.transform.location}")
+        return best_goal
+    
+    def _generate_goal_candidates(self, ego_location, collision_waypoint, target_distance):
+        """生成候选终点"""
+        candidates = []
+        
+        # 策略1: 在碰撞点前方停车
+        try:
+            # 从碰撞点向后退target_distance距离
+            backward_wps = collision_waypoint.previous(target_distance)
+            if backward_wps:
+                candidates.append(("before_collision", backward_wps[0]))
+        except:
+            pass
+        
+        # 策略2: 直接到达碰撞点（如果安全）
+        if self._is_position_safe(collision_waypoint, min_distance=3.0):
+            candidates.append(("at_collision", collision_waypoint))
+        
+        # 策略3: 在碰撞点之后一点
+        try:
+            forward_wps = collision_waypoint.next(5.0)
+            if forward_wps:
+                candidates.append(("after_collision", forward_wps[0]))
+        except:
+            pass
+        
+        # 策略4: 如果ego距离很近，选择ego前方的点
+        ego_distance = ego_location.distance(collision_waypoint.transform.location)
+        if ego_distance < 10.0:
+            ego_waypoint = self.carla_map.get_waypoint(
+                ego_location, project_to_road=True, lane_type=carla.LaneType.Driving)
+            try:
+                forward_from_ego = ego_waypoint.next(max(8.0, ego_distance + 2.0))
+                if forward_from_ego:
+                    candidates.append(("ego_forward", forward_from_ego[0]))
+            except:
+                pass
+        
+        print(f"[GOAL-DEBUG] Generated {len(candidates)} candidates: {[c[0] for c in candidates]}")
+        return candidates
+    
+    def _evaluate_candidates(self, candidates, ego_location):
+        """评估候选点并选择最优"""
+        if not candidates:
+            # fallback: 使用原始逻辑
+            print("[GOAL-DEBUG] No candidates, using fallback")
+            return self._fallback_goal_selection(ego_location)
+        
+        scores = []
+        for strategy, waypoint in candidates:
+            score = self._score_candidate(waypoint, ego_location, strategy)
+            scores.append((score, strategy, waypoint))
+            print(f"[GOAL-DEBUG] {strategy}: score={score:.2f}")
+        
+        # 选择得分最高的候选点
+        scores.sort(reverse=True)
+        best_score, best_strategy, best_waypoint = scores[0]
+        print(f"[GOAL-DEBUG] Best strategy: {best_strategy} (score={best_score:.2f})")
+        
+        return best_waypoint
+    
+    def _score_candidate(self, waypoint, ego_location, strategy):
+        """给候选点打分"""
+        score = 0.0
+        
+        # 1. 安全性评分 (最重要)
+        if self._is_position_safe(waypoint, min_distance=4.0):
+            score += 50.0
+        elif self._is_position_safe(waypoint, min_distance=2.0):
+            score += 30.0
+        else:
+            score += 0.0  # 不安全的位置
+        
+        # 2. 距离评分 (适中的距离最好)
+        distance = ego_location.distance(waypoint.transform.location)
+        if 5.0 <= distance <= 25.0:  # 理想距离范围
+            score += 30.0
+        elif distance < 5.0:  # 太近
+            score += 10.0
+        elif distance > 50.0:  # 太远
+            score += 5.0
+        else:  # 中等距离
+            score += 20.0
+        
+        # 3. 策略偏好评分
+        strategy_bonus = {
+            "before_collision": 20.0,  # 最优：在碰撞前停车
+            "ego_forward": 15.0,       # 次优：ego前方
+            "at_collision": 10.0,      # 可接受：在碰撞点
+            "after_collision": 5.0     # 最后选择：碰撞后
+        }
+        score += strategy_bonus.get(strategy, 0.0)
+        
+        return score
+    
+    def _is_position_safe(self, waypoint, min_distance=4.0):
+        """检查位置是否安全（没有障碍物太近）"""
+        waypoint_loc = waypoint.transform.location
+        for obs in self.surrounding_vehicles:
+            obs_loc = carla.Location(x=obs.x, y=obs.y, z=0.5)
+            if waypoint_loc.distance(obs_loc) < min_distance:
+                return False
+        return True
+    
+    def _fallback_goal_selection(self, ego_location):
+        """备用终点选择（原始逻辑的简化版）"""
+        ego_waypoint = self.carla_map.get_waypoint(
+            ego_location, project_to_road=True, lane_type=carla.LaneType.Driving)
+        
+        # 简单地选择ego前方10米处
+        try:
+            forward_wps = ego_waypoint.next(10.0)
+            if forward_wps:
+                return forward_wps[0]
+        except:
+            pass
+        
+        # 如果失败，返回ego当前位置的waypoint
+        return ego_waypoint
 
 
 def parse_car_data(recorder_info):
@@ -536,7 +710,6 @@ def extract_ego_vid_and_type(recorder_info):
         (ego_vid: int, type_id: str) if found, else None
     """
     create_blocks = re.findall(r"(Create\s+\d+:.*?)(?=(?:Create\s+\d+:)|\Z)", recorder_info, re.DOTALL)
-
     for block in create_blocks:
         id_match = re.search(r"Create\s+(\d+):\s*([^\s]+)", block)
         role_match = re.search(r"role_name\s*=\s*(\w+)", block)

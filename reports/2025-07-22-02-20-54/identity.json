@@ -1,0 +1,126 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "4400": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "4404": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "4405": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "4406": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "4407": {
+    "name": "Vehicle6",
+    "identity": "NPC"
+  },
+  "4408": {
+    "name": "Vehicle7",
+    "identity": "NPC"
+  },
+  "4409": {
+    "name": "Vehicle8",
+    "identity": "NPC"
+  },
+  "4410": {
+    "name": "Vehicle9",
+    "identity": "NPC"
+  },
+  "4411": {
+    "name": "Vehicle10",
+    "identity": "NPC"
+  },
+  "4412": {
+    "name": "Vehicle11",
+    "identity": "NPC"
+  },
+  "4413": {
+    "name": "Vehicle12",
+    "identity": "NPC"
+  },
+  "4414": {
+    "name": "Vehicle13",
+    "identity": "NPC"
+  },
+  "4415": {
+    "name": "Vehicle14",
+    "identity": "NPC"
+  },
+  "4416": {
+    "name": "Vehicle15",
+    "identity": "NPC"
+  },
+  "4417": {
+    "name": "Vehicle16",
+    "identity": "NPC"
+  },
+  "4418": {
+    "name": "Vehicle17",
+    "identity": "NPC"
+  },
+  "4419": {
+    "name": "Vehicle18",
+    "identity": "NPC"
+  },
+  "4420": {
+    "name": "Vehicle19",
+    "identity": "NPC"
+  },
+  "4421": {
+    "name": "Vehicle20",
+    "identity": "NPC"
+  },
+  "4422": {
+    "name": "Vehicle21",
+    "identity": "NPC"
+  },
+  "4423": {
+    "name": "Vehicle22",
+    "identity": "NPC"
+  },
+  "4424": {
+    "name": "Vehicle23",
+    "identity": "NPC"
+  },
+  "4425": {
+    "name": "Vehicle24",
+    "identity": "NPC"
+  },
+  "4426": {
+    "name": "Vehicle25",
+    "identity": "NPC"
+  },
+  "4427": {
+    "name": "Vehicle26",
+    "identity": "NPC"
+  },
+  "4428": {
+    "name": "Vehicle27",
+    "identity": "NPC"
+  },
+  "4429": {
+    "name": "Vehicle28",
+    "identity": "NPC"
+  },
+  "4430": {
+    "name": "Vehicle29",
+    "identity": "NPC"
+  },
+  "4431": {
+    "name": "Vehicle30",
+    "identity": "NPC"
+  },
+  "0": {
+    "name": "Vehicle31",
+    "identity": "UNKNOWN"
+  }
+}

@@ -36,6 +36,9 @@ from utils import quaternion_from_euler, set_traffic_lights_state, get_angle_bet
     set_autopilot, delete_npc, check_autoware_status, mark_npc, timeout_handler, update_vehicle_file, \
     write_json_cache_to_file, record_closest_cars
 
+import subprocess
+import socket
+
 config.set_carla_api_path()
 try:
     import carla
@@ -72,10 +75,34 @@ def record_min_distance(npc_vehicles, player_loc, state):
         state.closest_car = closest_car
 
 
-def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
+def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list, timestamp=None):
     # simulate() is always called by Scenario instance,
     # so we won't need to switch a map unless a new instance is created.
     # switch_map(conf, client, town)
+
+    if conf.agent_type == c.AUTOWARE:
+        print("[info] Restarting Carla simulator for this simulation...")
+        subprocess.call(["bash", "./script/stop_carla.sh"])
+        subprocess.Popen(["bash", "./script/screen_run_carla.sh"])
+        # 自适应等待Carla端口4000可用，最多等120秒
+        max_wait = 120
+        waited = 0
+        while waited < max_wait:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                s.settimeout(2)
+                s.connect(("localhost", 4000))
+                print(f"[info] Carla is up after {waited} seconds.")
+                s.close()
+                break
+            except Exception:
+                time.sleep(2)
+                waited += 2
+                print(f"[info] Waiting for Carla to be ready... {waited}s")
+            finally:
+                s.close()
+        else:
+            print("[error] Carla did not start within expected time!")
 
     # always reuse the existing client instance
     assert (exec_state.client is not None)
@@ -90,7 +117,9 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
     player = None
     player_loc = None
     time_start = time.time()
-    recorder_name = "{}.log".format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S'))
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    recorder_name = "{}.log".format(timestamp)
 
     npc_now = []
     agents_now = []
@@ -383,7 +412,6 @@ def simulate(conf, state, exec_state, sp, wp, weather_dict, npc_list):
         with open(dangerous_frame_file, 'w') as f:
             json.dump(data, f, indent=4)
 
-        save_video(carla_error, state)
         # save video in output_dir
         if conf.agent_type == c.AUTOWARE:
             os.system("rosnode kill /recorder_video_front")
@@ -1019,13 +1047,9 @@ def save_video(carla_error, state, out_dir=None, out_prefix=None):
     import shutil
     camera_names = ("front", "top")
     username = os.getenv("USER")
-    print(f"[save_video] username={username}, out_dir={out_dir}, out_prefix={out_prefix}")
     for cam in camera_names:
         jpg_pattern = f"/tmp/fuzzerdata/{username}/{cam}-*.jpg"
         mp4_path = f"/tmp/fuzzerdata/{username}/{cam}.mp4"
-        print(f"[save_video] Processing camera: {cam}")
-        print(f"[save_video] jpg_pattern: {jpg_pattern}")
-        print(f"[save_video] mp4_path: {mp4_path}")
         # Disabled: truncate to last N seconds if crashed but not lane-invaded
         if False:
             print(f"Do not save video this time", end=" ")
@@ -1055,15 +1079,12 @@ def save_video(carla_error, state, out_dir=None, out_prefix=None):
         # Cleanup temp frames
         print(f"[save_video] Removing jpg frames: {jpg_pattern}")
         os.system(f"rm -f {jpg_pattern}")
-
         # 新增：如果 out_dir 和 out_prefix 指定，则拷贝到目标目录并重命名
         if out_dir and out_prefix:
             target_name = f"{out_prefix}_{cam}.mp4"
             target_path = os.path.join(out_dir, target_name)
-            print(f"[save_video] Will copy to: {target_path}")
             if os.path.exists(mp4_path):
                 shutil.copyfile(mp4_path, target_path)
-                print(f"[save_video] [info] Saved {mp4_path} to {target_path}")
             else:
                 print(f"[save_video] [warn] {mp4_path} not found, video not saved!")
 

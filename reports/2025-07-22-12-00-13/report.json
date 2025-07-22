@@ -1,0 +1,46 @@
+{
+  "RoadNetWork": {
+    "RoadType": "One-way",
+    "LaneType": "2-lane",
+    "RoadShape": "straight",
+    "RoadSlope": "unmentioned",
+    "SpeedLimit": 30.0
+  },
+  "Environment": {
+    "RoadCondition": "unmentioned",
+    "Weather": [
+      "altitude"
+    ]
+  },
+  "accidents": {
+    "Vehicle1": {
+      "ImpactSide": "unmentioned",
+      "MovingOnWhichWay": "northwest",
+      "LocationAfterCrash": 1,
+      "ObjectiveBehavior": {
+        "WhetherToBrake": "yes",
+        "Direction": "northwest",
+        "VehicleAction": "turn right,deceleration",
+        "TravelSpeed": 22.840698641176324,
+        "is_against_rules": "unmentioned",
+        "AttemptedAvoidanceManeuvers": "turn right,decelerate to avoid collision",
+        "AttemptedLaneCrossing": "no"
+      }
+    },
+    "Vehicle3": {
+      "ImpactSide": "left side collided by Vehicle1",
+      "MovingOnWhichWay": "west",
+      "LocationAfterCrash": 1,
+      "ObjectiveBehavior": {
+        "WhetherToBrake": "no",
+        "Direction": "west",
+        "VehicleAction": "go straight,deceleration",
+        "TravelSpeed": 23.5641302674076,
+        "is_against_rules": "unmentioned",
+        "AttemptedAvoidanceManeuvers": "decelerate to avoid collision",
+        "AttemptedLaneCrossing": "no"
+      }
+    }
+  },
+  "Obstacles": "unmentioned"
+}

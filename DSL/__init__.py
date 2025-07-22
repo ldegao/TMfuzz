@@ -58,7 +58,7 @@ def add_collision(my_id, other_id):
     set_isHit(True)
     _report.set_report()
 
-def dump_report():
+def dump_report(timestamp):
     is_Hit = _isHit
     # 只有在有NPC的情况下才添加碰撞
     if _state.npc_id and len(_state.npc_id) > 0:
@@ -67,8 +67,7 @@ def dump_report():
     is_violation = violation.check_violation()
     if is_Hit == False and is_violation == False:
         return
-    reportname = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    middle_path = os.path.join(report_base_dir, reportname)
+    middle_path = os.path.join(report_base_dir, timestamp)
     # 确保reports目录存在
     os.makedirs(report_base_dir, exist_ok=True)
     os.mkdir(middle_path)

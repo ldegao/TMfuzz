@@ -1,0 +1,60 @@
+{
+  "RoadNetWork": {
+    "RoadType": "One-way",
+    "LaneType": "2-lane",
+    "RoadShape": "straight",
+    "RoadSlope": "unmentioned",
+    "SpeedLimit": 30.0
+  },
+  "Environment": {
+    "RoadCondition": "unmentioned",
+    "Weather": [
+      "altitude"
+    ]
+  },
+  "accidents": {
+    "Vehicle1": {
+      "ImpactSide": "right front side collided by Vehicle49",
+      "MovingOnWhichWay": "north",
+      "LocationAfterCrash": -1,
+      "ObjectiveBehavior": {
+        "WhetherToBrake": "yes",
+        "Direction": "northeast",
+        "VehicleAction": "turn right,deceleration",
+        "TravelSpeed": 21.7082829083604,
+        "is_against_rules": "unmentioned",
+        "AttemptedAvoidanceManeuvers": "decelerate to avoid collision",
+        "AttemptedLaneCrossing": "no"
+      }
+    },
+    "Vehicle49": {
+      "ImpactSide": "left front side collided by Vehicle1",
+      "MovingOnWhichWay": "north",
+      "LocationAfterCrash": 1,
+      "ObjectiveBehavior": {
+        "WhetherToBrake": "no",
+        "Direction": "northwest",
+        "VehicleAction": "turn right,deceleration",
+        "TravelSpeed": 24.79391944262209,
+        "is_against_rules": "unmentioned",
+        "AttemptedAvoidanceManeuvers": "turn right,decelerate to avoid collision",
+        "AttemptedLaneCrossing": "no"
+      }
+    },
+    "Vehicle3": {
+      "ImpactSide": "left rear side collided by Vehicle1",
+      "MovingOnWhichWay": "north",
+      "LocationAfterCrash": -1,
+      "ObjectiveBehavior": {
+        "WhetherToBrake": "no",
+        "Direction": "north",
+        "VehicleAction": "parking",
+        "TravelSpeed": 0.0,
+        "is_against_rules": "unmentioned",
+        "AttemptedAvoidanceManeuvers": "unmentioned",
+        "AttemptedLaneCrossing": "no"
+      }
+    }
+  },
+  "Obstacles": "unmentioned"
+}

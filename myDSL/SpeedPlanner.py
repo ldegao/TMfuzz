@@ -43,6 +43,11 @@ class SpeedPlanner:
         # We will not compute st_regions here directly, as it depends on the ego vehicle
         self.st_regions = None
         self.update_st_regions()
+        
+        # 存储原始参数用于动态调整
+        self.original_dt = dt
+        self.original_ds = ds
+        self.original_penalty_factor = penalty_factor
 
     def compute_s_range(self, obstacle, s_center):
         half_length = obstacle.length / 2.0
@@ -126,16 +131,87 @@ class SpeedPlanner:
                                 obs_cost[i, j] = self.penalty_factor * (1 - d / self.sigma)
         return obs_cost
 
+    def _adjust_parameters_based_on_scenario(self):
+        """根据场景复杂度动态调整参数"""
+        # 根据轨迹长度调整步长
+        if self.s_total > 100:  # 长轨迹
+            self.ds = min(self.original_ds * 2.0, 0.5)  # 增加空间步长，但不超过0.5m
+            self.dt = min(self.original_dt * 1.5, 0.3)  # 增加时间步长，但不超过0.3s
+            print(f"[A*-OPTIMIZE] Long trajectory detected, adjusted ds={self.ds:.3f}, dt={self.dt:.3f}")
+        elif self.s_total > 50:  # 中等轨迹
+            self.ds = self.original_ds * 1.5
+            self.dt = self.original_dt * 1.2
+            print(f"[A*-OPTIMIZE] Medium trajectory detected, adjusted ds={self.ds:.3f}, dt={self.dt:.3f}")
+        
+        # 根据障碍物数量调整惩罚因子
+        num_obstacles = len(self.obstacles)
+        if num_obstacles > 5:  # 高密度障碍物
+            self.penalty_factor = self.original_penalty_factor * 0.8  # 降低惩罚，允许更多探索
+            print(f"[A*-OPTIMIZE] High obstacle density ({num_obstacles}), reduced penalty factor to {self.penalty_factor}")
+        elif num_obstacles > 3:  # 中等密度
+            self.penalty_factor = self.original_penalty_factor * 0.9
+            print(f"[A*-OPTIMIZE] Medium obstacle density ({num_obstacles}), adjusted penalty factor to {self.penalty_factor}")
+
+    def _should_skip_planning(self, penalty_ratio, total_cells):
+        """检查是否应该跳过规划"""
+        # 场景太复杂，直接跳过
+        if penalty_ratio > 0.6:  # 超过60%被阻挡
+            print(f"[A*-SKIP] Too many obstacles ({penalty_ratio:.1%} blocked), skipping planning")
+            return True
+        
+        # 搜索空间过大
+        if total_cells > 100000:  # 超过10万个网格
+            print(f"[A*-SKIP] Search space too large ({total_cells} cells), skipping planning")
+            return True
+        
+        # 轨迹过长且障碍物密度高的组合
+        if self.s_total > 150 and penalty_ratio > 0.3:
+            print(f"[A*-SKIP] Long trajectory ({self.s_total:.1f}m) with high obstacle density ({penalty_ratio:.1%}), skipping planning")
+            return True
+        
+        return False
+
+    def _get_dynamic_node_limit(self, attempt, total_cells):
+        """根据尝试次数和搜索空间动态调整节点限制"""
+        base_limit = min(total_cells // 2, 15000)  # 基础限制不超过搜索空间的一半，最多15000
+        
+        if attempt < 5:  # 前5次尝试使用较小限制
+            return min(base_limit // 2, 5000)
+        elif attempt < 8:  # 中期尝试
+            return min(base_limit, 10000)
+        else:  # 后期尝试使用更大限制
+            return min(base_limit * 2, 20000)
+
     def plan_speed_profile_astar(self):
+        # 动态调整参数
+        self._adjust_parameters_based_on_scenario()
+        
         N_t = math.ceil(self.T / self.dt) + 1
         N_s = math.ceil(self.s_total / self.ds) + 1
         times = np.linspace(0, self.T, N_t)
         s_vals = np.linspace(0, self.s_total, N_s)
         obs_penalty = self.compute_obstacle_penalty(times, s_vals)
 
+        # 添加调试信息
+        print(f"[A*-DEBUG] Search space: N_t={N_t}, N_s={N_s}")
+        print(f"[A*-DEBUG] Total time: {self.T:.2f}s, total distance: {self.s_total:.2f}m")
+        print(f"[A*-DEBUG] Time step: {self.dt:.3f}s, space step: {self.ds:.3f}m")
+        
+        # 分析障碍物惩罚
+        high_penalty_count = np.sum(obs_penalty >= self.penalty_factor)
+        total_cells = N_t * N_s
+        penalty_ratio = high_penalty_count / total_cells
+        print(f"[A*-DEBUG] Obstacle penalty cells: {high_penalty_count}/{total_cells} ({penalty_ratio:.2%})")
+        print(f"[A*-DEBUG] Penalty factor: {self.penalty_factor}")
+
+        # 早期终止条件检查
+        if self._should_skip_planning(penalty_ratio, total_cells):
+            return None, obs_penalty
+
         max_attempts = 10
         base_max_speed = self.s_total / (self.T * 0.5)
         base_ds_range = 3
+        print(f"[A*-DEBUG] Base max speed: {base_max_speed:.2f} m/s")
 
         for attempt in range(max_attempts + 1):
             print(f"[A*] Attempt {attempt + 1}...")
@@ -151,25 +227,45 @@ class SpeedPlanner:
                 max_speed = base_max_speed * (1 + 0.5 * attempt)
                 ds_limit = base_ds_range + attempt
                 optimized = True
+                print(f"[A*-DEBUG] Attempt {attempt + 1}: max_speed={max_speed:.2f}, ds_limit={ds_limit}")
             else:
                 print("[A*] Fallback to Standard A* Mode.")
                 optimized = False
+                print(f"[A*-DEBUG] Standard mode: no speed/step limits")
 
-            while heap:
+            # 搜索过程监控
+            nodes_explored = 0
+            # 动态调整节点限制
+            max_nodes_per_attempt = self._get_dynamic_node_limit(attempt, total_cells)
+            print(f"[A*-DEBUG] Max nodes for attempt {attempt + 1}: {max_nodes_per_attempt}")
+            
+            while heap and nodes_explored < max_nodes_per_attempt:
                 f, g, t_idx, s_idx = heapq.heappop(heap)
                 if visited[t_idx, s_idx]:
                     continue
                 visited[t_idx, s_idx] = True
+                nodes_explored += 1
+                
+                # 每1000个节点打印一次进度
+                if nodes_explored % 1000 == 0:
+                    progress_t = t_idx / (N_t - 1) * 100
+                    progress_s = s_idx / (N_s - 1) * 100
+                    print(f"[A*-DEBUG] Explored {nodes_explored} nodes, progress: t={progress_t:.1f}%, s={progress_s:.1f}%")
 
                 if optimized:
                     if s_idx >= N_s - 1 and t_idx >= N_t - 2:
+                        print(f"[A*-DEBUG] Reached goal region: t_idx={t_idx}, s_idx={s_idx}")
                         break
                     ds_range = range(1, ds_limit)
                 else:
                     if t_idx == N_t - 1 and s_idx == N_s - 1:
+                        print(f"[A*-DEBUG] Reached exact goal: t_idx={t_idx}, s_idx={s_idx}")
                         break
                     ds_range = range(1, N_s - s_idx)
 
+                valid_moves = 0
+                blocked_moves = 0
+                
                 for ds_step in ds_range:
                     s_next_idx = s_idx + ds_step
                     t_next_idx = t_idx + 1
@@ -177,6 +273,7 @@ class SpeedPlanner:
                         continue
 
                     if obs_penalty[t_next_idx, s_next_idx] >= self.penalty_factor:
+                        blocked_moves += 1
                         continue
 
                     s_now = s_vals[s_idx]
@@ -198,6 +295,16 @@ class SpeedPlanner:
                         cost[t_next_idx, s_next_idx] = new_g
                         came_from[t_next_idx][s_next_idx] = (t_idx, s_idx)
                         heapq.heappush(heap, (new_g + h, new_g, t_next_idx, s_next_idx))
+                        valid_moves += 1
+                
+                # 如果节点没有有效移动，记录调试信息
+                if valid_moves == 0 and nodes_explored % 500 == 0:
+                    print(f"[A*-DEBUG] Dead end at ({t_idx}, {s_idx}), blocked_moves={blocked_moves}")
+            
+            print(f"[A*-DEBUG] Attempt {attempt + 1} completed: explored {nodes_explored} nodes")
+            
+            if nodes_explored >= max_nodes_per_attempt:
+                print(f"[A*-DEBUG] Hit node exploration limit ({max_nodes_per_attempt})")
 
             if optimized:
                 goal_candidates = [(t_idx, s_idx) for t_idx in range(N_t - 3, N_t) for s_idx in range(N_s - 3, N_s) if

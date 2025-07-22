@@ -1,0 +1,209 @@
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 1
+With collision: 0
+Without collision: 1
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 1
+
+
+=== Progress Update ===
+Processed logs: 2
+With collision: 0
+Without collision: 2
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 2
+
+[ERROR] Subprocess failed for 2025-07-18-17-24-41.log, code=1
+[ERROR] Stderr: Traceback (most recent call last):
+  File "replay.py", line 449, in main
+    result = analyze_collision_and_replay(client, recorder_path, out_dir, dummy_log)
+  File "replay.py", line 34, in analyze_collision_and_replay
+    recorder_info = client.show_recorder_file_info(recorder_path, True)
+RuntimeError: time-out of 10000ms while waiting for the simulator, make sure the simulator is ready and connected to localhost:6001
+
+
+=== Progress Update ===
+Processed logs: 3
+With collision: 0
+Without collision: 3
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 2
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 4
+With collision: 0
+Without collision: 4
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 3
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 5
+With collision: 0
+Without collision: 5
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 3
+- Subprocess error 1: 1
+- Replay failed: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 6
+With collision: 0
+Without collision: 6
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 4
+- Subprocess error 1: 1
+- Replay failed: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 7
+With collision: 0
+Without collision: 7
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 5
+- Subprocess error 1: 1
+- Replay failed: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 8
+With collision: 0
+Without collision: 8
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 6
+- Subprocess error 1: 1
+- Replay failed: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 9
+With collision: 0
+Without collision: 9
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+- Replay failed: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 10
+With collision: 0
+Without collision: 10
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+- Replay failed: 2
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 11
+With collision: 0
+Without collision: 11
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+- Replay failed: 3
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 12
+With collision: 0
+Without collision: 12
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+- Replay failed: 4
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 13
+With collision: 0
+Without collision: 13
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+- Replay failed: 5
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 14
+With collision: 0
+Without collision: 14
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 1
+- Replay failed: 5
+
+[INFO] Called stop_carla_replay.sh

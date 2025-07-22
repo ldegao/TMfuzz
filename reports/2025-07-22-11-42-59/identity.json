@@ -1,0 +1,42 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "11047": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "11051": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "11052": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "11053": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "11054": {
+    "name": "Vehicle6",
+    "identity": "NPC"
+  },
+  "11055": {
+    "name": "Vehicle7",
+    "identity": "NPC"
+  },
+  "11056": {
+    "name": "Vehicle8",
+    "identity": "NPC"
+  },
+  "11057": {
+    "name": "Vehicle9",
+    "identity": "NPC"
+  },
+  "11058": {
+    "name": "Vehicle10",
+    "identity": "NPC"
+  }
+}

@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 import deap.base
 import DSL as sd
+import datetime
+import datetime
 
 from npc import NPC
 from cluster import draw_picture, shift_scale_points_group
@@ -95,7 +97,6 @@ class Scenario:
             "Rotation": (self.seed_data["roll"], self.seed_data["yaw"], self.seed_data["pitch"])
         }
         self.town = self.seed_data["map"]
-        # utils.switch_map(conf, self.town, client)
 
     def get_distance_from_player(self, location):
         sp = get_seed_sp_transform(self.seed_data)
@@ -137,6 +138,8 @@ class Scenario:
         return filename
 
     def run_test(self, exec_state):
+        self.timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        print(f"[run_test] self.timestamp = {self.timestamp}")
         if self.conf.debug:
             print("[debug] use scenario:id=", self.scenario_id)
         self.reload_state()
@@ -149,12 +152,11 @@ class Scenario:
             sp=sp,
             wp=wp,
             weather_dict=self.weather,
-            npc_list=self.npc_list
+            npc_list=self.npc_list,
+            timestamp=self.timestamp
         )
         # carAccidentsReport: dump report
         sd.dump_report(self.timestamp)
-        if ret == -1:
-            return -1
         if not self.conf.function.startswith("eval"):
             if ret == 128:
                 return 128
@@ -163,13 +165,16 @@ class Scenario:
         error = self.check_error(self.state)
         # # reload scenario state
         # self.state = ScenarioState()
-        # 直接调用统一的save_video
+        print(f"[debug][run_test] before save_video: cam_dir={self.conf.cam_dir}, timestamp={self.timestamp}")
         save_video(
             carla_error=False,  # 可根据实际情况传递
             state=self.state,
             out_dir=self.conf.cam_dir,
             out_prefix=self.timestamp
         )
+        print(f"[debug][run_test] after save_video: cam_dir={self.conf.cam_dir}, timestamp={self.timestamp}")
+        if ret == -1:
+            return -1
         if self.state.trace_graph_important != []:
             self.save_trace(self.state.trace_graph_important, log_filename)
         if error:

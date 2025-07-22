@@ -1,0 +1,270 @@
+
+=== Progress Update ===
+Processed logs: 1
+With collision: 0
+Without collision: 1
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 1
+
+
+=== Progress Update ===
+Processed logs: 2
+With collision: 0
+Without collision: 2
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 2
+
+
+=== Progress Update ===
+Processed logs: 3
+With collision: 0
+Without collision: 3
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 3
+
+
+=== Progress Update ===
+Processed logs: 4
+With collision: 0
+Without collision: 4
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 4
+
+[ERROR] Subprocess failed for 2025-07-19-13-54-04.log, code=1
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+Traceback (most recent call last):
+  File "replay.py", line 79, in analyze_collision_and_replay
+    result = replay_test(client, important_frame_id, recorder_path, pic_save_path)
+  File "replay.py", line 137, in replay_test
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["r
+
+=== Progress Update ===
+Processed logs: 5
+With collision: 0
+Without collision: 5
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 4
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 6
+With collision: 0
+Without collision: 6
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 5
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 7
+With collision: 0
+Without collision: 7
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 6
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 8
+With collision: 0
+Without collision: 8
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 7
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 9
+With collision: 0
+Without collision: 9
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+[ERROR] Subprocess failed for 2025-07-19-08-14-38.log, code=1
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+Traceback (most recent call last):
+  File "replay.py", line 79, in analyze_collision_and_replay
+    result = replay_test(client, important_frame_id, recorder_path, pic_save_path)
+  File "replay.py", line 137, in replay_test
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["r
+
+=== Progress Update ===
+Processed logs: 10
+With collision: 0
+Without collision: 10
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 2
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+[ERROR] Subprocess failed for 2025-07-19-10-57-07.log, code=1
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+Traceback (most recent call last):
+  File "replay.py", line 79, in analyze_collision_and_replay
+    result = replay_test(client, important_frame_id, recorder_path, pic_save_path)
+  File "replay.py", line 137, in replay_test
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["r
+
+=== Progress Update ===
+Processed logs: 11
+With collision: 0
+Without collision: 11
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 3
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+[ERROR] Subprocess failed for 2025-07-19-05-37-25.log, code=1
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+Traceback (most recent call last):
+  File "replay.py", line 79, in analyze_collision_and_replay
+    result = replay_test(client, important_frame_id, recorder_path, pic_save_path)
+  File "replay.py", line 137, in replay_test
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["r
+
+=== Progress Update ===
+Processed logs: 12
+With collision: 0
+Without collision: 12
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 4
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+[ERROR] Subprocess failed for 2025-07-19-06-26-56.log, code=1
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+Traceback (most recent call last):
+  File "replay.py", line 79, in analyze_collision_and_replay
+    result = replay_test(client, important_frame_id, recorder_path, pic_save_path)
+  File "replay.py", line 137, in replay_test
+    trajectory, v_vals_hero = plan_trajectory(sim["client"], sim["r
+
+=== Progress Update ===
+Processed logs: 13
+With collision: 0
+Without collision: 13
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 8
+- Subprocess error 1: 5
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 14
+With collision: 0
+Without collision: 14
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 9
+- Subprocess error 1: 5
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 15
+With collision: 0
+Without collision: 15
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 10
+- Subprocess error 1: 5
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 16
+With collision: 0
+Without collision: 16
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 11
+- Subprocess error 1: 5
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 17
+With collision: 0
+Without collision: 17
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- No collision involving ego_vid found: 12
+- Subprocess error 1: 5
+
+[INFO] Called stop_carla_replay.sh

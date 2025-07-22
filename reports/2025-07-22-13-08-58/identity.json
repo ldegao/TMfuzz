@@ -1,0 +1,70 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "1091": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "1095": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "1096": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "1097": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "1098": {
+    "name": "Vehicle6",
+    "identity": "NPC"
+  },
+  "1099": {
+    "name": "Vehicle7",
+    "identity": "NPC"
+  },
+  "1100": {
+    "name": "Vehicle8",
+    "identity": "NPC"
+  },
+  "1101": {
+    "name": "Vehicle9",
+    "identity": "NPC"
+  },
+  "1102": {
+    "name": "Vehicle10",
+    "identity": "NPC"
+  },
+  "1103": {
+    "name": "Vehicle11",
+    "identity": "NPC"
+  },
+  "1104": {
+    "name": "Vehicle12",
+    "identity": "NPC"
+  },
+  "1105": {
+    "name": "Vehicle13",
+    "identity": "NPC"
+  },
+  "1106": {
+    "name": "Vehicle14",
+    "identity": "NPC"
+  },
+  "1107": {
+    "name": "Vehicle15",
+    "identity": "NPC"
+  },
+  "1108": {
+    "name": "Vehicle16",
+    "identity": "NPC"
+  },
+  "1109": {
+    "name": "Vehicle17",
+    "identity": "NPC"
+  }
+}

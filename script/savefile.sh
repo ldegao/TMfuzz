@@ -1,7 +1,20 @@
 #!/bin/bash
 
-# Create a timestamp for the save directory
-timestamp=$(date +"%Y%m%d%H%M%S")
+# 自动从camera目录下视频文件名提取timestamp作为save_dir名
+camera_dir="../data/output/camera"
+first_video=$(ls $camera_dir/*_front.mp4 2>/dev/null | head -n 1)
+if [[ -z "$first_video" ]]; then
+  echo "No video found in $camera_dir, fallback to current time."
+  timestamp=$(date +"%Y%m%d%H%M%S")
+else
+  # 提取形如2025-07-16-13-45-43的部分
+  basename=$(basename "$first_video")
+  timestamp=$(echo "$basename" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}')
+  # 如果没提取到，fallback
+  if [[ -z "$timestamp" ]]; then
+    timestamp=$(date +"%Y%m%d%H%M%S")
+  fi
+fi
 save_dir="../data/save/$timestamp/"
 
 declare -A dir_map=(
@@ -36,7 +49,6 @@ if [[ -e "${log_files[0]}" ]]; then
 else
   echo "No .log files to move."
 fi
-
 
 if [[ $(find "$save_dir" -type f | wc -l) -gt 0 ]]; then
   echo "Saving done in $save_dir"

@@ -9,6 +9,9 @@ import traceback
 import numpy as np
 from scipy.interpolate import interp1d
 
+# 添加项目根目录到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from myDSL.ImportantFinder import ImportantFinder, parse_data
 from myDSL.Obstacle import Obstacle
 from myDSL.RecordDealer import HeroPlanner, plot_trajectory_with_obstacles, extract_collision_frame_and_type
@@ -78,7 +81,8 @@ def analyze_collision_and_replay(client, recorder_path, out_dir, log_file):
     except Exception as e:
         err_msg = f"Replay failed: {e}"
         traceback.print_exc(file=sys.stdout)
-        # log_file.write(f"[ERROR] {recorder_path} - {err_msg}\n")
+        log_file.write(f"[ERROR] {recorder_path} - {err_msg}\n")
+        print(f"[ERROR] {recorder_path} - {err_msg}")
         return {"replay_result": None, "error_type": "Replay failed"}
 
 
@@ -435,7 +439,7 @@ def main():
         out_dir = sys.argv[2]
         result_path = os.path.join(out_dir, "replay_result.json")
 
-        client = carla.Client('localhost', 4000)
+        client = carla.Client('localhost', 6001)
         client.set_timeout(10.0)
 
         class DummyLogger:

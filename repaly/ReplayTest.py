@@ -10,10 +10,22 @@ import traceback
 from datetime import datetime
 
 
-def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
+def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data_replay/"):
+    # 展开路径
+    test_dir = os.path.expanduser(test_dir)
+    root_dir = os.path.expanduser(root_dir)
+    out_dir = os.path.expanduser(out_dir)
+    
+    # 创建必要的目录
     os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(test_dir, exist_ok=True)
+    
     log_file_path = os.path.join(out_dir, f"replay_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+    replay_log_json_path = os.path.join(out_dir, f"replay_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
     log_file = open(log_file_path, "a", buffering=1)
+    
+    # 用于存储每个log的详细结果
+    replay_results = {}
     summary = None
 
     def log(msg):
@@ -46,13 +58,17 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
 
                     proc = subprocess.run(
                         ["python3", run_script, fname, out_dir],
-                        stdout=None,
-                        stderr=None,
-                        timeout=300
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=300,
+                        universal_newlines=True
                     )
-
+                    print("==== 子进程标准输出 ====")
+                    print(proc.stdout)
                     if proc.returncode != 0:
                         log(f"[ERROR] Subprocess failed for {fname}, code={proc.returncode}")
+                        if proc.stderr:
+                            log(f"[ERROR] Stderr: {proc.stderr}")  
                         result = {
                             "replay_result": False,
                             "error_type": f"Subprocess error {proc.returncode}"
@@ -74,6 +90,17 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
                                 "error_type": f"Invalid JSON file: {str(e)}"
                             }
 
+                    # 记录每个log文件的详细结果
+                    replay_results[fname] = {
+                        "log_file": fname,
+                        "src_path": src_path,
+                        "collision_detected": result["replay_result"],
+                        "replay_successful": result.get("error_type") is None,
+                        "error_type": result.get("error_type"),
+                        "timestamp": datetime.now().isoformat(),
+                        "process_order": total_logs
+                    }
+
                     if result["replay_result"]:
                         with_collision += 1
                     else:
@@ -85,12 +112,39 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
                     else:
                         successful_replay += 1
                         last_error = False
+                except subprocess.TimeoutExpired:
+                    msg = f"Timeout after 300 seconds (likely A* planning failure)"
+                    errors_by_type[msg] = errors_by_type.get(msg, 0) + 1
+                    log(f"[TIMEOUT] {fname} - {msg}")
+                    last_error = True
+                    
+                    # 记录超时情况
+                    replay_results[fname] = {
+                        "log_file": fname,
+                        "src_path": src_path,
+                        "collision_detected": False,
+                        "replay_successful": False,
+                        "error_type": f"Timeout: {msg}",
+                        "timestamp": datetime.now().isoformat(),
+                        "process_order": total_logs
+                    }
                 except Exception as e:
                     msg = f"Unhandled error: {str(e)}"
                     errors_by_type[msg] = errors_by_type.get(msg, 0) + 1
                     traceback.print_exc(file=sys.stdout)
                     log(f"[EXCEPTION] {fname} - {msg}")
                     last_error = True
+                    
+                    # 记录异常情况
+                    replay_results[fname] = {
+                        "log_file": fname,
+                        "src_path": src_path,
+                        "collision_detected": False,
+                        "replay_successful": False,
+                        "error_type": f"Exception: {msg}",
+                        "timestamp": datetime.now().isoformat(),
+                        "process_order": total_logs
+                    }
                 finally:
                     if os.path.exists(dst_path):
                         os.remove(dst_path)
@@ -112,35 +166,63 @@ def test_all_logs_in_folder(root_dir, out_dir, test_dir="~/carla_data/"):
 
                 log(summary)
 
-    log("\n=== Final Summary ===\n" + summary)
+    if summary:
+        log("\n=== Final Summary ===\n" + summary)
+    else:
+        log("\n=== Final Summary ===\nNo summary available")
+    
+    # 保存详细的JSON日志
+    final_report = {
+        "test_run_info": {
+            "start_time": datetime.now().isoformat(),
+            "root_directory": root_dir,
+            "output_directory": out_dir,
+            "test_directory": test_dir
+        },
+        "summary": {
+            "total_logs_processed": total_logs,
+            "successful_replays": successful_replay,
+            "logs_with_collision": with_collision,
+            "logs_without_collision": no_collision,
+            "collision_rate": f"{with_collision / total_logs * 100:.2f}%" if total_logs > 0 else "0%",
+            "success_rate": f"{successful_replay / total_logs * 100:.2f}%" if total_logs > 0 else "0%"
+        },
+        "error_breakdown": errors_by_type,
+        "detailed_results": replay_results
+    }
+    
+    with open(replay_log_json_path, 'w', encoding='utf-8') as json_file:
+        json.dump(final_report, json_file, indent=2, ensure_ascii=False)
+    
+    log(f"[INFO] Detailed JSON log saved to: {replay_log_json_path}")
     log_file.close()
 
 
 def restart_carla(log_fn):
     """Stop and restart Carla server."""
-    stop_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/stop_carla.sh")
-    start_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/screen_run_carla.sh")
+    stop_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/stop_carla_replay.sh")
+    start_script = os.path.expanduser("~/drivefuzz/TM-fuzzer/script/screen_run_carla_replay.sh")
 
     subprocess.call(["bash", stop_script])
-    log_fn("[INFO] Called stop_carla.sh")
+    log_fn("[INFO] Called stop_carla_replay.sh")
     time.sleep(2)
 
     subprocess.Popen(["bash", start_script])
     time.sleep(30)
-    log_fn("[INFO] Called screen_run_carla.sh")
+    log_fn("[INFO] Called screen_run_carla_replay.sh")
 
 
 def wait_for_carla_ready(timeout=15, interval=2):
-    """Wait until Carla server is reachable via port 4000."""
+    """Wait until Carla server is reachable via port 6001."""
     waited = 0
     while waited < timeout:
-        if is_port_open("localhost", 4000):
-            print(f"[INFO] Carla port 4000 is now open after waiting {waited} seconds.")
+        if is_port_open("localhost", 6001):
+            print(f"[INFO] Carla port 6001 is now open after waiting {waited} seconds.")
             return True
         time.sleep(interval)
         waited += interval
-        print(f"[INFO] Waiting for Carla to open port 4000... ({waited}/{timeout}s)")
-    print(f"[ERROR] Carla port 4000 not open after {timeout} seconds.")
+        print(f"[INFO] Waiting for Carla to open port 6001... ({waited}/{timeout}s)")
+    print(f"[ERROR] Carla port 6001 not open after {timeout} seconds.")
     return False
 
 
@@ -157,6 +239,6 @@ def is_port_open(host: str, port: int) -> bool:
 
 if __name__ == '__main__':
     # root_dir = "~/drivefuzz/TM-fuzzer/data/save/20250605203343/logs/"
-    root_dir = "~/drivefuzz/save_autoware_6_20/"
-    out_dir = "~/drivefuzz/save_autoware_6_20/result"
+    root_dir = "/home/linshenghao/drivefuzz/TM-fuzzer/data/save/"
+    out_dir = "result"
     test_all_logs_in_folder(root_dir, out_dir)

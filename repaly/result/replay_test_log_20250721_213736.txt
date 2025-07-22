@@ -1,0 +1,72 @@
+[ERROR] Subprocess failed for 2025-07-21-19-00-15.log, code=-11
+[ERROR] Stderr: WARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API 
+WARNING: Client API version     = 0.9.13-dirty 
+WARNING: Simulator API version  = 0.9.13 
+cat: 写入错误: 断开的管道
+WARNING: sensor object went out of the scope but the sensor is still alive in the simulation: Actor 1297 (sensor.camera.rgb) 
+
+
+=== Progress Update ===
+Processed logs: 1
+With collision: 0
+Without collision: 1
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Subprocess error -11: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 2
+With collision: 0
+Without collision: 2
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Subprocess error -11: 1
+- No collision involving ego_vid found: 1
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 3
+With collision: 0
+Without collision: 3
+Collision before: 0
+Collision before rate: 0.00%
+Collision still rate: N/A
+=== Error Breakdown ===
+- Subprocess error -11: 1
+- No collision involving ego_vid found: 2
+
+[INFO] Called stop_carla_replay.sh
+[INFO] Called screen_run_carla_replay.sh
+
+=== Progress Update ===
+Processed logs: 4
+With collision: 0
+Without collision: 4
+Collision before: 1
+Collision before rate: 25.00%
+Collision still rate: 0.00%
+=== Error Breakdown ===
+- Subprocess error -11: 1
+- No collision involving ego_vid found: 2
+
+
+=== Progress Update ===
+Processed logs: 5
+With collision: 0
+Without collision: 5
+Collision before: 1
+Collision before rate: 20.00%
+Collision still rate: 0.00%
+=== Error Breakdown ===
+- Subprocess error -11: 1
+- No collision involving ego_vid found: 3
+

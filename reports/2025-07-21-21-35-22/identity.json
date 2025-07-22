@@ -1,0 +1,26 @@
+{
+  "null": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "3316": {
+    "name": "Vehicle1",
+    "identity": "EGO"
+  },
+  "3320": {
+    "name": "Vehicle3",
+    "identity": "NPC"
+  },
+  "3321": {
+    "name": "Vehicle4",
+    "identity": "NPC"
+  },
+  "3322": {
+    "name": "Vehicle5",
+    "identity": "NPC"
+  },
+  "0": {
+    "name": "Vehicle6",
+    "identity": "UNKNOWN"
+  }
+}
